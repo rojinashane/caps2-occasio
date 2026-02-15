@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Official Invitation | Occasio</title>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #00686F;
+            --primary-dark: #004D52;
+            --bg-subtle: #f8fafc;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --white: #ffffff;
+            --gold-accent: #b45309; /* Elegant gold for 'You are Invited' */
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: var(--bg-subtle);
+            background-image: radial-gradient(#e2e8f0 0.5px, transparent 0.5px);
+            background-size: 24px 24px;
+            display: flex; justify-content: center; align-items: center; 
+            min-height: 100vh; margin: 0; padding: 20px; color: var(--text-main);
+        }
+
+        .card { 
+            background: var(--white); border-radius: 24px; 
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05); 
+            width: 100%; max-width: 440px; overflow: hidden;
+            border: 1px solid #e2e8f0;
+            animation: fadeIn 1s ease;
+        }
+
+        .header-section {
+            padding: 40px 20px 20px;
+            text-align: center;
+            background: linear-gradient(to bottom, #f0f9fa, #ffffff);
+        }
+
+        .invitation-text {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.2rem;
+            color: var(--gold-accent);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        h1 { 
+            font-family: 'Playfair Display', serif;
+            font-size: 2.2rem; font-weight: 700; margin: 0; 
+            color: var(--primary-dark); line-height: 1.2;
+        }
+
+        .content { padding: 0 32px 40px; }
+
+        .divider {
+            height: 1px; background: #e2e8f0; width: 60px; margin: 25px auto;
+        }
+
+        .info-stack { gap: 16px; display: flex; flex-direction: column; }
+
+        .info-row {
+            display: flex; align-items: flex-start; gap: 16px;
+        }
+
+        .info-icon-box {
+            width: 40px; height: 40px; border-radius: 10px;
+            background: #f1f5f9; display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .info-detail { flex: 1; }
+        .info-label { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-value { font-size: 1rem; font-weight: 500; color: var(--text-main); margin-top: 2px; display: block;}
+
+        .map-link {
+            font-size: 0.8rem; color: var(--primary); text-decoration: none; 
+            font-weight: 600; margin-top: 4px; display: inline-block;
+        }
+
+        .rsvp-section {
+            margin-top: 40px; padding-top: 30px; border-top: 1px solid #f1f5f9;
+        }
+
+        .form-label { font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; display: block; }
+
+        input, select { 
+            width: 100%; padding: 14px; margin-bottom: 20px;
+            border: 1px solid #cbd5e1; border-radius: 12px; box-sizing: border-box; 
+            font-size: 1rem; color: var(--text-main); background: #fcfcfc;
+        }
+
+        button { 
+            background: var(--primary); color: white; border: none; padding: 18px; 
+            width: 100%; border-radius: 12px; font-weight: 700; font-size: 1rem;
+            cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(0, 104, 111, 0.2);
+        }
+
+        button:hover { background: var(--primary-dark); transform: translateY(-1px); }
+        button:disabled { background: #94a3b8; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        #status { margin-top: 15px; font-size: 0.9rem; text-align: center; font-weight: 600; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        #event-loading { padding: 50px; text-align: center; color: var(--text-muted); }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div id="event-loading">Loading your formal invitation...</div>
+
+        <div id="event-content" style="display:none;">
+            <div class="header-section">
+                <span class="invitation-text">You are Invited to</span>
+                <h1 id="event-title">Event Name</h1>
+                <div class="divider"></div>
+            </div>
+
+            <div class="content">
+                <div class="info-stack">
+                    <div class="info-row">
+                        <div class="info-icon-box">📅</div>
+                        <div class="info-detail">
+                            <span class="info-label">When</span>
+                            <span class="info-value" id="disp-date">--</span>
+                        </div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-icon-box">⏰</div>
+                        <div class="info-detail">
+                            <span class="info-label">Time</span>
+                            <span class="info-value" id="disp-time">--</span>
+                        </div>
+                    </div>
+
+                    <div class="info-row">
+                        <div class="info-icon-box">📍</div>
+                        <div class="info-detail">
+                            <span class="info-label">Where</span>
+                            <span class="info-value" id="disp-loc">--</span>
+                            <a id="map-btn" href="#" target="_blank" class="map-link" style="display:none;">View on Google Maps</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="rsvp-section">
+                    <span class="form-label">Full Name</span>
+                    <input type="text" id="guestName" placeholder="Your name" required>
+                    
+                    <span class="form-label">Attendance</span>
+                    <select id="statusSelect">
+                        <option value="Going">I will be attending</option>
+                        <option value="Not Going">I am unable to attend</option>
+                    </select>
+                    
+                    <button id="submitBtn" onclick="submitRSVP()">Confirm RSVP</button>
+                    <div id="status"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyBNhdyamoJ2IB6chxV8VQSuE_QOgbJz2DA",
+          authDomain: "occasio-866c3.firebaseapp.com",
+          projectId: "occasio-866c3",
+          storageBucket: "occasio-866c3.firebasestorage.app",
+          messagingSenderId: "982786283947",
+          appId: "1:982786283947:web:ff5a4db6acb119fac61aee",
+          measurementId: "G-VN1WKPML5F"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const eventId = urlParams.get('id'); 
+
+        if (eventId) {
+            loadEventDetails();
+        } else {
+            document.getElementById('event-loading').innerText = "Invalid invitation link.";
+        }
+
+        async function loadEventDetails() {
+            try {
+                const docRef = doc(db, "events", eventId);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    
+                    // Date Formatting
+                    const date = data.startDate?.seconds ? new Date(data.startDate.seconds * 1000) : new Date(data.startDate);
+                    const dateStr = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                    
+                    // Time Formatting (Matches startTime field in EventDetailsScreen.js)
+                    let timeStr = "To be announced";
+                    if (data.startTime) {
+                        const t = data.startTime.seconds ? new Date(data.startTime.seconds * 1000) : new Date(data.startTime);
+                        timeStr = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    }
+
+                    document.getElementById('event-title').innerText = data.title;
+                    document.getElementById('disp-date').innerText = dateStr;
+                    document.getElementById('disp-time').innerText = timeStr;
+                    document.getElementById('disp-loc').innerText = data.location || 'Location to be announced';
+
+                    // Google Maps link
+                    if(data.location) {
+                        document.getElementById('map-btn').href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(data.location)}`;
+                        document.getElementById('map-btn').style.display = 'inline-block';
+                    }
+
+                    document.getElementById('event-loading').style.display = 'none';
+                    document.getElementById('event-content').style.display = 'block';
+                } else {
+                    document.getElementById('event-loading').innerText = "This event no longer exists.";
+                }
+            } catch (e) { 
+                document.getElementById('event-loading').innerText = "Unable to load invitation."; 
+            }
+        }
+
+        window.submitRSVP = async () => {
+            const name = document.getElementById('guestName').value;
+            const status = document.getElementById('statusSelect').value;
+            const statusDiv = document.getElementById('status');
+            const btn = document.getElementById('submitBtn');
+
+            if (!name.trim()) return alert("Please enter your name");
+
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+
+            try {
+                // Correct sub-collection path for RSVP tracker
+                await addDoc(collection(db, "events", eventId, "rsvps"), {
+                    guestName: name,
+                    status: status,
+                    timestamp: serverTimestamp()
+                });
+                statusDiv.innerText = "RSVP Confirmed. Thank you!";
+                statusDiv.style.color = "#00686F";
+                btn.innerText = "Confirmed";
+            } catch (e) {
+                statusDiv.innerText = "Error sending RSVP.";
+                statusDiv.style.color = "#dc2626";
+                btn.disabled = false;
+                btn.innerText = "Confirm Attendance";
+            }
+        }
+    </script>
+</body>
+</html>
