@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     View, StyleSheet, TouchableOpacity, Dimensions,
     ActivityIndicator, StatusBar, TextInput, Modal, KeyboardAvoidingView,
@@ -58,6 +58,12 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [activeTask, setActiveTask] = useState(null);
     const [activeColumnId, setActiveColumnId] = useState(null);
 
+    // --- PERMISSION LOGIC ---
+    // Derived state to check if the current user is the owner
+    const isOwner = useMemo(() => {
+        return eventData?.userId === auth.currentUser?.uid;
+    }, [eventData]);
+
     useFocusEffect(
         useCallback(() => {
             let isActive = true;
@@ -81,40 +87,21 @@ export default function EventDetailsScreen({ route, navigation }) {
         }, [eventId])
     );
 
-  // Inside EventDetailsScreen.js
+    const handleShareInvitation = async () => {
+        const invitationLink = `https://occasio-866c3.web.app/index.html?id=${eventId}`;
+        const message = `YOU'RE INVITED!\n\nEvent: ${eventData?.title}\nDate: ${formatDate(eventData?.startDate)}\nLocation: ${eventData?.location || 'TBD'}\n\nPlease confirm your RSVP here:\n${invitationLink}`;
 
-const handleShareInvitation = async () => {
-    // FIX: Must use ?id= so the web script can read the event details
-    const invitationLink = `https://occasio-866c3.web.app/index.html?id=${eventId}`;
+        try {
+            await Share.share({ title: 'Event Invitation', message: message, url: invitationLink });
+        } catch (error) {
+            Alert.alert("Error", "Could not share invitation.");
+        }
+    };
 
-    const message = `
- YOU'RE INVITED! 
-        
-Event: ${eventData?.title}
-Date: ${formatDate(eventData?.startDate)}
-Location: ${eventData?.location || 'TBD'}
+    const openRSVPTracker = () => {
+        navigation.navigate('RSVPTrackerScreen', { eventId, eventTitle: eventData?.title });
+    };
 
-Please confirm your RSVP here:
-${invitationLink}
-    `;
-
-    try {
-        await Share.share({
-            title: 'Event Invitation',
-            message: message,
-            url: invitationLink 
-        });
-    } catch (error) {
-        Alert.alert("Error", "Could not share invitation.");
-    }
-};
-
-const openRSVPTracker = () => {
-    // This navigates to the screen that reads from events/${eventId}/rsvps
-    navigation.navigate('RSVPTrackerScreen', { eventId, eventTitle: eventData?.title });
-};
-
-    // --- WORKSPACE ACTIONS ---
     const syncToFirebase = async (updatedColumns) => {
         try {
             const docRef = doc(db, 'events', eventId);
@@ -180,7 +167,6 @@ const openRSVPTracker = () => {
         }
     };
 
-    // --- LIST & CARD LOGIC ---
     const updateColumnTitle = async (columnId, newTitle) => {
         const updated = columns.map(col => col.id === columnId ? { ...col, title: newTitle } : col);
         setColumns(updated);
@@ -246,8 +232,6 @@ const openRSVPTracker = () => {
 
     const getPriorityColor = (p) => p === 'A' ? '#EF4444' : p === 'B' ? '#F59E0B' : '#10B981';
 
-    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#00686F" /></View>;
-
     const handleSearchUsers = async (text) => {
         setCollabEmail(text);
         if (text.length < 3) {
@@ -264,6 +248,8 @@ const openRSVPTracker = () => {
         } catch (error) { console.log(error); }
     };
 
+    if (loading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#00686F" /></View>;
+
     return (
         <View style={styles.mainContainer}>
             <StatusBar barStyle="light-content" />
@@ -279,9 +265,12 @@ const openRSVPTracker = () => {
                             <CustomText style={styles.headerTitle} numberOfLines={1}>{eventData?.title}</CustomText>
                             <CustomText style={styles.headerSubtitle}>EVENT WORKSPACE</CustomText>
                         </View>
-                        <TouchableOpacity style={styles.iconCircle} onPress={() => setMenuVisible(true)}>
-                            <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
-                        </TouchableOpacity>
+                        {/* ONLY OWNER: Workspace Menu (Delete Event) */}
+                        {isOwner && (
+                            <TouchableOpacity style={styles.iconCircle} onPress={() => setMenuVisible(true)}>
+                                <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
+                            </TouchableOpacity>
+                        )}
                     </View>
                 </View>
 
@@ -293,21 +282,29 @@ const openRSVPTracker = () => {
                                 <View style={styles.infoIconBg}><Ionicons name="stats-chart" size={18} color="#00686F" /></View>
                                 <CustomText style={styles.columnTitle}>Overview</CustomText>
                             </View>
-                            <TouchableOpacity onPress={() => navigation.navigate('UpdateEvent', { eventId, eventData })} style={styles.editPill}>
-                                <Ionicons name="pencil" size={12} color="#00686F" /><CustomText style={styles.editBtnText}>Edit</CustomText>
-                            </TouchableOpacity>
+                            {/* ONLY OWNER: Edit Event Information */}
+                            {isOwner && (
+                                <TouchableOpacity onPress={() => navigation.navigate('UpdateEvent', { eventId, eventData })} style={styles.editPill}>
+                                    <Ionicons name="pencil" size={12} color="#00686F" /><CustomText style={styles.editBtnText}>Edit</CustomText>
+                                </TouchableOpacity>
+                            )}
                         </View>
                         <ScrollView showsVerticalScrollIndicator={false}>
                             
-                            {/* RSVP TRACKER CARD (UPDATED LABELS & NAVIGATION) */}
                             <View style={[styles.detailCard, { borderLeftWidth: 5, borderLeftColor: '#00686F', backgroundColor: '#F0F9FA' }]}>
                                 <CustomText style={[styles.infoLabel, { color: '#00686F' }]}>RSVP TRACKER</CustomText>
                                 <View style={styles.rsvpActionRow}>
-                                    <TouchableOpacity style={styles.rsvpBtn} onPress={handleShareInvitation}>
-                                        <Ionicons name="share-social" size={16} color="#FFF" />
-                                        <CustomText style={styles.rsvpBtnText}>Share Invite</CustomText>
-                                    </TouchableOpacity>
-                                    <TouchableOpacity style={[styles.rsvpBtn, { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#00686F' }]} onPress={openRSVPTracker}>
+                                    {/* ONLY OWNER: Share Invitation Link */}
+                                    {isOwner && (
+                                        <TouchableOpacity style={styles.rsvpBtn} onPress={handleShareInvitation}>
+                                            <Ionicons name="share-social" size={16} color="#FFF" />
+                                            <CustomText style={styles.rsvpBtnText}>Share Invite</CustomText>
+                                        </TouchableOpacity>
+                                    )}
+                                    <TouchableOpacity 
+                                        style={[styles.rsvpBtn, { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#00686F', flex: isOwner ? 0.48 : 1 }]} 
+                                        onPress={openRSVPTracker}
+                                    >
                                         <Ionicons name="people" size={16} color="#00686F" />
                                         <CustomText style={[styles.rsvpBtnText, { color: '#00686F' }]}>Tracker</CustomText>
                                     </TouchableOpacity>
@@ -342,19 +339,34 @@ const openRSVPTracker = () => {
                     {columns.map((col) => (
                         <View key={col.id} style={styles.trelloColumn}>
                             <View style={styles.trelloHeaderRow}>
-                                <TextInput style={styles.trelloTitleInput} value={col.title} onChangeText={(text) => updateColumnTitle(col.id, text)} />
-                                <TouchableOpacity onPress={() => triggerDeleteList(col.id)}><Ionicons name="trash-outline" size={20} color="#EF4444" /></TouchableOpacity>
+                                <TextInput 
+                                    style={styles.trelloTitleInput} 
+                                    value={col.title} 
+                                    editable={isOwner} // ONLY OWNER: Edit List Title
+                                    onChangeText={(text) => updateColumnTitle(col.id, text)} 
+                                />
+                                {/* ONLY OWNER: Delete List */}
+                                {isOwner && (
+                                    <TouchableOpacity onPress={() => triggerDeleteList(col.id)}>
+                                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                                    </TouchableOpacity>
+                                )}
                             </View>
                             <ScrollView showsVerticalScrollIndicator={false}>
                                 {col.tasks.map((task) => (
-                                    <Swipeable key={task.id} renderRightActions={() => (
-                                        <TouchableOpacity style={styles.deleteSwipeAction} onPress={() => {
-                                            const updated = columns.map(c => c.id === col.id ? { ...c, tasks: c.tasks.filter(t => t.id !== task.id) } : c);
-                                            setColumns(updated); syncToFirebase(updated);
-                                        }}><Ionicons name="trash-outline" size={24} color="#FFF" /></TouchableOpacity>
-                                    )}>
+                                    <Swipeable 
+                                        key={task.id} 
+                                        enabled={isOwner} // ONLY OWNER: Delete Cards
+                                        renderRightActions={() => (
+                                            <TouchableOpacity style={styles.deleteSwipeAction} onPress={() => {
+                                                const updated = columns.map(c => c.id === col.id ? { ...c, tasks: c.tasks.filter(t => t.id !== task.id) } : c);
+                                                setColumns(updated); syncToFirebase(updated);
+                                            }}><Ionicons name="trash-outline" size={24} color="#FFF" /></TouchableOpacity>
+                                        )}
+                                    >
                                         <TouchableOpacity style={[styles.trelloTaskCard, { borderLeftWidth: 6, borderLeftColor: getPriorityColor(task.priority) }]} onPress={() => openTaskDetails(col.id, task)}>
                                             <View style={styles.cardHeaderRow}>
+                                                {/* BOTH: Toggle Completion */}
                                                 <TouchableOpacity onPress={() => toggleCardCompletion(col.id, task.id)} style={styles.outerCheckbox}>
                                                     <Ionicons name={task.completed ? "checkbox" : "square-outline"} size={20} color={task.completed ? "#10B981" : "#CBD5E1"} />
                                                 </TouchableOpacity>
@@ -363,19 +375,26 @@ const openRSVPTracker = () => {
                                         </TouchableOpacity>
                                     </Swipeable>
                                 ))}
-                                <TouchableOpacity style={styles.trelloAddTaskBtn} onPress={() => { setModalConfig({ type: 'ADD_TASK', columnId: col.id, title: 'Add a card' }); setInputText(''); setModalVisible(true); }}>
-                                    <Ionicons name="add" size={20} color="#64748B" /><CustomText style={styles.trelloAddTaskText}>Add a card</CustomText>
-                                </TouchableOpacity>
+                                {/* ONLY OWNER: Add New Cards */}
+                                {isOwner && (
+                                    <TouchableOpacity style={styles.trelloAddTaskBtn} onPress={() => { setModalConfig({ type: 'ADD_TASK', columnId: col.id, title: 'Add a card' }); setInputText(''); setModalVisible(true); }}>
+                                        <Ionicons name="add" size={20} color="#64748B" /><CustomText style={styles.trelloAddTaskText}>Add a card</CustomText>
+                                    </TouchableOpacity>
+                                )}
                             </ScrollView>
                         </View>
                     ))}
-                    <TouchableOpacity style={styles.addListBtn} onPress={() => { setModalConfig({ type: 'ADD_COLUMN', title: 'Add a list' }); setInputText(''); setModalVisible(true); }}>
-                        <Ionicons name="add-circle" size={24} color="#FFF" /><CustomText style={styles.addListBtnText}>Add list</CustomText>
-                    </TouchableOpacity>
+                    
+                    {/* ONLY OWNER: Add New Lists */}
+                    {isOwner && (
+                        <TouchableOpacity style={styles.addListBtn} onPress={() => { setModalConfig({ type: 'ADD_COLUMN', title: 'Add a list' }); setInputText(''); setModalVisible(true); }}>
+                            <Ionicons name="add-circle" size={24} color="#FFF" /><CustomText style={styles.addListBtnText}>Add list</CustomText>
+                        </TouchableOpacity>
+                    )}
                 </ScrollView>
             </SafeAreaView>
 
-            {/* ALL ORIGINAL MODALS RESTORED */}
+            {/* MODALS */}
             <Modal transparent visible={menuVisible} animationType="slide">
                 <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuVisible(false)}>
                     <View style={styles.menuContent}>
@@ -434,22 +453,42 @@ const openRSVPTracker = () => {
                 <View style={styles.detailModalContainer}>
                     <View style={styles.detailHeader}>
                         <TouchableOpacity onPress={() => setDetailModalVisible(false)}><CustomText>Close</CustomText></TouchableOpacity>
-                        <CustomText style={styles.detailHeaderTitle}>Edit Card</CustomText>
-                        <TouchableOpacity onPress={saveTaskDetails}><CustomText style={{ color: '#00686F', fontWeight: 'bold' }}>Save</CustomText></TouchableOpacity>
+                        <CustomText style={styles.detailHeaderTitle}>Card Details</CustomText>
+                        {/* ONLY OWNER: Can save edited details (Priority, Description, etc.) */}
+                        {isOwner ? (
+                            <TouchableOpacity onPress={saveTaskDetails}><CustomText style={{ color: '#00686F', fontWeight: 'bold' }}>Save</CustomText></TouchableOpacity>
+                        ) : <View style={{ width: 40 }} />}
                     </View>
                     <ScrollView style={{ padding: 20 }}>
                         <CustomText style={styles.detailLabel}>TITLE</CustomText>
-                        <TextInput style={styles.detailTitleInput} value={activeTask?.text} onChangeText={(t) => setActiveTask({ ...activeTask, text: t })} />
+                        <TextInput 
+                            style={styles.detailTitleInput} 
+                            value={activeTask?.text} 
+                            editable={isOwner} // OWNER ONLY
+                            onChangeText={(t) => setActiveTask({ ...activeTask, text: t })} 
+                        />
                         <CustomText style={styles.detailLabel}>PRIORITY</CustomText>
                         <View style={styles.priorityRow}>
                             {['A', 'B', 'C'].map((p) => (
-                                <TouchableOpacity key={p} onPress={() => setActiveTask({ ...activeTask, priority: p })} style={[styles.priorityBtn, { backgroundColor: activeTask?.priority === p ? getPriorityColor(p) : '#F1F5F9' }]}>
+                                <TouchableOpacity 
+                                    key={p} 
+                                    disabled={!isOwner} // OWNER ONLY
+                                    onPress={() => setActiveTask({ ...activeTask, priority: p })} 
+                                    style={[styles.priorityBtn, { backgroundColor: activeTask?.priority === p ? getPriorityColor(p) : '#F1F5F9' }]}
+                                >
                                     <CustomText style={{ color: activeTask?.priority === p ? '#FFF' : '#64748B' }}>{p}</CustomText>
                                 </TouchableOpacity>
                             ))}
                         </View>
                         <CustomText style={styles.detailLabel}>DESCRIPTION</CustomText>
-                        <TextInput style={styles.detailDescInput} multiline value={activeTask?.description} onChangeText={(t) => setActiveTask({ ...activeTask, description: t })} />
+                        <TextInput 
+                            style={styles.detailDescInput} 
+                            multiline 
+                            value={activeTask?.description} 
+                            editable={isOwner} // OWNER ONLY
+                            placeholder={isOwner ? "Add a description..." : "No description."}
+                            onChangeText={(t) => setActiveTask({ ...activeTask, description: t })} 
+                        />
                     </ScrollView>
                 </View>
             </Modal>
