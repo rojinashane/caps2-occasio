@@ -25,7 +25,7 @@ export default function RSVPTrackerScreen({ route, navigation }) {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState('All');
     
-    // Custom Modal State
+    // Modal State
     const [modalVisible, setModalVisible] = useState(false);
     const [selectedGuest, setSelectedGuest] = useState(null);
     
@@ -46,16 +46,21 @@ export default function RSVPTrackerScreen({ route, navigation }) {
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            // Notification logic: only trigger if the list size actually increased
             if (!isFirstRun.current && data.length > responses.length) {
-                triggerLocalNotification(data[0].guestName, data[0].status);
+                const newGuest = data[0];
+                const displayStatus = newGuest.status?.toLowerCase() === 'going' ? 'Attending' : 'Declined';
+                triggerLocalNotification(newGuest.guestName, displayStatus);
             }
+            
             setResponses(data);
             applyFilters(data, searchQuery, activeFilter);
             setLoading(false);
             isFirstRun.current = false;
         });
         return () => unsubscribe();
-    }, [eventId]);
+    }, [eventId, responses.length]);
 
     const triggerLocalNotification = async (name, status) => {
         await Notifications.scheduleNotificationAsync({
@@ -69,8 +74,9 @@ export default function RSVPTrackerScreen({ route, navigation }) {
         if (filter !== 'All') {
             result = result.filter(item => {
                 const status = item.status?.toLowerCase() || '';
-                const target = filter.toLowerCase();
-                return target === 'declined' ? (status === 'declined' || status === 'not going') : status === target;
+                if (filter === 'Attending') return status === 'going' || status === 'attending';
+                if (filter === 'Declined') return status === 'declined' || status === 'not going';
+                return true;
             });
         }
         if (queryText) {
@@ -79,7 +85,6 @@ export default function RSVPTrackerScreen({ route, navigation }) {
         setFilteredResponses(result);
     };
 
-    // --- DELETE LOGIC ---
     const requestDelete = (item) => {
         setSelectedGuest(item);
         setModalVisible(true);
@@ -104,21 +109,23 @@ export default function RSVPTrackerScreen({ route, navigation }) {
         try {
             const fileName = `RSVP_${eventTitle?.replace(/[^a-z0-9]/gi, '_') || 'List'}.csv`;
             const fileUri = FileSystem.documentDirectory + fileName;
-            let csv = "Guest Name,Status\n" + responses.map(r => `"${r.guestName}","${r.status}"`).join("\n");
+            let csv = "Guest Name,Status\n" + responses.map(r => {
+                const displayStatus = r.status?.toLowerCase() === 'going' ? 'Attending' : 'Declined';
+                return `"${r.guestName}","${displayStatus}"`;
+            }).join("\n");
             await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' });
             await Sharing.shareAsync(fileUri);
         } catch (error) { console.log(error); }
     };
 
     const totalCount = responses.length;
-    const goingCount = responses.filter(r => r.status?.toLowerCase() === 'going').length;
-    const rate = totalCount > 0 ? Math.round((goingCount / totalCount) * 100) : 0;
+    const attendingCount = responses.filter(r => r.status?.toLowerCase() === 'going' || r.status?.toLowerCase() === 'attending').length;
+    const rate = totalCount > 0 ? Math.round((attendingCount / totalCount) * 100) : 0;
 
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
             
-            {/* Header Section */}
             <View style={[styles.header, { paddingTop: insets.top || 20 }]}>
                 <View style={styles.navbar}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navIcon}>
@@ -134,7 +141,7 @@ export default function RSVPTrackerScreen({ route, navigation }) {
                 <View style={styles.metricsContainer}>
                     <View style={styles.metricBox}><CustomText style={styles.mValue}>{totalCount}</CustomText><CustomText style={styles.mLabel}>TOTAL</CustomText></View>
                     <View style={styles.vDivider} />
-                    <View style={styles.metricBox}><CustomText style={styles.mValue}>{goingCount}</CustomText><CustomText style={styles.mLabel}>GOING</CustomText></View>
+                    <View style={styles.metricBox}><CustomText style={styles.mValue}>{attendingCount}</CustomText><CustomText style={styles.mLabel}>ATTENDING</CustomText></View>
                     <View style={styles.vDivider} />
                     <View style={styles.metricBox}><CustomText style={styles.mValue}>{rate}%</CustomText><CustomText style={styles.mLabel}>RATE</CustomText></View>
                 </View>
@@ -152,7 +159,7 @@ export default function RSVPTrackerScreen({ route, navigation }) {
 
             <View style={styles.content}>
                 <View style={styles.filterBar}>
-                    {['All', 'Going', 'Declined'].map((f) => (
+                    {['All', 'Attending', 'Declined'].map((f) => (
                         <TouchableOpacity 
                             key={f} 
                             onPress={() => {setActiveFilter(f); applyFilters(responses, searchQuery, f);}}
@@ -169,36 +176,35 @@ export default function RSVPTrackerScreen({ route, navigation }) {
                     <FlatList
                         data={filteredResponses}
                         keyExtractor={item => item.id}
-                        renderItem={({ item }) => (
-                            <View style={styles.card}>
-                                <View style={styles.cardMain}>
-                                    <View style={[styles.avatar, { backgroundColor: item.status?.toLowerCase() === 'going' ? COLORS.primary : '#E2E8F0' }]}>
-                                        <CustomText style={styles.avatarText}>{item.guestName?.charAt(0).toUpperCase()}</CustomText>
-                                    </View>
-                                    <View style={styles.guestInfo}>
-                                        <CustomText style={styles.guestName}>{item.guestName}</CustomText>
-                                        <View style={[styles.statusTag, { backgroundColor: item.status?.toLowerCase() === 'going' ? '#E0F2F1' : '#F1F5F9' }]}>
-                                            <CustomText style={[styles.tagText, { color: item.status?.toLowerCase() === 'going' ? COLORS.primary : COLORS.textMuted }]}>{item.status}</CustomText>
+                        renderItem={({ item }) => {
+                            const isAttending = item.status?.toLowerCase() === 'going' || item.status?.toLowerCase() === 'attending';
+                            return (
+                                <View style={styles.card}>
+                                    <View style={styles.cardMain}>
+                                        <View style={[styles.avatar, { backgroundColor: isAttending ? COLORS.primary : '#E2E8F0' }]}>
+                                            <CustomText style={styles.avatarText}>{item.guestName?.charAt(0).toUpperCase()}</CustomText>
+                                        </View>
+                                        <View style={styles.guestInfo}>
+                                            <CustomText style={styles.guestName}>{item.guestName}</CustomText>
+                                            <View style={[styles.statusTag, { backgroundColor: isAttending ? '#E0F2F1' : '#F1F5F9' }]}>
+                                                <CustomText style={[styles.tagText, { color: isAttending ? COLORS.primary : COLORS.textMuted }]}>
+                                                    {isAttending ? 'Attending' : 'Declined'}
+                                                </CustomText>
+                                            </View>
                                         </View>
                                     </View>
+                                    <TouchableOpacity onPress={() => requestDelete(item)} style={styles.trashBtn}>
+                                        <Ionicons name="trash-outline" size={20} color="#CBD5E1" />
+                                    </TouchableOpacity>
                                 </View>
-                                <TouchableOpacity onPress={() => requestDelete(item)} style={styles.trashBtn}>
-                                    <Ionicons name="trash-outline" size={20} color="#CBD5E1" />
-                                </TouchableOpacity>
-                            </View>
-                        )}
+                            );
+                        }}
                         contentContainerStyle={[styles.list, { paddingBottom: 120 }]}
                     />
                 )}
             </View>
 
-            {/* Custom Themed Delete Modal */}
-            <Modal
-                animationType="fade"
-                transparent={true}
-                visible={modalVisible}
-                onRequestClose={() => setModalVisible(false)}
-            >
+            <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
                 <Pressable style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
                     <Animated.View style={styles.modalContent}>
                         <View style={styles.modalHandle} />
@@ -208,35 +214,21 @@ export default function RSVPTrackerScreen({ route, navigation }) {
                             </View>
                             <CustomText style={styles.modalTitle}>Remove Guest?</CustomText>
                             <CustomText style={styles.modalSub}>
-                                You are about to remove <CustomText style={{fontWeight: 'bold'}}>{selectedGuest?.guestName}</CustomText>. This action cannot be undone.
+                                You are about to remove <CustomText style={{fontWeight: 'bold'}}>{selectedGuest?.guestName}</CustomText>.
                             </CustomText>
                         </View>
-
                         <View style={styles.modalFooter}>
-                            <TouchableOpacity 
-                                style={styles.cancelBtn} 
-                                onPress={() => setModalVisible(false)}
-                            >
+                            <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)}>
                                 <CustomText style={styles.cancelBtnText}>Keep Guest</CustomText>
                             </TouchableOpacity>
-                            
-                            <TouchableOpacity 
-                                style={styles.confirmBtn} 
-                                onPress={confirmDelete}
-                                disabled={isDeleting}
-                            >
-                                {isDeleting ? (
-                                    <ActivityIndicator color="#FFF" />
-                                ) : (
-                                    <CustomText style={styles.confirmBtnText}>Yes, Remove</CustomText>
-                                )}
+                            <TouchableOpacity style={styles.confirmBtn} onPress={confirmDelete} disabled={isDeleting}>
+                                {isDeleting ? <ActivityIndicator color="#FFF" /> : <CustomText style={styles.confirmBtnText}>Yes, Remove</CustomText>}
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
                 </Pressable>
             </Modal>
 
-            {/* Export FAB */}
             <TouchableOpacity style={[styles.fab, { bottom: insets.bottom || 30 }]} onPress={exportToCSV}>
                 <LinearGradient colors={[COLORS.primary, COLORS.primaryLight]} style={styles.fabGradient}>
                     <Ionicons name="download-outline" size={20} color="#FFF" />
@@ -276,8 +268,6 @@ const styles = StyleSheet.create({
     statusTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginTop: 4 },
     tagText: { fontSize: 8, fontWeight: '800', textTransform: 'uppercase' },
     trashBtn: { padding: 10 },
-    
-    // --- MODAL STYLES ---
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: '#FFF', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 25, alignItems: 'center' },
     modalHandle: { width: 40, height: 5, backgroundColor: '#E2E8F0', borderRadius: 10, marginBottom: 20 },
@@ -289,7 +279,6 @@ const styles = StyleSheet.create({
     cancelBtnText: { color: '#64748B', fontWeight: '700' },
     confirmBtn: { flex: 1, height: 55, borderRadius: 15, backgroundColor: '#FF4D4D', alignItems: 'center', justifyContent: 'center' },
     confirmBtnText: { color: '#FFF', fontWeight: '700' },
-
     fab: { position: 'absolute', left: 20, right: 20 },
     fabGradient: { height: 55, borderRadius: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
     fabText: { color: '#FFF', fontSize: 14, fontWeight: '800' }
