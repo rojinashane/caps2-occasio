@@ -6,11 +6,13 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { db, auth } from '../firebase';
+import { db, auth, storage } from '../firebase'; 
 import {
     doc, getDoc, updateDoc, deleteDoc,
     collection, query, where, getDocs, addDoc, serverTimestamp, limit
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import * as DocumentPicker from 'expo-document-picker';
 import CustomText from '../components/CustomText';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
@@ -38,6 +40,7 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [eventData, setEventData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
+    const [uploading, setUploading] = useState(false);
     const [columns, setColumns] = useState([]);
     const [foundUsers, setFoundUsers] = useState([]);
 
@@ -47,6 +50,7 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
     const [menuVisible, setMenuVisible] = useState(false);
     const [collabModalVisible, setCollabModalVisible] = useState(false);
+    const [workspaceDeleteVisible, setWorkspaceDeleteVisible] = useState(false);
 
     const [modalConfig, setModalConfig] = useState({ type: '', columnId: '', taskId: '', title: '' });
     const [listToDelete, setListToDelete] = useState(null);
@@ -58,8 +62,6 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [activeTask, setActiveTask] = useState(null);
     const [activeColumnId, setActiveColumnId] = useState(null);
 
-    // --- PERMISSION LOGIC ---
-    // Derived state to check if the current user is the owner
     const isOwner = useMemo(() => {
         return eventData?.userId === auth.currentUser?.uid;
     }, [eventData]);
@@ -87,10 +89,16 @@ export default function EventDetailsScreen({ route, navigation }) {
         }, [eventId])
     );
 
+    const syncToFirebase = async (updatedColumns) => {
+        try {
+            const docRef = doc(db, 'events', eventId);
+            await updateDoc(docRef, { columns: updatedColumns });
+        } catch (error) { console.error("Sync Error:", error); }
+    };
+
     const handleShareInvitation = async () => {
         const invitationLink = `https://occasio-866c3.web.app/index.html?id=${eventId}`;
         const message = `YOU'RE INVITED!\n\nEvent: ${eventData?.title}\nDate: ${formatDate(eventData?.startDate)}\nLocation: ${eventData?.location || 'TBD'}\n\nPlease confirm your RSVP here:\n${invitationLink}`;
-
         try {
             await Share.share({ title: 'Event Invitation', message: message, url: invitationLink });
         } catch (error) {
@@ -102,51 +110,46 @@ export default function EventDetailsScreen({ route, navigation }) {
         navigation.navigate('RSVPTrackerScreen', { eventId, eventTitle: eventData?.title });
     };
 
-    const syncToFirebase = async (updatedColumns) => {
+    const confirmDeleteWorkspace = async () => {
         try {
-            const docRef = doc(db, 'events', eventId);
-            await updateDoc(docRef, { columns: updatedColumns });
-        } catch (error) { console.error("Sync Error:", error); }
-    };
-
-    const handleDeleteWorkspace = () => {
-        setMenuVisible(false);
-        Alert.alert(
-            "Delete Workspace",
-            "This will permanently delete the event and all tasks for everyone. Continue?",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete Forever",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await deleteDoc(doc(db, 'events', eventId));
-                            navigation.navigate('Dashboard');
-                        } catch (error) { Alert.alert("Error", "Could not delete workspace."); }
-                    }
-                }
-            ]
-        );
+            setActionLoading(true);
+            await deleteDoc(doc(db, 'events', eventId));
+            setWorkspaceDeleteVisible(false);
+            navigation.navigate('Dashboard');
+        } catch (error) {
+            Alert.alert("Error", "Could not delete workspace.");
+        } finally {
+            setActionLoading(false);
+        }
     };
 
     const handleAddCollaborator = async () => {
-        if (!collabEmail.trim()) return;
-        if (collabEmail.trim().toLowerCase() === auth.currentUser?.email?.toLowerCase()) {
-            Alert.alert("Wait", "You are already the owner of this workspace!");
+        if (!collabEmail.trim()) {
+            Alert.alert("Required", "Please enter a valid email address.");
             return;
         }
+        
+        if (collabEmail.trim().toLowerCase() === auth.currentUser?.email?.toLowerCase()) {
+            Alert.alert("Wait", "You are already the owner of this workspace!");
+            setCollabEmail('');
+            setFoundUsers([]);
+            return;
+        }
+        
         setActionLoading(true);
         try {
             const usersRef = collection(db, 'users');
             const q = query(usersRef, where("email", "==", collabEmail.trim().toLowerCase()));
             const querySnapshot = await getDocs(q);
+            
             if (querySnapshot.empty) {
-                Alert.alert("User Not Found", "This email is not registered.");
+                Alert.alert("User Not Found", "This email is not registered with Occasio.");
                 setActionLoading(false);
                 return;
             }
+            
             const recipientId = querySnapshot.docs[0].id;
+            
             await addDoc(collection(db, 'notifications'), {
                 type: 'COLLAB_REQUEST',
                 senderName: auth.currentUser?.displayName || "A user",
@@ -157,9 +160,11 @@ export default function EventDetailsScreen({ route, navigation }) {
                 status: 'pending',
                 createdAt: serverTimestamp(),
             });
+            
             setCollabModalVisible(false);
             setCollabEmail('');
-            Alert.alert("Invitation Sent", "The user will appear once they accept.");
+            setFoundUsers([]);
+            Alert.alert("Invitation Sent", "The collaboration request has been sent successfully.");
         } catch (error) {
             Alert.alert("Error", "Failed to send invitation.");
         } finally {
@@ -198,7 +203,13 @@ export default function EventDetailsScreen({ route, navigation }) {
 
     const openTaskDetails = (columnId, task) => {
         setActiveColumnId(columnId);
-        setActiveTask({ ...task, description: task.description || '', priority: task.priority || 'C', subtasks: task.subtasks || [] });
+        setActiveTask({ 
+            ...task, 
+            description: task.description || '', 
+            priority: task.priority || 'C', 
+            subtasks: task.subtasks || [],
+            attachments: task.attachments || []
+        });
         setDetailModalVisible(true);
     };
 
@@ -214,6 +225,56 @@ export default function EventDetailsScreen({ route, navigation }) {
         setDetailModalVisible(false);
     };
 
+    const deleteSubtask = (subtaskId) => {
+        const filtered = activeTask.subtasks.filter(s => s.id !== subtaskId);
+        setActiveTask({ ...activeTask, subtasks: filtered });
+    };
+
+    const addSubtask = () => {
+        if (!subtaskText.trim()) return;
+        const newSubtask = { id: Date.now().toString(), text: subtaskText, completed: false };
+        setActiveTask({ ...activeTask, subtasks: [...(activeTask.subtasks || []), newSubtask] });
+        setSubtaskText('');
+    };
+
+    const handleFileUpload = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: "*/*",
+                copyToCacheDirectory: true
+            });
+
+            if (result.canceled) return;
+
+            setUploading(true);
+            const file = result.assets[0];
+            const response = await fetch(file.uri);
+            const blob = await response.blob();
+            
+            const fileRef = ref(storage, `event_files/${eventId}/${Date.now()}_${file.name}`);
+            await uploadBytes(fileRef, blob);
+            const downloadUrl = await getDownloadURL(fileRef);
+
+            const newAttachment = { 
+                id: Date.now().toString(), 
+                url: downloadUrl, 
+                name: file.name,
+                size: file.size 
+            };
+            
+            setActiveTask({ 
+                ...activeTask, 
+                attachments: [...(activeTask.attachments || []), newAttachment] 
+            });
+            Alert.alert("Success", "File uploaded successfully");
+        } catch (error) {
+            console.error("Upload Error:", error);
+            Alert.alert("Error", "Failed to upload file.");
+        } finally {
+            setUploading(false);
+        }
+    };
+
     const handleModalSubmit = async () => {
         if (!inputText.trim()) return;
         let newColumns = [...columns];
@@ -221,7 +282,7 @@ export default function EventDetailsScreen({ route, navigation }) {
             newColumns.push({ id: Date.now().toString(), title: inputText, tasks: [] });
         } else if (modalConfig.type === 'ADD_TASK') {
             newColumns = columns.map(col => col.id === modalConfig.columnId ? {
-                ...col, tasks: [...col.tasks, { id: Date.now().toString(), text: inputText, completed: false, priority: 'C', description: '', subtasks: [] }]
+                ...col, tasks: [...col.tasks, { id: Date.now().toString(), text: inputText, completed: false, priority: 'C', description: '', subtasks: [], attachments: [] }]
             } : col);
         }
         setColumns(newColumns);
@@ -265,7 +326,6 @@ export default function EventDetailsScreen({ route, navigation }) {
                             <CustomText style={styles.headerTitle} numberOfLines={1}>{eventData?.title}</CustomText>
                             <CustomText style={styles.headerSubtitle}>EVENT WORKSPACE</CustomText>
                         </View>
-                        {/* ONLY OWNER: Workspace Menu (Delete Event) */}
                         {isOwner && (
                             <TouchableOpacity style={styles.iconCircle} onPress={() => setMenuVisible(true)}>
                                 <Ionicons name="ellipsis-horizontal" size={24} color="#FFF" />
@@ -275,14 +335,12 @@ export default function EventDetailsScreen({ route, navigation }) {
                 </View>
 
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={COLUMN_WIDTH + 16} decelerationRate="fast" contentContainerStyle={styles.boardContent}>
-                    {/* OVERVIEW COLUMN */}
                     <View style={[styles.column, styles.infoColumn]}>
                         <View style={styles.columnHeader}>
                             <View style={styles.row}>
                                 <View style={styles.infoIconBg}><Ionicons name="stats-chart" size={18} color="#00686F" /></View>
                                 <CustomText style={styles.columnTitle}>Overview</CustomText>
                             </View>
-                            {/* ONLY OWNER: Edit Event Information */}
                             {isOwner && (
                                 <TouchableOpacity onPress={() => navigation.navigate('UpdateEvent', { eventId, eventData })} style={styles.editPill}>
                                     <Ionicons name="pencil" size={12} color="#00686F" /><CustomText style={styles.editBtnText}>Edit</CustomText>
@@ -290,11 +348,9 @@ export default function EventDetailsScreen({ route, navigation }) {
                             )}
                         </View>
                         <ScrollView showsVerticalScrollIndicator={false}>
-                            
                             <View style={[styles.detailCard, { borderLeftWidth: 5, borderLeftColor: '#00686F', backgroundColor: '#F0F9FA' }]}>
                                 <CustomText style={[styles.infoLabel, { color: '#00686F' }]}>RSVP TRACKER</CustomText>
                                 <View style={styles.rsvpActionRow}>
-                                    {/* ONLY OWNER: Share Invitation Link */}
                                     {isOwner && (
                                         <TouchableOpacity style={styles.rsvpBtn} onPress={handleShareInvitation}>
                                             <Ionicons name="share-social" size={16} color="#FFF" />
@@ -335,17 +391,15 @@ export default function EventDetailsScreen({ route, navigation }) {
                         </ScrollView>
                     </View>
 
-                    {/* DYNAMIC LISTS */}
                     {columns.map((col) => (
                         <View key={col.id} style={styles.trelloColumn}>
                             <View style={styles.trelloHeaderRow}>
                                 <TextInput 
                                     style={styles.trelloTitleInput} 
                                     value={col.title} 
-                                    editable={isOwner} // ONLY OWNER: Edit List Title
+                                    editable={isOwner}
                                     onChangeText={(text) => updateColumnTitle(col.id, text)} 
                                 />
-                                {/* ONLY OWNER: Delete List */}
                                 {isOwner && (
                                     <TouchableOpacity onPress={() => triggerDeleteList(col.id)}>
                                         <Ionicons name="trash-outline" size={20} color="#EF4444" />
@@ -356,7 +410,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 {col.tasks.map((task) => (
                                     <Swipeable 
                                         key={task.id} 
-                                        enabled={isOwner} // ONLY OWNER: Delete Cards
+                                        enabled={isOwner}
                                         renderRightActions={() => (
                                             <TouchableOpacity style={styles.deleteSwipeAction} onPress={() => {
                                                 const updated = columns.map(c => c.id === col.id ? { ...c, tasks: c.tasks.filter(t => t.id !== task.id) } : c);
@@ -366,16 +420,30 @@ export default function EventDetailsScreen({ route, navigation }) {
                                     >
                                         <TouchableOpacity style={[styles.trelloTaskCard, { borderLeftWidth: 6, borderLeftColor: getPriorityColor(task.priority) }]} onPress={() => openTaskDetails(col.id, task)}>
                                             <View style={styles.cardHeaderRow}>
-                                                {/* BOTH: Toggle Completion */}
                                                 <TouchableOpacity onPress={() => toggleCardCompletion(col.id, task.id)} style={styles.outerCheckbox}>
                                                     <Ionicons name={task.completed ? "checkbox" : "square-outline"} size={20} color={task.completed ? "#10B981" : "#CBD5E1"} />
                                                 </TouchableOpacity>
                                                 <CustomText style={[styles.trelloTaskText, task.completed && styles.checkTextDone]}>{task.text}</CustomText>
                                             </View>
+                                            {(task.subtasks?.length > 0 || task.attachments?.length > 0) && (
+                                                <View style={styles.cardBadges}>
+                                                    {task.subtasks?.length > 0 && (
+                                                        <View style={styles.badge}>
+                                                            <Ionicons name="checkmark-done" size={12} color="#64748B" />
+                                                            <CustomText style={styles.badgeText}>{task.subtasks.filter(s => s.completed).length}/{task.subtasks.length}</CustomText>
+                                                        </View>
+                                                    )}
+                                                    {task.attachments?.length > 0 && (
+                                                        <View style={styles.badge}>
+                                                            <Ionicons name="attach" size={12} color="#64748B" />
+                                                            <CustomText style={styles.badgeText}>{task.attachments.length}</CustomText>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            )}
                                         </TouchableOpacity>
                                     </Swipeable>
                                 ))}
-                                {/* ONLY OWNER: Add New Cards */}
                                 {isOwner && (
                                     <TouchableOpacity style={styles.trelloAddTaskBtn} onPress={() => { setModalConfig({ type: 'ADD_TASK', columnId: col.id, title: 'Add a card' }); setInputText(''); setModalVisible(true); }}>
                                         <Ionicons name="add" size={20} color="#64748B" /><CustomText style={styles.trelloAddTaskText}>Add a card</CustomText>
@@ -385,7 +453,6 @@ export default function EventDetailsScreen({ route, navigation }) {
                         </View>
                     ))}
                     
-                    {/* ONLY OWNER: Add New Lists */}
                     {isOwner && (
                         <TouchableOpacity style={styles.addListBtn} onPress={() => { setModalConfig({ type: 'ADD_COLUMN', title: 'Add a list' }); setInputText(''); setModalVisible(true); }}>
                             <Ionicons name="add-circle" size={24} color="#FFF" /><CustomText style={styles.addListBtnText}>Add list</CustomText>
@@ -402,11 +469,44 @@ export default function EventDetailsScreen({ route, navigation }) {
                         <TouchableOpacity style={styles.menuItem} onPress={() => { setMenuVisible(false); setCollabModalVisible(true); }}>
                             <Ionicons name="person-add-outline" size={22} color="#1E293B" /><CustomText style={styles.menuItemText}>Add a Collaborator</CustomText>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]} onPress={handleDeleteWorkspace}>
+                        <TouchableOpacity style={[styles.menuItem, { borderBottomWidth: 0 }]} onPress={() => { setMenuVisible(false); setWorkspaceDeleteVisible(true); }}>
                             <Ionicons name="trash-outline" size={22} color="#EF4444" /><CustomText style={[styles.menuItemText, { color: '#EF4444' }]}>Delete Event Workspace</CustomText>
                         </TouchableOpacity>
                     </View>
                 </TouchableOpacity>
+            </Modal>
+
+            <Modal transparent visible={workspaceDeleteVisible} animationType="fade">
+                <View style={styles.modalOverlay}>
+                    <View style={styles.deleteWorkspaceCard}>
+                        <View style={styles.dangerIconContainer}>
+                            <Ionicons name="warning" size={32} color="#EF4444" />
+                        </View>
+                        <CustomText style={styles.deleteWorkspaceTitle}>Delete Workspace?</CustomText>
+                        <CustomText style={styles.deleteWorkspaceMessage}>
+                            This will permanently delete this event and all associated tasks for everyone. This action cannot be undone.
+                        </CustomText>
+                        <View style={styles.deleteWorkspaceActions}>
+                            <TouchableOpacity 
+                                style={styles.cancelWorkspaceBtn} 
+                                onPress={() => setWorkspaceDeleteVisible(false)}
+                            >
+                                <CustomText style={styles.cancelBtnText}>Keep Workspace</CustomText>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={styles.confirmWorkspaceBtn} 
+                                onPress={confirmDeleteWorkspace}
+                                disabled={actionLoading}
+                            >
+                                {actionLoading ? (
+                                    <ActivityIndicator color="#FFF" size="small" />
+                                ) : (
+                                    <CustomText style={styles.confirmBtnText}>Delete Forever</CustomText>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
             </Modal>
 
             <Modal transparent visible={collabModalVisible} animationType="fade">
@@ -415,7 +515,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                         <CustomText style={styles.modalTitle}>Invite Collaborator</CustomText>
                         <TextInput style={styles.modalInput} placeholder="Email..." value={collabEmail} onChangeText={handleSearchUsers} autoCapitalize="none" />
                         <View style={styles.modalButtons}>
-                            <TouchableOpacity onPress={() => setCollabModalVisible(false)} style={styles.modalCancel}><CustomText style={{ color: '#64748B' }}>Cancel</CustomText></TouchableOpacity>
+                            <TouchableOpacity onPress={() => { setCollabModalVisible(false); setCollabEmail(''); setFoundUsers([]); }} style={styles.modalCancel}><CustomText style={{ color: '#64748B' }}>Cancel</CustomText></TouchableOpacity>
                             <TouchableOpacity onPress={handleAddCollaborator} style={styles.modalSave} disabled={actionLoading}>
                                 {actionLoading ? <ActivityIndicator color="#FFF" /> : <CustomText style={{ color: '#FFF', fontWeight: 'bold' }}>Send Request</CustomText>}
                             </TouchableOpacity>
@@ -450,47 +550,148 @@ export default function EventDetailsScreen({ route, navigation }) {
             </Modal>
 
             <Modal visible={detailModalVisible} animationType="slide">
-                <View style={styles.detailModalContainer}>
+                <SafeAreaView style={styles.detailModalContainer}>
                     <View style={styles.detailHeader}>
-                        <TouchableOpacity onPress={() => setDetailModalVisible(false)}><CustomText>Close</CustomText></TouchableOpacity>
-                        <CustomText style={styles.detailHeaderTitle}>Card Details</CustomText>
-                        {/* ONLY OWNER: Can save edited details (Priority, Description, etc.) */}
-                        {isOwner ? (
-                            <TouchableOpacity onPress={saveTaskDetails}><CustomText style={{ color: '#00686F', fontWeight: 'bold' }}>Save</CustomText></TouchableOpacity>
-                        ) : <View style={{ width: 40 }} />}
+                        <TouchableOpacity onPress={() => setDetailModalVisible(false)} style={styles.detailCloseBtn}>
+                            <Ionicons name="close" size={24} color="#64748B" />
+                        </TouchableOpacity>
+                        <CustomText style={styles.detailHeaderTitle}>Task Details</CustomText>
+                        {/* Allowed collaborators to update so checklists and uploads sync */}
+                        <TouchableOpacity onPress={saveTaskDetails} style={styles.detailSaveBtn}>
+                            <CustomText style={{ color: '#FFF', fontWeight: 'bold' }}>Update</CustomText>
+                        </TouchableOpacity>
                     </View>
-                    <ScrollView style={{ padding: 20 }}>
-                        <CustomText style={styles.detailLabel}>TITLE</CustomText>
-                        <TextInput 
-                            style={styles.detailTitleInput} 
-                            value={activeTask?.text} 
-                            editable={isOwner} // OWNER ONLY
-                            onChangeText={(t) => setActiveTask({ ...activeTask, text: t })} 
-                        />
-                        <CustomText style={styles.detailLabel}>PRIORITY</CustomText>
-                        <View style={styles.priorityRow}>
-                            {['A', 'B', 'C'].map((p) => (
-                                <TouchableOpacity 
-                                    key={p} 
-                                    disabled={!isOwner} // OWNER ONLY
-                                    onPress={() => setActiveTask({ ...activeTask, priority: p })} 
-                                    style={[styles.priorityBtn, { backgroundColor: activeTask?.priority === p ? getPriorityColor(p) : '#F1F5F9' }]}
-                                >
-                                    <CustomText style={{ color: activeTask?.priority === p ? '#FFF' : '#64748B' }}>{p}</CustomText>
-                                </TouchableOpacity>
+                    
+                    <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+                        <View style={styles.detailBody}>
+                            <View style={styles.sectionHeader}>
+                                <Ionicons name="text" size={18} color="#00686F" />
+                                <CustomText style={styles.detailLabel}>TITLE</CustomText>
+                            </View>
+                            <TextInput 
+                                style={styles.detailTitleInput} 
+                                value={activeTask?.text} 
+                                editable={isOwner}
+                                placeholder="Task title..."
+                                onChangeText={(t) => setActiveTask({ ...activeTask, text: t })} 
+                            />
+
+                            <View style={styles.sectionHeader}>
+                                <Ionicons name="flag" size={18} color="#00686F" />
+                                <CustomText style={styles.detailLabel}>PRIORITY</CustomText>
+                            </View>
+                            <View style={styles.priorityRow}>
+                                {['A', 'B', 'C'].map((p) => (
+                                    <TouchableOpacity 
+                                        key={p} 
+                                        disabled={!isOwner}
+                                        onPress={() => setActiveTask({ ...activeTask, priority: p })} 
+                                        style={[
+                                            styles.priorityBtn, 
+                                            activeTask?.priority === p && { backgroundColor: getPriorityColor(p), borderColor: getPriorityColor(p) }
+                                        ]}
+                                    >
+                                        <CustomText style={[styles.priorityBtnText, activeTask?.priority === p && { color: '#FFF' }]}>
+                                            {p === 'A' ? 'High' : p === 'B' ? 'Medium' : 'Low'}
+                                        </CustomText>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+
+                            <View style={styles.sectionHeader}>
+                                <Ionicons name="document-text" size={18} color="#00686F" />
+                                <CustomText style={styles.detailLabel}>DESCRIPTION</CustomText>
+                            </View>
+                            <TextInput 
+                                style={styles.detailDescInput} 
+                                multiline 
+                                value={activeTask?.description} 
+                                editable={isOwner}
+                                placeholder={isOwner ? "Tap to add a more detailed description..." : "No description."}
+                                onChangeText={(t) => setActiveTask({ ...activeTask, description: t })} 
+                            />
+
+                            <View style={styles.sectionHeader}>
+                                <Ionicons name="list" size={18} color="#00686F" />
+                                <CustomText style={styles.detailLabel}>CHECKLIST</CustomText>
+                            </View>
+                            
+                            {activeTask?.subtasks?.map((sub) => (
+                                <View key={sub.id} style={styles.subtaskRow}>
+                                    <TouchableOpacity 
+                                        onPress={() => {
+                                            const updated = activeTask.subtasks.map(s => s.id === sub.id ? { ...s, completed: !s.completed } : s);
+                                            setActiveTask({ ...activeTask, subtasks: updated });
+                                        }}
+                                        style={styles.subtaskCheck}
+                                    >
+                                        <Ionicons name={sub.completed ? "checkbox" : "square-outline"} size={22} color={sub.completed ? "#10B981" : "#00686F"} />
+                                    </TouchableOpacity>
+                                    <CustomText style={[styles.subtaskText, sub.completed && styles.checkTextDone]}>{sub.text}</CustomText>
+                                    {isOwner && (
+                                        <TouchableOpacity onPress={() => deleteSubtask(sub.id)} style={styles.subtaskDelete}>
+                                            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
                             ))}
+
+                            {isOwner && (
+                                <View style={styles.addSubtaskContainer}>
+                                    <TextInput 
+                                        style={styles.subtaskInput} 
+                                        placeholder="Add a checklist item..." 
+                                        value={subtaskText} 
+                                        onChangeText={setSubtaskText} 
+                                    />
+                                    <TouchableOpacity onPress={addSubtask} style={styles.subtaskAddBtn}>
+                                        <Ionicons name="add" size={24} color="#FFF" />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            <View style={styles.sectionHeader}>
+                                <Ionicons name="attach" size={18} color="#00686F" />
+                                <CustomText style={styles.detailLabel}>ATTACHMENTS</CustomText>
+                            </View>
+
+                            {activeTask?.attachments?.map((file) => (
+                                <View key={file.id} style={styles.attachmentRow}>
+                                    <TouchableOpacity style={styles.attachmentInfo} onPress={() => Linking.openURL(file.url)}>
+                                        <Ionicons name="document-outline" size={20} color="#00686F" />
+                                        <CustomText style={styles.attachmentText} numberOfLines={1}>{file.name || 'View Document'}</CustomText>
+                                    </TouchableOpacity>
+                                    {isOwner && (
+                                        <TouchableOpacity onPress={() => {
+                                            const filtered = activeTask.attachments.filter(a => a.id !== file.id);
+                                            setActiveTask({ ...activeTask, attachments: filtered });
+                                        }}>
+                                            <Ionicons name="close-circle" size={20} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ))}
+
+                            {/* Allowed collaborators to upload files */}
+                            <TouchableOpacity 
+                                onPress={handleFileUpload} 
+                                style={styles.uploadBtn}
+                                disabled={uploading}
+                            >
+                                {uploading ? (
+                                    <ActivityIndicator color="#00686F" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="cloud-upload-outline" size={20} color="#00686F" />
+                                        <CustomText style={styles.uploadBtnText}>Upload from device</CustomText>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+
+                            <View style={{ height: 40 }} />
                         </View>
-                        <CustomText style={styles.detailLabel}>DESCRIPTION</CustomText>
-                        <TextInput 
-                            style={styles.detailDescInput} 
-                            multiline 
-                            value={activeTask?.description} 
-                            editable={isOwner} // OWNER ONLY
-                            placeholder={isOwner ? "Add a description..." : "No description."}
-                            onChangeText={(t) => setActiveTask({ ...activeTask, description: t })} 
-                        />
                     </ScrollView>
-                </View>
+                </SafeAreaView>
             </Modal>
         </View>
     );
@@ -523,6 +724,9 @@ const styles = StyleSheet.create({
     trelloTitleInput: { flex: 1, fontWeight: '800', fontSize: 16, color: '#2D3748', textTransform: 'uppercase' },
     trelloTaskCard: { backgroundColor: '#FFF', padding: 14, borderRadius: 14, marginBottom: 10, elevation: 2 },
     cardHeaderRow: { flexDirection: 'row', alignItems: 'center' },
+    cardBadges: { flexDirection: 'row', marginTop: 8, gap: 10 },
+    badge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F1F5F9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+    badgeText: { fontSize: 10, color: '#64748B', marginLeft: 3, fontWeight: '600' },
     outerCheckbox: { marginRight: 10 },
     trelloTaskText: { fontSize: 15, color: '#334155', fontWeight: '600', flex: 1 },
     checkTextDone: { textDecorationLine: 'line-through', color: '#94A3B8' },
@@ -543,14 +747,32 @@ const styles = StyleSheet.create({
     menuHandle: { width: 40, height: 5, backgroundColor: '#E2E8F0', borderRadius: 3, alignSelf: 'center', marginVertical: 15 },
     menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
     menuItemText: { fontSize: 16, fontWeight: '600', color: '#1E293B', marginLeft: 15 },
-    detailModalContainer: { flex: 1, backgroundColor: '#FFF' },
-    detailHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-    detailHeaderTitle: { fontSize: 16, fontWeight: '800' },
-    detailLabel: { fontSize: 11, fontWeight: '900', color: '#94A3B8', marginTop: 25, marginBottom: 10, letterSpacing: 1 },
-    detailTitleInput: { fontSize: 18, fontWeight: '700', color: '#1E293B', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12 },
-    priorityRow: { flexDirection: 'row', justifyContent: 'space-between' },
-    priorityBtn: { flex: 1, marginHorizontal: 4, padding: 12, borderRadius: 10, alignItems: 'center' },
-    detailDescInput: { backgroundColor: '#F8FAFC', padding: 15, borderRadius: 12, height: 100, textAlignVertical: 'top' },
+    
+    detailModalContainer: { flex: 1, backgroundColor: '#F8FAFC' },
+    detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+    detailCloseBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+    detailSaveBtn: { backgroundColor: '#00686F', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20 },
+    detailHeaderTitle: { fontSize: 16, fontWeight: '800', color: '#1E293B' },
+    detailBody: { padding: 20 },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, marginTop: 12 },
+    detailLabel: { fontSize: 12, fontWeight: '900', color: '#64748B', marginLeft: 8, letterSpacing: 1 },
+    detailTitleInput: { fontSize: 20, fontWeight: '700', color: '#1E293B', backgroundColor: '#FFF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 20 },
+    priorityRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
+    priorityBtn: { flex: 1, marginHorizontal: 4, paddingVertical: 10, borderRadius: 12, alignItems: 'center', borderWidth: 1.5, borderColor: '#E2E8F0', backgroundColor: '#FFF' },
+    priorityBtnText: { fontWeight: '700', fontSize: 13, color: '#64748B' },
+    detailDescInput: { backgroundColor: '#FFF', padding: 15, borderRadius: 12, height: 120, textAlignVertical: 'top', borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 20, fontSize: 15, color: '#334155' },
+    subtaskRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, backgroundColor: '#FFF', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+    subtaskCheck: { marginRight: 10 },
+    subtaskText: { flex: 1, fontSize: 15, color: '#334155', fontWeight: '500' },
+    subtaskDelete: { padding: 4 },
+    addSubtaskContainer: { flexDirection: 'row', marginTop: 10, marginBottom: 24 },
+    subtaskInput: { flex: 1, backgroundColor: '#FFF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', fontSize: 14 },
+    subtaskAddBtn: { backgroundColor: '#00686F', width: 48, justifyContent: 'center', alignItems: 'center', borderRadius: 12, marginLeft: 8 },
+    attachmentRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' },
+    attachmentInfo: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+    attachmentText: { marginLeft: 10, fontSize: 14, color: '#00686F', fontWeight: '600', textDecorationLine: 'underline' },
+    uploadBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F9FA', padding: 14, borderRadius: 12, borderStyle: 'dashed', borderWidth: 2, borderColor: '#00686F', marginTop: 8 },
+    uploadBtnText: { marginLeft: 10, fontSize: 14, color: '#00686F', fontWeight: '700' },
     deleteModalBox: { backgroundColor: '#FFF', width: '80%', padding: 25, borderRadius: 25, alignItems: 'center' },
     deleteModalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 10 },
     deleteModalActions: { flexDirection: 'row', width: '100%', justifyContent: 'space-around' },
@@ -562,5 +784,15 @@ const styles = StyleSheet.create({
     collabEmail: { fontSize: 11, color: '#334155', fontWeight: '600', maxWidth: 150 },
     rsvpActionRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
     rsvpBtn: { flex: 0.48, backgroundColor: '#00686F', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 12 },
-    rsvpBtnText: { color: '#FFF', fontWeight: '700', fontSize: 12, marginLeft: 6 }
+    rsvpBtnText: { color: '#FFF', fontWeight: '700', fontSize: 12, marginLeft: 6 },
+    
+    deleteWorkspaceCard: { backgroundColor: '#FFF', width: '85%', padding: 24, borderRadius: 32, alignItems: 'center', elevation: 10 },
+    dangerIconContainer: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+    deleteWorkspaceTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B', marginBottom: 8 },
+    deleteWorkspaceMessage: { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 20, marginBottom: 24 },
+    deleteWorkspaceActions: { width: '100%', gap: 12 },
+    confirmWorkspaceBtn: { backgroundColor: '#EF4444', width: '100%', paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
+    confirmBtnText: { color: '#FFF', fontWeight: '800', fontSize: 15 },
+    cancelWorkspaceBtn: { backgroundColor: '#F1F5F9', width: '100%', paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
+    cancelBtnText: { color: '#64748B', fontWeight: '700', fontSize: 15 }
 });
