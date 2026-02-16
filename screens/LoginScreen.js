@@ -16,20 +16,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomText from '../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
 import { auth } from '../firebase';
-import { signInWithEmailAndPassword, reload, signOut } from 'firebase/auth';
+import { 
+    signInWithEmailAndPassword, 
+    reload, 
+    signOut, 
+    sendPasswordResetEmail // Added for forgot password functionality
+} from 'firebase/auth';
 
 export default function LoginScreen({ navigation }) {
     // --- ANIMATION VALUES ---
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const slideUpAnim = useRef(new Animated.Value(30)).current;
     const logoScale = useRef(new Animated.Value(0)).current;
-    const logoRotate = useRef(new Animated.Value(0)).current; // New rotation value
+    const logoRotate = useRef(new Animated.Value(0)).current; 
     const floatAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
         // Main entrance sequence
         Animated.sequence([
-            // 1. Pop, Spin, and Slide the logo & content
             Animated.parallel([
                 Animated.spring(logoScale, {
                     toValue: 1,
@@ -76,7 +80,6 @@ export default function LoginScreen({ navigation }) {
         ).start();
     }, []);
 
-    // Interpolate rotation for the logo
     const spin = logoRotate.interpolate({
         inputRange: [0, 1],
         outputRange: ['0deg', '360deg'],
@@ -86,6 +89,8 @@ export default function LoginScreen({ navigation }) {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+
+    // --- HANDLERS ---
 
     const handleLogin = async () => {
         if (!email.trim() || !password) {
@@ -117,6 +122,27 @@ export default function LoginScreen({ navigation }) {
         }
     };
 
+    const handleForgotPassword = async () => {
+        if (!email.trim()) {
+            Alert.alert('Email Required', 'Please enter your email address in the field above to reset your password.');
+            return;
+        }
+
+        try {
+            await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+            Alert.alert(
+                'Reset Link Sent',
+                'A password reset link has been sent to your email. Please check your inbox and spam folder.'
+            );
+        } catch (err) {
+            let errorMessage = 'Could not send reset email. Please try again.';
+            if (err.code === 'auth/user-not-found') {
+                errorMessage = 'No account found with this email address.';
+            }
+            Alert.alert('Reset Error', errorMessage);
+        }
+    };
+
     return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#EFF0EE' }} edges={['top', 'left', 'right']}>
             <KeyboardAvoidingView
@@ -136,7 +162,7 @@ export default function LoginScreen({ navigation }) {
                             marginBottom: 20,
                             transform: [
                                 { scale: logoScale },
-                                { rotate: spin },     // Added Rotation
+                                { rotate: spin },
                                 { translateY: floatAnim }
                             ]
                         }}
@@ -180,7 +206,7 @@ export default function LoginScreen({ navigation }) {
                         </View>
 
                         {/* Password Input */}
-                        <View style={{ marginBottom: 24 }}>
+                        <View style={{ marginBottom: 10 }}>
                             <CustomText style={styles.inputLabel}>Password</CustomText>
                             <View style={styles.inputContainer}>
                                 <Ionicons name="lock-closed-outline" size={20} color="#00686F" />
@@ -203,6 +229,14 @@ export default function LoginScreen({ navigation }) {
                                 </TouchableOpacity>
                             </View>
                         </View>
+
+                        {/* Forgot Password Link */}
+                        <TouchableOpacity 
+                            onPress={handleForgotPassword} 
+                            style={{ alignSelf: 'flex-end', marginBottom: 24, paddingVertical: 5 }}
+                        >
+                            <CustomText style={styles.forgotPasswordText}>Forgot Password?</CustomText>
+                        </TouchableOpacity>
 
                         <TouchableOpacity
                             onPress={handleLogin}
@@ -274,6 +308,11 @@ const styles = StyleSheet.create({
         marginLeft: 10,
         fontSize: 15,
         color: '#111827',
+    },
+    forgotPasswordText: {
+        color: '#00686F',
+        fontSize: 13,
+        fontWeight: '700',
     },
     loginButton: {
         backgroundColor: '#00686F',
