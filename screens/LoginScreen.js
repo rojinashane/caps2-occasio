@@ -11,6 +11,7 @@ import {
     ActivityIndicator,
     ScrollView,
     StyleSheet,
+    Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomText from '../components/CustomText';
@@ -20,7 +21,7 @@ import {
     signInWithEmailAndPassword, 
     reload, 
     signOut, 
-    sendPasswordResetEmail // Added for forgot password functionality
+    sendPasswordResetEmail 
 } from 'firebase/auth';
 
 export default function LoginScreen({ navigation }) {
@@ -33,32 +34,30 @@ export default function LoginScreen({ navigation }) {
 
     useEffect(() => {
         // Main entrance sequence
-        Animated.sequence([
-            Animated.parallel([
-                Animated.spring(logoScale, {
-                    toValue: 1,
-                    friction: 7,
-                    tension: 40,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(logoRotate, {
-                    toValue: 1,
-                    duration: 1000,
-                    easing: Easing.out(Easing.cubic),
-                    useNativeDriver: true,
-                }),
-                Animated.timing(fadeAnim, {
-                    toValue: 1,
-                    duration: 800,
-                    useNativeDriver: true
-                }),
-                Animated.timing(slideUpAnim, {
-                    toValue: 0,
-                    duration: 700,
-                    easing: Easing.out(Easing.back(1)),
-                    useNativeDriver: true,
-                }),
-            ])
+        Animated.parallel([
+            Animated.spring(logoScale, {
+                toValue: 1,
+                friction: 7,
+                tension: 40,
+                useNativeDriver: true,
+            }),
+            Animated.timing(logoRotate, {
+                toValue: 1,
+                duration: 1200, 
+                easing: Easing.out(Easing.exp), // FIXED: Changed .expo to .exp
+                useNativeDriver: true,
+            }),
+            Animated.timing(fadeAnim, {
+                toValue: 1,
+                duration: 800,
+                useNativeDriver: true
+            }),
+            Animated.timing(slideUpAnim, {
+                toValue: 0,
+                duration: 700,
+                easing: Easing.out(Easing.back(1)),
+                useNativeDriver: true,
+            }),
         ]).start();
 
         // Continuous floating idle animation
@@ -66,13 +65,13 @@ export default function LoginScreen({ navigation }) {
             Animated.sequence([
                 Animated.timing(floatAnim, {
                     toValue: -10,
-                    duration: 2000,
+                    duration: 2500,
                     easing: Easing.inOut(Easing.sin),
                     useNativeDriver: true,
                 }),
                 Animated.timing(floatAnim, {
                     toValue: 0,
-                    duration: 2000,
+                    duration: 2500,
                     easing: Easing.inOut(Easing.sin),
                     useNativeDriver: true,
                 }),
@@ -89,8 +88,6 @@ export default function LoginScreen({ navigation }) {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-
-    // --- HANDLERS ---
 
     const handleLogin = async () => {
         if (!email.trim() || !password) {
@@ -124,52 +121,46 @@ export default function LoginScreen({ navigation }) {
 
     const handleForgotPassword = async () => {
         if (!email.trim()) {
-            Alert.alert('Email Required', 'Please enter your email address in the field above to reset your password.');
+            Alert.alert('Email Required', 'Please enter your email to reset password.');
             return;
         }
-
         try {
             await sendPasswordResetEmail(auth, email.trim().toLowerCase());
-            Alert.alert(
-                'Reset Link Sent',
-                'A password reset link has been sent to your email. Please check your inbox and spam folder.'
-            );
+            Alert.alert('Reset Link Sent', 'Check your inbox for the reset link.');
         } catch (err) {
-            let errorMessage = 'Could not send reset email. Please try again.';
-            if (err.code === 'auth/user-not-found') {
-                errorMessage = 'No account found with this email address.';
-            }
-            Alert.alert('Reset Error', errorMessage);
+            Alert.alert('Error', 'Could not send reset email.');
         }
     };
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#EFF0EE' }} edges={['top', 'left', 'right']}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
                 <ScrollView
-                    contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 20, paddingVertical: 24, justifyContent: 'center' }}
+                    contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* ANIMATED LOGO SECTION */}
+                    {/* LOGO SECTION */}
                     <Animated.View 
-                        style={{ 
-                            alignItems: 'center', 
-                            marginBottom: 20,
-                            transform: [
-                                { scale: logoScale },
-                                { rotate: spin },
-                                { translateY: floatAnim }
-                            ]
-                        }}
+                        style={[
+                            styles.logoContainer,
+                            { 
+                                transform: [
+                                    { scale: logoScale },
+                                    { rotate: spin },
+                                    { translateY: floatAnim }
+                                ]
+                            }
+                        ]}
                     >
-                        <View style={styles.logoCircle}>
-                            <Ionicons name="calendar" size={40} color="#EFF0EE" />
-                        </View>
+                        <Image 
+                            source={require('../assets/logo/logoo.png')} 
+                            style={styles.logoImage}
+                            resizeMode="contain"
+                        />
                     </Animated.View>
 
                     <Animated.View
@@ -178,17 +169,13 @@ export default function LoginScreen({ navigation }) {
                             transform: [{ translateY: slideUpAnim }],
                         }}
                     >
-                        <View style={{ marginBottom: 28, alignItems: 'center' }}>
-                            <CustomText style={{ fontSize: 28, fontWeight: 'bold', color: '#00686F', marginBottom: 4 }}>
-                                Welcome Back
-                            </CustomText>
-                            <CustomText style={{ fontSize: 14, color: '#6B7280', textAlign: 'center' }}>
-                                Sign in to continue your planning
-                            </CustomText>
+                        <View style={styles.headerTextContainer}>
+                            <CustomText style={styles.welcomeTitle}>Welcome Back</CustomText>
+                            <CustomText style={styles.subtitle}>Sign in to continue your planning</CustomText>
                         </View>
 
                         {/* Email Input */}
-                        <View style={{ marginBottom: 14 }}>
+                        <View style={styles.inputWrapper}>
                             <CustomText style={styles.inputLabel}>Email</CustomText>
                             <View style={styles.inputContainer}>
                                 <Ionicons name="mail-outline" size={20} color="#00686F" />
@@ -200,13 +187,12 @@ export default function LoginScreen({ navigation }) {
                                     onChangeText={setEmail}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
-                                    autoCorrect={false}
                                 />
                             </View>
                         </View>
 
                         {/* Password Input */}
-                        <View style={{ marginBottom: 10 }}>
+                        <View style={styles.inputWrapper}>
                             <CustomText style={styles.inputLabel}>Password</CustomText>
                             <View style={styles.inputContainer}>
                                 <Ionicons name="lock-closed-outline" size={20} color="#00686F" />
@@ -218,7 +204,6 @@ export default function LoginScreen({ navigation }) {
                                     onChangeText={setPassword}
                                     secureTextEntry={!showPassword}
                                     autoCapitalize="none"
-                                    onSubmitEditing={handleLogin}
                                 />
                                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                                     <Ionicons
@@ -230,19 +215,15 @@ export default function LoginScreen({ navigation }) {
                             </View>
                         </View>
 
-                        {/* Forgot Password Link */}
-                        <TouchableOpacity 
-                            onPress={handleForgotPassword} 
-                            style={{ alignSelf: 'flex-end', marginBottom: 24, paddingVertical: 5 }}
-                        >
-                            <CustomText style={styles.forgotPasswordText}>Forgot Password?</CustomText>
+                        <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotBtn}>
+                            <CustomText style={styles.forgotText}>Forgot Password?</CustomText>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             onPress={handleLogin}
                             disabled={loading}
                             style={styles.loginButton}
-                            activeOpacity={0.85}
+                            activeOpacity={0.8}
                         >
                             {loading ? (
                                 <ActivityIndicator color="#EFF0EE" size="small" />
@@ -252,18 +233,14 @@ export default function LoginScreen({ navigation }) {
                         </TouchableOpacity>
 
                         <View style={styles.dividerContainer}>
-                            <View style={styles.dividerLine} />
-                            <CustomText style={styles.dividerText}>OR</CustomText>
-                            <View style={styles.dividerLine} />
+                            <View style={styles.line} />
+                            <CustomText style={styles.orText}>OR</CustomText>
+                            <View style={styles.line} />
                         </View>
 
-                        <TouchableOpacity
-                            onPress={() => navigation.navigate('Signup')}
-                            style={{ paddingVertical: 10 }}
-                        >
-                            <CustomText style={{ textAlign: 'center', fontSize: 14, color: '#6B7280' }}>
-                                Don't have an account?{' '}
-                                <CustomText style={{ color: '#00686F', fontWeight: 'bold' }}>Sign Up</CustomText>
+                        <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+                            <CustomText style={styles.signupPrompt}>
+                                Don't have an account? <CustomText style={styles.signupLink}>Sign Up</CustomText>
                             </CustomText>
                         </TouchableOpacity>
                     </Animated.View>
@@ -274,76 +251,99 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-    logoCircle: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: '#00686F',
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#00686F',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 8,
+    safeArea: { flex: 1, backgroundColor: '#EFF0EE' },
+    scrollContent: { 
+        flexGrow: 1, 
+        paddingHorizontal: 30, 
+        paddingVertical: 40, 
+        justifyContent: 'center' 
     },
-    inputLabel: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 6
+    logoContainer: { 
+        alignItems: 'center', 
+        marginBottom: 20 
+    },
+    logoImage: { 
+        width: 90, 
+        height: 90 
+    },
+    headerTextContainer: { 
+        marginBottom: 30, 
+        alignItems: 'center' 
+    },
+    welcomeTitle: { 
+        fontSize: 34, 
+        fontWeight: '900', 
+        color: '#004D52', 
+        letterSpacing: -1 
+    },
+    subtitle: { 
+        fontSize: 15, 
+        color: '#6B7280', 
+        marginTop: 4 
+    },
+    inputWrapper: { marginBottom: 15 },
+    inputLabel: { 
+        fontSize: 13, 
+        fontWeight: '700', 
+        color: '#374151', 
+        marginBottom: 6 
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 11,
-        borderWidth: 1.5,
+        borderRadius: 15,
+        paddingHorizontal: 15,
+        height: 55,
+        borderWidth: 1,
         borderColor: '#D1D5DB',
     },
-    textInput: {
-        flex: 1,
-        marginLeft: 10,
-        fontSize: 15,
-        color: '#111827',
+    textInput: { 
+        flex: 1, 
+        marginLeft: 10, 
+        fontSize: 16, 
+        color: '#111827' 
     },
-    forgotPasswordText: {
-        color: '#00686F',
-        fontSize: 13,
-        fontWeight: '700',
+    forgotBtn: { 
+        alignSelf: 'flex-end', 
+        marginBottom: 25 
+    },
+    forgotText: { 
+        color: '#00686F', 
+        fontWeight: '700', 
+        fontSize: 14 
     },
     loginButton: {
         backgroundColor: '#00686F',
-        borderRadius: 12,
-        paddingVertical: 14,
-        marginBottom: 16,
-        shadowColor: '#00686F',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.25,
-        shadowRadius: 6,
-        elevation: 4,
-    },
-    loginButtonText: {
-        color: '#EFF0EE',
-        textAlign: 'center',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    dividerContainer: {
-        flexDirection: 'row',
+        borderRadius: 15,
+        height: 55,
+        justifyContent: 'center',
         alignItems: 'center',
-        marginVertical: 18
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 5,
     },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#D1D5DB'
+    loginButtonText: { 
+        color: '#FFF', 
+        fontSize: 18, 
+        fontWeight: 'bold' 
     },
-    dividerText: {
-        marginHorizontal: 12,
-        color: '#9CA3AF',
-        fontSize: 13
-    }
+    dividerContainer: { 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        marginVertical: 25 
+    },
+    line: { flex: 1, height: 1, backgroundColor: '#D1D5DB' },
+    orText: { marginHorizontal: 10, color: '#9CA3AF', fontSize: 13 },
+    signupPrompt: { 
+        textAlign: 'center', 
+        color: '#6B7280', 
+        fontSize: 15 
+    },
+    signupLink: { 
+        color: '#00686F', 
+        fontWeight: 'bold' 
+    },
 });

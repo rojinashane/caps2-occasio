@@ -45,6 +45,7 @@ export default function NotificationModal({ visible, onClose }) {
         return () => unsubscribe();
     }, [visible]); // Re-run when modal opens to ensure fresh data
 
+    
     const handleAccept = async (notif) => {
         try {
             if (!notif.eventId) {
@@ -74,6 +75,15 @@ export default function NotificationModal({ visible, onClose }) {
         } catch (error) {
             console.error("Decline Error:", error);
             Alert.alert("Error", "Failed to decline invitation.");
+        }
+    };
+
+    const getIcon = (type) => {
+    switch(type) {
+        case 'card_added': return 'add-circle';
+        case 'item_checked': return 'checkmark-done-circle';
+        case 'list_added': return 'list-outline';
+        default: return 'notifications';
         }
     };
 

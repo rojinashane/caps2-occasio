@@ -89,12 +89,51 @@ export default function EventDetailsScreen({ route, navigation }) {
         }, [eventId])
     );
 
+    const sendUniversalNotification = async (type, detail) => {
+    const user = auth.currentUser;
+    if (!user || !eventData) return;
+
+    // 1. Collect all participant emails (Owner + Collaborators)
+    // We use a Set to prevent duplicate notifications if someone is listed twice
+    const allParticipantEmails = new Set([
+        eventData.userId ? await getOwnerEmail(eventData.userId) : null, // Helper to get owner email if not in eventData
+        ...(eventData.collaborators || []).map(email => email.toLowerCase())
+    ]);
+
+    // 2. Loop through every participant to create a notification doc
+    for (const email of allParticipantEmails) {
+        if (!email) continue;
+        
+        try {
+            const userQ = query(collection(db, 'users'), where('email', '==', email), limit(1));
+            const userSnap = await getDocs(userQ);
+            
+            if (!userSnap.empty) {
+                const recipientId = userSnap.docs[0].id;
+                const isSelf = email === user.email.toLowerCase();
+
+                await addDoc(collection(db, 'notifications'), {
+                    recipientId: recipientId,
+                    senderName: isSelf ? "You" : (userData?.firstName || user.email),
+                    type: type, 
+                    body: isSelf ? `You ${detail}` : `${userData?.firstName || 'A collaborator'} ${detail}`,
+                    status: 'pending',
+                    eventId: eventId,
+                    eventTitle: eventData?.title || "Workspace Update",
+                    createdAt: serverTimestamp()
+                });
+            }
+        } catch (err) {
+            console.error("Failed to notify participant:", email, err);
+        }
+    }
+};
     const syncToFirebase = async (updatedColumns) => {
         try {
             const docRef = doc(db, 'events', eventId);
             await updateDoc(docRef, { columns: updatedColumns });
-        } catch (error) { console.error("Sync Error:", error); }
-    };
+            } catch (error) { console.error("Sync Error:", error); }
+        };
 
     const handleShareInvitation = async () => {
         const invitationLink = `https://occasio-866c3.web.app/index.html?id=${eventId}`;
@@ -189,17 +228,39 @@ export default function EventDetailsScreen({ route, navigation }) {
         await syncToFirebase(updated);
         setDeleteConfirmVisible(false);
     };
+    
 
     const toggleCardCompletion = async (columnId, taskId) => {
-        const updatedColumns = columns.map(col => {
-            if (col.id === columnId) {
-                return { ...col, tasks: col.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t) };
-            }
-            return col;
-        });
-        setColumns(updatedColumns);
-        await syncToFirebase(updatedColumns);
-    };
+    let taskTitle = "a card";
+    let isNowCompleted = false;
+
+    const updatedColumns = columns.map(col => {
+        if (col.id === columnId) {
+            return { 
+                ...col, 
+                tasks: col.tasks.map(t => {
+                    if (t.id === taskId) {
+                        taskTitle = t.title; // Capture title for notification
+                        isNowCompleted = !t.completed;
+                        return { ...t, completed: isNowCompleted };
+                    }
+                    return t;
+                }) 
+            };
+        }
+        return col;
+    });
+
+    setColumns(updatedColumns);
+    await syncToFirebase(updatedColumns);
+
+    // Trigger notification for everyone
+    const actionVerb = isNowCompleted ? "completed" : "uncompleted";
+    await sendUniversalNotification(
+        'item_checked', 
+        `marked "${taskTitle}" as ${actionVerb}`
+    );
+};
 
     const openTaskDetails = (columnId, task) => {
         setActiveColumnId(columnId);
@@ -275,21 +336,59 @@ export default function EventDetailsScreen({ route, navigation }) {
         }
     };
 
-    const handleModalSubmit = async () => {
-        if (!inputText.trim()) return;
-        let newColumns = [...columns];
-        if (modalConfig.type === 'ADD_COLUMN') {
-            newColumns.push({ id: Date.now().toString(), title: inputText, tasks: [] });
-        } else if (modalConfig.type === 'ADD_TASK') {
-            newColumns = columns.map(col => col.id === modalConfig.columnId ? {
-                ...col, tasks: [...col.tasks, { id: Date.now().toString(), text: inputText, completed: false, priority: 'C', description: '', subtasks: [], attachments: [] }]
-            } : col);
-        }
-        setColumns(newColumns);
-        await syncToFirebase(newColumns);
-        setModalVisible(false);
-        setInputText('');
-    };
+   const handleModalSubmit = async () => {
+    if (!inputText.trim()) return;
+
+    let newColumns = [...columns];
+    let notificationType = '';
+    let notificationDetail = '';
+
+    if (modalConfig.type === 'ADD_COLUMN') {
+        newColumns.push({ 
+            id: Date.now().toString(), 
+            title: inputText, 
+            tasks: [] 
+        });
+        notificationType = 'list_added';
+        notificationDetail = `added a new list: "${inputText}"`;
+    } else if (modalConfig.type === 'ADD_TASK') {
+        newColumns = columns.map(col => {
+            if (col.id === modalConfig.columnId) {
+                notificationDetail = `added a card "${inputText}" to ${col.title}`;
+                return {
+                    ...col, 
+                    tasks: [...col.tasks, { 
+                        id: Date.now().toString(), 
+                        title: inputText, // Ensure this matches your task object key (text or title)
+                        completed: false, 
+                        priority: 'C', 
+                        description: '', 
+                        subtasks: [], 
+                        attachments: [] 
+                    }]
+                };
+            }
+            return col;
+        });
+        notificationType = 'card_added';
+    }
+
+    // 1. Update UI State
+    setColumns(newColumns);
+    
+    // 2. Sync to Firestore Workspace
+    await syncToFirebase(newColumns);
+
+    // 3. Send Notifications to everyone (Self + Collaborators)
+    if (notificationType) {
+        await sendUniversalNotification(notificationType, notificationDetail);
+    }
+
+    // 4. Reset Modal
+    setModalVisible(false);
+    setInputText('');
+};
+
 
     const getPriorityColor = (p) => p === 'A' ? '#EF4444' : p === 'B' ? '#F59E0B' : '#10B981';
 

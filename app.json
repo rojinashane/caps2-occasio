@@ -3,6 +3,7 @@
     "name": "Occasio",
     "slug": "occasio",
     "version": "1.0.0",
+    "icon": "./assets/logo/logoo.png",
     "plugins": [
       [
         "expo-build-properties",
@@ -16,7 +17,11 @@
       ]
     ],
     "android": {
-      "package": "com.anonymous.occasio"
+      "package": "com.anonymous.occasio",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo/logoo.png",
+        "backgroundColor": "#00686F"
+      }
     }
   }
 }

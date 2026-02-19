@@ -8,6 +8,7 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomText from '../components/CustomText';
@@ -22,8 +23,6 @@ export default function LandingScreen({ navigation }) {
   const logoRotate = useRef(new Animated.Value(0)).current;
   const buttonFade = useRef(new Animated.Value(0)).current;
   const socialFade = useRef(new Animated.Value(0)).current;
-
-  // 1. New value for the continuous floating/bouncing effect
   const bounceAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -69,8 +68,7 @@ export default function LandingScreen({ navigation }) {
       ]),
     ]).start();
 
-    // 2. Start the continuous bouncing loop
-    // This moves the logo up and down by 10 units indefinitely
+    // Floating animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(bounceAnim, {
@@ -111,7 +109,6 @@ export default function LandingScreen({ navigation }) {
               styles.header,
               {
                 opacity: fadeAnim,
-                // 3. Combined entrance slideUp and the continuous bounceAnim
                 transform: [
                   { translateY: Animated.add(slideUpAnim, bounceAnim) }, 
                   { scale: scaleAnim }
@@ -121,19 +118,36 @@ export default function LandingScreen({ navigation }) {
           >
             <CustomText style={styles.welcomeText}>Welcome to</CustomText>
             
-            <Animated.View style={[styles.logoContainer, { transform: [{ rotate: spin }] }]}>
-              <View style={styles.logoInner}>
-                <Ionicons name="calendar" size={50} color="#EFF0EE" />
-              </View>
+            {/* Reduced size for logoWrapper */}
+            <Animated.View style={[styles.logoWrapper, { transform: [{ rotate: spin }] }]}>
+              <Image 
+                source={require('../assets/logo/logoo.png')} 
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </Animated.View>
 
+            {/* Enhanced brandName styling */}
             <CustomText style={styles.brandName}>Occasio</CustomText>
             <View style={styles.brandDivider} />
             <CustomText style={styles.tagline}>Plan Event Beyond the Screen</CustomText>
           </Animated.View>
 
           {/* Bottom Section */}
-          <Animated.View style={[styles.footer, { opacity: buttonFade, transform: [{ translateY: buttonFade.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }]}>
+          <Animated.View 
+            style={[
+              styles.footer, 
+              { 
+                opacity: buttonFade, 
+                transform: [{ 
+                  translateY: buttonFade.interpolate({ 
+                    inputRange: [0, 1], 
+                    outputRange: [20, 0] 
+                  }) 
+                }] 
+              }
+            ]}
+          >
             <TouchableOpacity
               onPress={() => navigation.navigate('Login')}
               activeOpacity={0.9}
@@ -196,41 +210,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   welcomeText: {
-    fontSize: 16,
-    color: '#6B7280',
-    letterSpacing: 3,
+    fontSize: 14,
+    color: '#9CA3AF',
+    letterSpacing: 4,
     textTransform: 'uppercase',
-    fontWeight: '500',
-    marginBottom: 25,
+    fontWeight: '600',
+    marginBottom: 15,
   },
-  logoContainer: {
-    shadowColor: '#00686F',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.25,
-    shadowRadius: 15,
-    elevation: 10,
-    marginBottom: 25,
-  },
-  logoInner: {
-    width: 100,
+  logoWrapper: {
+    width: 100, // Shrunk from 140 to 100 for a more balanced look
     height: 100,
-    borderRadius: 50,
-    backgroundColor: '#00686F',
+    marginBottom: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+  },
   brandName: {
-    fontSize: 48,
-    fontWeight: '800',
+    fontSize: 52, // Slightly larger
+    fontWeight: '900', // Heavier weight for better presence
     color: '#004D52',
-    letterSpacing: -1,
-    paddingVertical: 5,
-    lineHeight: 56,
+    letterSpacing: -1.5, // Tighter spacing for a modern "full" look
     textAlign: 'center',
+    lineHeight: 60, // Ensure no clipping
   },
   brandDivider: {
-    width: 40,
-    height: 4,
+    width: 50, // Wider divider
+    height: 4, // Thicker divider
     backgroundColor: '#00686F',
     borderRadius: 2,
     marginVertical: 12,
@@ -239,22 +247,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
-    fontWeight: '400',
+    fontWeight: '500', // Slightly bolder tagline
+    maxWidth: '85%',
   },
   footer: {
     width: '100%',
-    marginTop: 40,
+    marginTop: 30,
   },
   primaryButton: {
     backgroundColor: '#00686F',
     borderRadius: 18,
     paddingVertical: 18,
     marginBottom: 15,
-    shadowColor: '#00686F',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#EFF0EE',
@@ -267,7 +276,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderRadius: 18,
     paddingVertical: 18,
-    backgroundColor: 'transparent',
   },
   secondaryButtonText: {
     color: '#00686F',
@@ -280,10 +288,10 @@ const styles = StyleSheet.create({
     marginTop: 35,
   },
   socialTitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#9CA3AF',
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
     marginBottom: 15,
   },
   socialIcons: {
@@ -297,10 +305,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+    shadowRadius: 4,
   },
 });

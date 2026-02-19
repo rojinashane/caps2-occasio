@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'; // Added useCallback
 import {
     View,
     ScrollView,
@@ -10,9 +10,12 @@ import {
     UIManager,
     Dimensions,
     TouchableWithoutFeedback,
-    Alert
+    Alert,
+    Image,
+    FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native'; // Added useFocusEffect
 import { Calendar } from 'react-native-calendars';
 import CustomText from '../components/CustomText';
 import DashboardHeader from '../components/Header';
@@ -31,6 +34,40 @@ import {
 } from 'firebase/firestore';
 
 const { width } = Dimensions.get('window');
+
+// --- MOCK DATA FOR FEATURED SECTION ---
+const FEATURED_VENUES = [
+     {
+        id: '1',
+        name: "Lilia's Fortune Hall",
+        location: 'Ricacho Subdivision, Sorsogon City',
+        coordinates: { latitude: 12.973938, longitude: 124.005313 },
+        capacity: '500 Pax',
+        price: '₱50,000 / day',
+        image: 'https://lh3.googleusercontent.com/p/AF1QipOcI3QEVc5BMawcJXoW24Zw0ddegvEKdE57OGmH=s1360-w1360-h1020-rw',
+        hasAR: true,
+    },
+    {
+        id: '2',
+        name: "Hilda's Love Function Hall",
+        location: 'Quezon Street, Sorsogon City',
+        coordinates: { latitude: 12.9691, longitude: 124.0044 },
+        capacity: '200 Pax',
+        price: '₱35,000 / day',
+        image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&q=80&w=800',
+        hasAR: true,
+    },
+    {
+        id: '3',
+        name: 'The Clover Leaf Place',
+        location: 'El Retiro, Sorsogon City',
+        coordinates: { latitude: 12.9622, longitude: 123.9961 },
+        capacity: '50 Pax',
+        price: '₱15,000 / day',
+        image: 'https://lh3.googleusercontent.com/p/AF1QipN1Rh-OKX2LzCGmeHR2j3_f73KgxfgpyfvRnaZT=s1360-w1360-h1020-rw',
+        hasAR: false,
+    },
+];
 
 // --- UTILITY FUNCTIONS ---
 const parseDateToObj = (dateVal) => {
@@ -54,15 +91,19 @@ export default function DashboardScreen({ navigation }) {
     const [stats, setStats] = useState({ total: 0, upcoming3Months: 0, shared: 0 });
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    // --- MODAL & MENU STATES ---
     const [menuVisible, setMenuVisible] = useState(false);
-    const [notifVisible, setNotifVisible] = useState(false); // Controls the NotificationModal
+    const [notifVisible, setNotifVisible] = useState(false); 
     const slideAnim = useRef(new Animated.Value(width)).current;
 
-    useEffect(() => {
-        fetchUserData();
-        setGreetingMessage();
+    // --- FIX: REFRESH USER DATA ON FOCUS ---
+    useFocusEffect(
+        useCallback(() => {
+            fetchUserData();
+            setGreetingMessage();
+        }, [])
+    );
 
+    useEffect(() => {
         const user = auth.currentUser;
         if (user) {
             const q = query(
@@ -84,6 +125,16 @@ export default function DashboardScreen({ navigation }) {
             return () => unsubscribe();
         }
     }, []);
+
+    const fetchUserData = async () => {
+        const user = auth.currentUser;
+        if (user) {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+                setUserData(userDoc.data());
+            }
+        }
+    };
 
     const toggleMenu = (open) => {
         if (open) {
@@ -129,14 +180,6 @@ export default function DashboardScreen({ navigation }) {
             if (start >= now && start <= threeMonths) u3m++;
         });
         setStats({ total: events.length, upcoming3Months: u3m, shared });
-    };
-
-    const fetchUserData = async () => {
-        const user = auth.currentUser;
-        if (user) {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) setUserData(userDoc.data());
-        }
     };
 
     const setGreetingMessage = () => {
@@ -208,11 +251,40 @@ export default function DashboardScreen({ navigation }) {
                 />
 
                 <View style={styles.content}>
-                    <View style={styles.statsGrid}>
-                        <StatCard value={stats.total} label="Total" />
-                        <StatCard value={stats.upcoming3Months} label="Next 3M" highlight />
-                        <StatCard value={stats.shared} label="Shared" />
+                    <View style={styles.featuredHeader}>
+                        <CustomText style={styles.sectionTitle}>Explore Venues in AR</CustomText>
+                        <TouchableOpacity onPress={() => navigation.navigate('Venues')}>
+                            <CustomText style={styles.viewAllLink}>View All</CustomText>
+                        </TouchableOpacity>
                     </View>
+                    
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        style={styles.featuredCarousel}
+                        contentContainerStyle={{ paddingRight: 20 }}
+                    >
+                        {FEATURED_VENUES.map((venue) => (
+                            <TouchableOpacity 
+                                key={venue.id} 
+                                style={styles.featuredCard}
+                                onPress={() => navigation.navigate('ARVenue', { venueId: venue.id, venueName: venue.name })}
+                            >
+                                <Image source={{ uri: venue.image }} style={styles.featuredImage} />
+                                <View style={styles.arBadgeSmall}>
+                                    <Ionicons name="cube" size={10} color="#FFF" />
+                                    <CustomText style={styles.arBadgeTextSmall}>AR</CustomText>
+                                </View>
+                                <View style={styles.featuredOverlay}>
+                                    <CustomText style={styles.featuredVenueName} numberOfLines={1}>{venue.name}</CustomText>
+                                    <View style={styles.featuredLocRow}>
+                                        <Ionicons name="location" size={10} color="#CCC" />
+                                        <CustomText style={styles.featuredVenueLoc}>{venue.location}</CustomText>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
 
                     <CustomText style={styles.sectionTitle}>Quick Access</CustomText>
                     <View style={styles.quickAccessRow}>
@@ -262,7 +334,6 @@ export default function DashboardScreen({ navigation }) {
                 </View>
             </ScrollView>
 
-            {/* INTEGRATED NOTIFICATION MODAL */}
             <NotificationModal
                 visible={notifVisible}
                 onClose={() => setNotifVisible(false)}
@@ -311,13 +382,6 @@ export default function DashboardScreen({ navigation }) {
 }
 
 // --- SUB-COMPONENTS ---
-const StatCard = ({ value, label, highlight }) => (
-    <View style={[styles.statCard, highlight && { backgroundColor: '#F0F9FA' }]}>
-        <CustomText style={[styles.statValue, highlight && { color: '#00686F' }]}>{value}</CustomText>
-        <CustomText style={styles.statLabel}>{label}</CustomText>
-    </View>
-);
-
 const QuickBtn = ({ icon, label, color, onPress, active }) => (
     <TouchableOpacity style={styles.quickBtn} onPress={onPress}>
         <View style={[styles.quickIcon, { backgroundColor: color + '15' }, active && { backgroundColor: color }]}>
@@ -357,10 +421,19 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#F8F9FA' },
     content: { paddingHorizontal: 20 },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FA' },
-    statsGrid: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 20 },
-    statCard: { flex: 1, backgroundColor: '#FFF', padding: 15, borderRadius: 18, marginHorizontal: 5, alignItems: 'center', elevation: 2 },
-    statValue: { fontSize: 20, fontWeight: '800', color: '#111827' },
-    statLabel: { fontSize: 10, color: '#6B7280', marginTop: 4, fontWeight: '600' },
+    
+    featuredHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 , marginTop: 10},
+    viewAllLink: { color: '#00686F', fontWeight: 'bold', fontSize: 12 },
+    featuredCarousel: { marginBottom: 25, marginHorizontal: -20, paddingLeft: 20 },
+    featuredCard: { width: width * 0.6, height: 130, borderRadius: 20, marginRight: 15, overflow: 'hidden', backgroundColor: '#DDD' },
+    featuredImage: { ...StyleSheet.absoluteFillObject },
+    featuredOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12, backgroundColor: 'rgba(0,0,0,0.4)' },
+    featuredVenueName: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
+    featuredLocRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+    featuredVenueLoc: { color: '#CCC', fontSize: 10, marginLeft: 3 },
+    arBadgeSmall: { position: 'absolute', top: 10, right: 10, backgroundColor: '#00686F', flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, alignItems: 'center' },
+    arBadgeTextSmall: { color: '#FFF', fontSize: 9, fontWeight: 'bold', marginLeft: 3 },
+
     quickAccessRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
     quickBtn: { alignItems: 'center', width: '23%' },
     quickIcon: { width: 50, height: 50, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },

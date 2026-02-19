@@ -23,7 +23,7 @@ import RSVPTrackerScreen from './screens/RSVPTrackerScreen';
 // NEW: Import the Venues and AR Screens
 import VenuesScreen from './screens/VenuesScreen';
 import ARVenueScreen from './screens/ARVenueScreen';
-
+import VenueDetailsScreen from './screens/VenueDetailsScreen';
 // 2. CONFIGURE NOTIFICATIONS (Fixes the Warning)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -95,6 +95,7 @@ export default function App() {
             {/* NEW: Register the Venues and AR Screens */}
             <Stack.Screen name="Venues" component={VenuesScreen} />
             <Stack.Screen name="ARVenue" component={ARVenueScreen} />
+            <Stack.Screen name="VenueDetails" component={VenueDetailsScreen} />
 
           </Stack.Navigator>
         </NavigationContainer>

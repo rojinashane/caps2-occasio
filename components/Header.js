@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import {
     View,
     StyleSheet,
@@ -14,15 +14,17 @@ const AVATAR_MAP = {
     Avatar2: require('../assets/profile/Avatar2.jpg'),
     Avatar3: require('../assets/profile/Avatar3.jpg'),
     Avatar4: require('../assets/profile/Avatar4.jpg'),
+    Avatar5: require('../assets/profile/Avatar5.jpg'),
+    Avatar6: require('../assets/profile/Avatar6.jpg'),
 };
 
 export default function DashboardHeader({
     userData,
     greeting,
-    onOpenNotifications, // Renamed for clarity
-    onPressAvatar        // This will now trigger your "slider"
+    onOpenNotifications,
+    onPressAvatar,
+    hasUnread = false 
 }) {
-
     const avatarSource = useMemo(() => {
         if (!userData?.avatar) return null;
         if (AVATAR_MAP[userData.avatar]) {
@@ -31,7 +33,7 @@ export default function DashboardHeader({
         return { uri: userData.avatar };
     }, [userData?.avatar]);
 
-    const scaleAnim = useMemo(() => new Animated.Value(1), []);
+    const scaleAnim = useRef(new Animated.Value(1)).current;
 
     const handlePressIn = () => {
         Animated.spring(scaleAnim, {
@@ -52,8 +54,6 @@ export default function DashboardHeader({
     return (
         <View style={styles.headerBody}>
             <View style={styles.contentRow}>
-
-                {/* Left: Avatar (Triggers Profile Slider) */}
                 <Pressable
                     onPress={onPressAvatar}
                     onPressIn={handlePressIn}
@@ -68,6 +68,9 @@ export default function DashboardHeader({
                     >
                         {avatarSource ? (
                             <Image
+                                // CRITICAL: The key ensures the image refreshes 
+                                // when the avatar ID changes in the database
+                                key={userData.avatar} 
                                 source={avatarSource}
                                 style={styles.avatarImg}
                                 resizeMode="cover"
@@ -80,7 +83,6 @@ export default function DashboardHeader({
                     </Animated.View>
                 </Pressable>
 
-                {/* Center: User Info */}
                 <View style={styles.userInfo}>
                     <CustomText style={styles.greetingText}>
                         {greeting || 'Good Day'}
@@ -90,7 +92,6 @@ export default function DashboardHeader({
                     </CustomText>
                 </View>
 
-                {/* Right: Notification Bell */}
                 <View style={styles.rightActions}>
                     <Pressable
                         style={({ pressed }) => [
@@ -103,8 +104,7 @@ export default function DashboardHeader({
                         onPress={onOpenNotifications}
                     >
                         <Ionicons name="notifications-outline" size={26} color="#FFFFFF" />
-                        {/* Optional: Notification Dot */}
-                        <View style={styles.notificationDot} />
+                        {hasUnread && <View style={styles.notificationDot} />}
                     </Pressable>
                 </View>
             </View>
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.2)',
-        position: 'relative', // For notification dot positioning
+        position: 'relative', 
     },
     notificationDot: {
         position: 'absolute',
@@ -202,6 +202,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#FF4B4B',
         borderRadius: 5,
         borderWidth: 1.5,
-        borderColor: '#00686F',
+        borderColor: '#00686F', 
     },
 });

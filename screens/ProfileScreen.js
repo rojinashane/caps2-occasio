@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CustomText from '../components/CustomText';
 import { auth, db } from '../firebase';
 import { updateDoc, doc, getDoc } from 'firebase/firestore';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width } = Dimensions.get('window');
 
@@ -29,6 +30,8 @@ const AVATAR_MAP = {
     'Avatar2': require('../assets/profile/Avatar2.jpg'),
     'Avatar3': require('../assets/profile/Avatar3.jpg'),
     'Avatar4': require('../assets/profile/Avatar4.jpg'),
+    'Avatar5': require('../assets/profile/Avatar5.jpg'),
+    'Avatar6': require('../assets/profile/Avatar6.jpg'),
 };
 
 export default function ProfileScreen({ navigation }) {
@@ -797,10 +800,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     avatarPicker: {
-        flexDirection: 'row',
-        gap: 16,
-        paddingVertical: 4,
-    },
+    flexDirection: 'row',
+    gap: 16,
+    paddingVertical: 4,
+    paddingRight: 40,
+},
     avatarOption: {
         position: 'relative',
         borderRadius: 34,
