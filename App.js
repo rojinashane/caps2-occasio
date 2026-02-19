@@ -16,9 +16,13 @@ import SignupScreen from './screens/SignupScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import AddEvent from './components/AddEvent';
 import EventDetailsScreen from './screens/EventDetailsScreen';
-import UpdateEvent from './components/UpdateEvent'; 
-import ProfileScreen from './screens/ProfileScreen'; 
+import UpdateEvent from './components/UpdateEvent';
+import ProfileScreen from './screens/ProfileScreen';
 import RSVPTrackerScreen from './screens/RSVPTrackerScreen';
+
+// NEW: Import the Venues and AR Screens
+import VenuesScreen from './screens/VenuesScreen';
+import ARVenueScreen from './screens/ARVenueScreen';
 
 // 2. CONFIGURE NOTIFICATIONS (Fixes the Warning)
 Notifications.setNotificationHandler({
@@ -87,6 +91,11 @@ export default function App() {
             <Stack.Screen name="UpdateEvent" component={UpdateEvent} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
             <Stack.Screen name="RSVPTrackerScreen" component={RSVPTrackerScreen} options={{ title: 'RSVP Tracker' }} />
+
+            {/* NEW: Register the Venues and AR Screens */}
+            <Stack.Screen name="Venues" component={VenuesScreen} />
+            <Stack.Screen name="ARVenue" component={ARVenueScreen} />
+
           </Stack.Navigator>
         </NavigationContainer>
       </GestureHandlerRootView>
