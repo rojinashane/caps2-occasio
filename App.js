@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LandingScreen from './screens/LandingScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
+import AdminDashboard from './screens/AdminDashboardScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import AddEvent from './components/AddEvent';
 import EventDetailsScreen from './screens/EventDetailsScreen';
@@ -86,6 +87,7 @@ export default function App() {
             <Stack.Screen name="Landing" component={LandingScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
+            <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }} />
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
             <Stack.Screen name="AddEvent" component={AddEvent} />
             <Stack.Screen name="EventDetails" component={EventDetailsScreen} />

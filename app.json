@@ -3,6 +3,7 @@
     "name": "Occasio",
     "slug": "occasio",
     "version": "1.0.0",
+    "scheme": "occasio",
     "icon": "./assets/logo/logoo.png",
     "plugins": [
       [

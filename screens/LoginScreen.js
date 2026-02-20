@@ -41,116 +41,127 @@ export default function LoginScreen({ navigation }) {
                 tension: 40,
                 useNativeDriver: true,
             }),
-            Animated.timing(logoRotate, {
-                toValue: 1,
-                duration: 1200, 
-                easing: Easing.out(Easing.exp), // FIXED: Changed .expo to .exp
-                useNativeDriver: true,
-            }),
             Animated.timing(fadeAnim, {
                 toValue: 1,
-                duration: 800,
-                useNativeDriver: true
+                duration: 1000,
+                useNativeDriver: true,
             }),
             Animated.timing(slideUpAnim, {
                 toValue: 0,
-                duration: 700,
-                easing: Easing.out(Easing.back(1)),
+                duration: 800,
+                easing: Easing.out(Easing.back(1.5)),
                 useNativeDriver: true,
-            }),
+            })
         ]).start();
 
-        // Continuous floating idle animation
+        // Logo rotation
+        Animated.timing(logoRotate, {
+            toValue: 1,
+            duration: 1200,
+            easing: Easing.out(Easing.exp),
+            useNativeDriver: true,
+        }).start();
+
+        // Continuous floating animation
         Animated.loop(
             Animated.sequence([
                 Animated.timing(floatAnim, {
                     toValue: -10,
-                    duration: 2500,
+                    duration: 2000,
                     easing: Easing.inOut(Easing.sin),
                     useNativeDriver: true,
                 }),
                 Animated.timing(floatAnim, {
                     toValue: 0,
-                    duration: 2500,
+                    duration: 2000,
                     easing: Easing.inOut(Easing.sin),
                     useNativeDriver: true,
-                }),
+                })
             ])
         ).start();
     }, []);
-
-    const spin = logoRotate.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['0deg', '360deg'],
-    });
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
-    const handleLogin = async () => {
-        if (!email.trim() || !password) {
-            Alert.alert('Missing Fields', 'Please enter both email and password.');
+    const rotation = logoRotate.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '360deg'],
+    });
+
+    const handleLogin = () => {
+        if (!email || !password) {
+            Alert.alert("Error", "Please fill in all fields");
             return;
         }
-        if (loading) return;
+
         setLoading(true);
+        signInWithEmailAndPassword(auth, email, password)
+            .then(async (userCredential) => {
+                const user = userCredential.user;
+                await reload(user);
 
-        try {
-            const cleanEmail = email.trim().toLowerCase();
-            const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
-            const user = userCredential.user;
-            await reload(user);
-
-            if (!user.emailVerified) {
-                await signOut(auth);
-                Alert.alert('Email Not Verified', 'Please verify your email before logging in.');
-                setLoading(false);
-                return;
-            }
-            navigation.replace('Dashboard');
-        } catch (err) {
-            let errorMessage = 'An error occurred. Please try again.';
-            if (err.code === 'auth/invalid-credential') errorMessage = 'Invalid email or password.';
-            Alert.alert('Login Error', errorMessage);
-        } finally {
-            setLoading(false);
-        }
+                if (user.emailVerified) {
+                    // --- ADMIN REDIRECTION LOGIC ---
+                    if (user.email.toLowerCase() === 'rojinashaneecohabana@gmail.com') {
+                        navigation.replace('AdminDashboard');
+                    } else {
+                        navigation.replace('Dashboard');
+                    }
+                } else {
+                    Alert.alert(
+                        "Email Not Verified",
+                        "Please verify your email before logging in. Check your inbox for the verification link.",
+                        [
+                            { text: "OK", onPress: () => signOut(auth) }
+                        ]
+                    );
+                }
+            })
+            .catch((error) => {
+                let errorMessage = "An error occurred. Please try again.";
+                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                    errorMessage = "Invalid email or password.";
+                } else if (error.code === 'auth/invalid-email') {
+                    errorMessage = "The email address is not valid.";
+                }
+                Alert.alert("Login Failed", errorMessage);
+            })
+            .finally(() => setLoading(false));
     };
 
-    const handleForgotPassword = async () => {
-        if (!email.trim()) {
-            Alert.alert('Email Required', 'Please enter your email to reset password.');
+    const handleForgotPassword = () => {
+        if (!email) {
+            Alert.alert("Error", "Please enter your email address first.");
             return;
         }
-        try {
-            await sendPasswordResetEmail(auth, email.trim().toLowerCase());
-            Alert.alert('Reset Link Sent', 'Check your inbox for the reset link.');
-        } catch (err) {
-            Alert.alert('Error', 'Could not send reset email.');
-        }
+
+        sendPasswordResetEmail(auth, email)
+            .then(() => {
+                Alert.alert("Success", "Password reset email sent. Please check your inbox.");
+            })
+            .catch((error) => {
+                Alert.alert("Error", error.message);
+            });
     };
 
     return (
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
-            <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={{ flex: 1 }}
-            >
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                    keyboardShouldPersistTaps="handled"
+        <SafeAreaView style={styles.container}>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    style={styles.keyboardView}
                 >
-                    {/* LOGO SECTION */}
                     <Animated.View 
                         style={[
-                            styles.logoContainer,
+                            styles.logoContainer, 
                             { 
+                                opacity: fadeAnim,
                                 transform: [
                                     { scale: logoScale },
-                                    { rotate: spin },
+                                    { rotate: rotation },
                                     { translateY: floatAnim }
                                 ]
                             }
@@ -158,135 +169,143 @@ export default function LoginScreen({ navigation }) {
                     >
                         <Image 
                             source={require('../assets/logo/logoo.png')} 
-                            style={styles.logoImage}
+                            style={styles.logo}
                             resizeMode="contain"
                         />
                     </Animated.View>
 
-                    <Animated.View
-                        style={{
-                            opacity: fadeAnim,
-                            transform: [{ translateY: slideUpAnim }],
-                        }}
+                    <Animated.View 
+                        style={[
+                            styles.formContainer,
+                            {
+                                opacity: fadeAnim,
+                                transform: [{ translateY: slideUpAnim }]
+                            }
+                        ]}
                     >
-                        <View style={styles.headerTextContainer}>
-                            <CustomText style={styles.welcomeTitle}>Welcome Back</CustomText>
-                            <CustomText style={styles.subtitle}>Sign in to continue your planning</CustomText>
-                        </View>
+                        <CustomText style={styles.title}>Welcome Back</CustomText>
+                        <CustomText style={styles.subtitle}>Log in to manage your events effortlessly</CustomText>
 
-                        {/* Email Input */}
                         <View style={styles.inputWrapper}>
-                            <CustomText style={styles.inputLabel}>Email</CustomText>
+                            <CustomText style={styles.label}>Email Address</CustomText>
                             <View style={styles.inputContainer}>
-                                <Ionicons name="mail-outline" size={20} color="#00686F" />
+                                <Ionicons name="mail-outline" size={20} color="#6B7280" />
                                 <TextInput
                                     style={styles.textInput}
-                                    placeholder="your@email.com"
+                                    placeholder="yourname@email.com"
                                     placeholderTextColor="#9CA3AF"
                                     value={email}
                                     onChangeText={setEmail}
-                                    keyboardType="email-address"
                                     autoCapitalize="none"
+                                    keyboardType="email-address"
                                 />
                             </View>
                         </View>
 
-                        {/* Password Input */}
                         <View style={styles.inputWrapper}>
-                            <CustomText style={styles.inputLabel}>Password</CustomText>
+                            <CustomText style={styles.label}>Password</CustomText>
                             <View style={styles.inputContainer}>
-                                <Ionicons name="lock-closed-outline" size={20} color="#00686F" />
+                                <Ionicons name="lock-closed-outline" size={20} color="#6B7280" />
                                 <TextInput
                                     style={styles.textInput}
-                                    placeholder="Enter password"
+                                    placeholder="••••••••"
                                     placeholderTextColor="#9CA3AF"
+                                    secureTextEntry={!showPassword}
                                     value={password}
                                     onChangeText={setPassword}
-                                    secureTextEntry={!showPassword}
-                                    autoCapitalize="none"
                                 />
                                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                                    <Ionicons
-                                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                                        size={20}
-                                        color="#6B7280"
+                                    <Ionicons 
+                                        name={showPassword ? "eye-off-outline" : "eye-outline"} 
+                                        size={20} 
+                                        color="#6B7280" 
                                     />
                                 </TouchableOpacity>
                             </View>
                         </View>
 
-                        <TouchableOpacity onPress={handleForgotPassword} style={styles.forgotBtn}>
+                        <TouchableOpacity style={styles.forgotBtn} onPress={handleForgotPassword}>
                             <CustomText style={styles.forgotText}>Forgot Password?</CustomText>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
+                        <TouchableOpacity 
+                            style={styles.loginButton} 
                             onPress={handleLogin}
                             disabled={loading}
-                            style={styles.loginButton}
-                            activeOpacity={0.8}
                         >
                             {loading ? (
-                                <ActivityIndicator color="#EFF0EE" size="small" />
+                                <ActivityIndicator color="#FFF" />
                             ) : (
-                                <CustomText style={styles.loginButtonText}>Sign In</CustomText>
+                                <CustomText style={styles.loginButtonText}>Login</CustomText>
                             )}
                         </TouchableOpacity>
 
-                        <View style={styles.dividerContainer}>
-                            <View style={styles.line} />
-                            <CustomText style={styles.orText}>OR</CustomText>
-                            <View style={styles.line} />
+                        <View style={styles.footer}>
+                            <CustomText style={styles.footerText}>Don't have an account? </CustomText>
+                            <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+                                <CustomText style={styles.signupText}>Sign Up</CustomText>
+                            </TouchableOpacity>
                         </View>
-
-                        <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-                            <CustomText style={styles.signupPrompt}>
-                                Don't have an account? <CustomText style={styles.signupLink}>Sign Up</CustomText>
-                            </CustomText>
-                        </TouchableOpacity>
                     </Animated.View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+                </KeyboardAvoidingView>
+            </ScrollView>
         </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: '#EFF0EE' },
-    scrollContent: { 
-        flexGrow: 1, 
-        paddingHorizontal: 30, 
-        paddingVertical: 40, 
-        justifyContent: 'center' 
+    container: {
+        flex: 1,
+        backgroundColor: '#F3F4F6',
     },
-    logoContainer: { 
-        alignItems: 'center', 
-        marginBottom: 20 
+    scrollContent: {
+        flexGrow: 1,
     },
-    logoImage: { 
-        width: 90, 
-        height: 90 
+    keyboardView: {
+        flex: 1,
+        paddingHorizontal: 25,
+        justifyContent: 'center',
     },
-    headerTextContainer: { 
-        marginBottom: 30, 
-        alignItems: 'center' 
+    logoContainer: {
+        alignItems: 'center',
+        marginBottom: 40,
     },
-    welcomeTitle: { 
-        fontSize: 34, 
-        fontWeight: '900', 
-        color: '#004D52', 
-        letterSpacing: -1 
+    logo: {
+        width: 150,
+        height: 150,
     },
-    subtitle: { 
-        fontSize: 15, 
-        color: '#6B7280', 
-        marginTop: 4 
+    formContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 30,
+        padding: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 15,
+        elevation: 5,
     },
-    inputWrapper: { marginBottom: 15 },
-    inputLabel: { 
-        fontSize: 13, 
-        fontWeight: '700', 
-        color: '#374151', 
-        marginBottom: 6 
+    title: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: '#111827',
+        textAlign: 'center',
+        marginBottom: 10,
+    },
+    subtitle: {
+        fontSize: 16,
+        color: '#6B7280',
+        textAlign: 'center',
+        marginBottom: 30,
+    },
+    inputWrapper: {
+        marginBottom: 20,
+    },
+    label: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#374151',
+        marginBottom: 8,
+        marginLeft: 4,
     },
     inputContainer: {
         flexDirection: 'row',
@@ -330,20 +349,18 @@ const styles = StyleSheet.create({
         fontSize: 18, 
         fontWeight: 'bold' 
     },
-    dividerContainer: { 
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        marginVertical: 25 
+    footer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginTop: 25,
     },
-    line: { flex: 1, height: 1, backgroundColor: '#D1D5DB' },
-    orText: { marginHorizontal: 10, color: '#9CA3AF', fontSize: 13 },
-    signupPrompt: { 
-        textAlign: 'center', 
-        color: '#6B7280', 
-        fontSize: 15 
+    footerText: {
+        color: '#6B7280',
+        fontSize: 15,
     },
-    signupLink: { 
-        color: '#00686F', 
-        fontWeight: 'bold' 
+    signupText: {
+        color: '#00686F',
+        fontWeight: 'bold',
+        fontSize: 15,
     },
 });

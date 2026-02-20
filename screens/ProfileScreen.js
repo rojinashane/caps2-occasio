@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import CustomText from '../components/CustomText';
 import { auth, db } from '../firebase';
 import { updateDoc, doc, getDoc } from 'firebase/firestore';
-import { LinearGradient } from 'expo-linear-gradient';
+
 
 const { width } = Dimensions.get('window');
 
