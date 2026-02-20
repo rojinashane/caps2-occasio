@@ -19,6 +19,7 @@ import EventDetailsScreen from './screens/EventDetailsScreen';
 import UpdateEvent from './components/UpdateEvent';
 import ProfileScreen from './screens/ProfileScreen';
 import RSVPTrackerScreen from './screens/RSVPTrackerScreen';
+import CaptureVenueScreen from './screens/CaptureVenueScreen';
 
 // NEW: Import the Venues and AR Screens
 import VenuesScreen from './screens/VenuesScreen';
@@ -93,9 +94,10 @@ export default function App() {
             <Stack.Screen name="RSVPTrackerScreen" component={RSVPTrackerScreen} options={{ title: 'RSVP Tracker' }} />
 
             {/* NEW: Register the Venues and AR Screens */}
-            <Stack.Screen name="Venues" component={VenuesScreen} />
-            <Stack.Screen name="ARVenue" component={ARVenueScreen} />
-            <Stack.Screen name="VenueDetails" component={VenueDetailsScreen} />
+            <Stack.Screen name="Venues" component={VenuesScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="VenueDetails" component={VenueDetailsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="ARVenue" component={ARVenueScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="CaptureVenue" component={CaptureVenueScreen} options={{ headerShown: false }} />
 
           </Stack.Navigator>
         </NavigationContainer>

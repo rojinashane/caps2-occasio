@@ -1,21 +1,18 @@
 import React, { useState } from 'react';
 import {
     View,
-    StyleSheet,
     FlatList,
     TouchableOpacity,
     TextInput,
     Image,
     StatusBar,
     Linking,
-    Platform,
-    Dimensions
+    Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import CustomText from '../components/CustomText';
-
-const { width } = Dimensions.get('window');
+import tw from 'twrnc';
 
 const MOCK_VENUES = [
     {
@@ -50,40 +47,7 @@ const MOCK_VENUES = [
         image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800',
         hasAR: false,
         description: "A cozy and modern venue ideal for seminars, workshops, and small private parties."
-    },
-    {
-        id: '4',
-        name: "Fortune's Hall Event Center",
-        location: 'Bibincahan, Sorsogon City',
-        coordinates: { latitude: 12.9768, longitude: 124.0125 },
-        capacity: '50 Pax',
-        price: '₱15,000 / day',
-        image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800',
-        hasAR: false,
-        description: "Conveniently located in Bibincahan, this center offers a professional and air-conditioned setting for various events."
-    },
-    {
-        id: '5',
-        name: "Juliana's Events and Function Hall",
-        location: 'Sitio Sirangan, Macabog, Sorsogon City',
-        coordinates: { latitude: 12.9815, longitude: 124.0089 },
-        capacity: '50 Pax',
-        price: '₱15,000 / day',
-        image: 'https://images.unsplash.com/photo-1470753951487-d0d62b10da61?auto=format&fit=crop&q=80&w=800',
-        hasAR: false,
-        description: "A versatile function hall situated in Macabog, known for its friendly service and flexible layout options."
-    },
-    {
-        id: '6',
-        name: 'Sorsogon Convention Center',
-        location: 'Diversion Road, Brgy. Cabid-An, Sorsogon City',
-        coordinates: { latitude: 12.9856, longitude: 124.0201 },
-        capacity: '1000 Pax', // Updated to match a "Convention Center" scale
-        price: '₱75,000 / day',
-        image: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&q=80&w=800',
-        hasAR: false,
-        description: "The premier destination for large-scale conventions, exhibitions, and grand social gatherings in Sorsogon City."
-    },
+    }
 ];
 
 export default function VenuesScreen({ navigation }) {
@@ -115,65 +79,69 @@ export default function VenuesScreen({ navigation }) {
     };
 
     const renderVenueCard = ({ item }) => (
-        <View style={styles.cardContainer}>
-            <Image 
-                source={{ uri: item.image }} 
-                style={styles.cardImage} 
-                resizeMode="cover"
-            />
+        <View style={[tw`bg-white rounded-[24px] mb-6 overflow-hidden`, { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 }]}>
+            <View style={tw`relative w-full h-48 bg-slate-200`}>
+                <Image
+                    source={{ uri: item.image }}
+                    style={tw`w-full h-full absolute`}
+                    resizeMode="cover"
+                />
 
-            {item.hasAR && (
-                <View style={styles.arBadge}>
-                    <Ionicons name="cube" size={12} color="#FFF" />
-                    <CustomText style={styles.arBadgeText}>AR Ready</CustomText>
-                </View>
-            )}
+                {item.hasAR && (
+                    <View style={tw`absolute top-4 right-4 bg-[#00686F]/90 flex-row items-center px-3 py-1.5 rounded-full`}>
+                        <Ionicons name="cube" size={14} color="#FFF" />
+                        <CustomText fontFamily="bold" style={tw`text-white text-[11px] ml-1.5 tracking-wide uppercase`}>AR Ready</CustomText>
+                    </View>
+                )}
+            </View>
 
-            <View style={styles.cardContent}>
-                <View style={styles.cardHeader}>
-                    <CustomText style={styles.venueName} numberOfLines={1}>{item.name}</CustomText>
-                    <CustomText style={styles.venuePrice}>{item.price}</CustomText>
-                </View>
-
-                <View style={styles.infoRow}>
-                    <TouchableOpacity 
-                        style={[styles.infoItem, { flex: 1 }]} 
-                        onPress={() => openInGoogleMaps(item)}
-                    >
-                        <Ionicons name="location" size={14} color="#00686F" />
-                        <CustomText 
-                            style={[styles.infoText, { color: '#00686F', fontWeight: '700' }]}
-                            numberOfLines={1}
+            <View style={tw`p-5`}>
+                <View style={tw`flex-row justify-between items-start mb-3`}>
+                    <View style={tw`flex-1 mr-4`}>
+                        <CustomText fontFamily="extrabold" style={tw`text-lg text-slate-800`} numberOfLines={1}>{item.name}</CustomText>
+                        <TouchableOpacity
+                            style={tw`flex-row items-center mt-1`}
+                            onPress={() => openInGoogleMaps(item)}
                         >
-                            {item.location}
-                        </CustomText>
-                    </TouchableOpacity>
-
-                    <View style={styles.infoItem}>
-                        <Ionicons name="people-outline" size={14} color="#64748B" />
-                        <CustomText style={styles.infoText}>{item.capacity}</CustomText>
+                            <Ionicons name="location" size={14} color="#00686F" />
+                            <CustomText fontFamily="medium" style={tw`text-[13px] text-[#00686F] ml-1`} numberOfLines={1}>
+                                {item.location}
+                            </CustomText>
+                        </TouchableOpacity>
+                    </View>
+                    <View style={tw`bg-[#F0F9FA] px-3 py-2 rounded-xl`}>
+                        <CustomText fontFamily="bold" style={tw`text-[13px] text-[#00686F]`}>{item.price.split(' ')[0]}</CustomText>
+                        <CustomText fontFamily="medium" style={tw`text-[10px] text-slate-500 text-center`}>per day</CustomText>
                     </View>
                 </View>
 
-                <View style={styles.actionRow}>
+                <View style={tw`flex-row items-center mb-5`}>
+                    <View style={tw`flex-row items-center bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100`}>
+                        <Ionicons name="people" size={14} color="#64748B" />
+                        <CustomText fontFamily="semibold" style={tw`text-[12px] text-slate-600 ml-1.5`}>{item.capacity}</CustomText>
+                    </View>
+                </View>
+
+                {/* FIXED BUTTON ROW: Removed 'gap-3' and complex flex ratios. Now perfectly split 50/50 with margin-right */}
+                <View style={tw`flex-row`}>
                     <TouchableOpacity
-                        style={styles.detailsBtn}
+                        style={tw`flex-1 py-3.5 mr-3 rounded-2xl bg-slate-50 border border-slate-200 items-center justify-center`}
                         onPress={() => navigation.navigate('VenueDetails', { venue: item })}
                     >
-                        <CustomText style={styles.detailsBtnText}>View Details</CustomText>
+                        <CustomText fontFamily="bold" style={tw`text-slate-600 text-[14px]`}>Details</CustomText>
                     </TouchableOpacity>
 
                     {item.hasAR ? (
                         <TouchableOpacity
-                            style={styles.arBtn}
+                            style={tw`flex-1 flex-row py-3.5 rounded-2xl bg-[#00686F] items-center justify-center shadow-sm`}
                             onPress={() => navigation.navigate('ARVenue', { venueId: item.id, venueName: item.name })}
                         >
-                            <Ionicons name="walk-outline" size={18} color="#FFF" />
-                            <CustomText style={styles.arBtnText}>Walk in AR</CustomText>
+                            <Ionicons name="walk" size={18} color="#FFF" />
+                            <CustomText fontFamily="bold" style={tw`text-white text-[14px] ml-2`}>Walk in AR</CustomText>
                         </TouchableOpacity>
                     ) : (
-                        <View style={styles.noArBtn}>
-                            <CustomText style={styles.noArBtnText}>No AR Available</CustomText>
+                        <View style={tw`flex-1 py-3.5 rounded-2xl bg-slate-100 border border-slate-200 border-dashed items-center justify-center`}>
+                            <CustomText fontFamily="semibold" style={tw`text-slate-400 text-[13px]`}>No AR Available</CustomText>
                         </View>
                     )}
                 </View>
@@ -182,84 +150,69 @@ export default function VenuesScreen({ navigation }) {
     );
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={tw`flex-1 bg-[#F8FAFC]`} edges={['top']}>
             <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-                    <Ionicons name="chevron-back" size={24} color="#1E293B" />
+            {/* Header */}
+            <View style={tw`flex-row items-center px-6 py-4`}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={tw`w-11 h-11 rounded-full bg-white justify-center items-center shadow-sm border border-slate-100`}>
+                    <Ionicons name="chevron-back" size={20} color="#1E293B" />
                 </TouchableOpacity>
-                <View style={styles.headerTextContainer}>
-                    <CustomText style={styles.headerTitle}>Discover Venues</CustomText>
-                    <CustomText style={styles.headerSubtitle}>Find the perfect space for your event</CustomText>
+                <View style={tw`flex-1 items-center`}>
+                    <CustomText fontFamily="extrabold" style={tw`text-xl text-slate-800`}>Venues</CustomText>
                 </View>
-                <View style={{ width: 44 }} />
+                <View style={tw`w-11`} />
             </View>
 
-            <View style={styles.searchContainer}>
-                <View style={styles.searchBar}>
+            {/* Search Bar */}
+            <View style={tw`px-6 mb-4`}>
+                <View style={tw`flex-row items-center bg-white rounded-2xl px-4 h-14 border border-slate-200 shadow-sm`}>
                     <Ionicons name="search" size={20} color="#94A3B8" />
                     <TextInput
-                        style={styles.searchInput}
-                        placeholder="Search by name or location..."
+                        style={tw`flex-1 ml-3 text-[15px] text-slate-800 font-normal`}
+                        placeholder="Search venues or locations..."
                         placeholderTextColor="#94A3B8"
                         value={searchQuery}
                         onChangeText={handleSearch}
                     />
                     {searchQuery.length > 0 && (
-                        <TouchableOpacity onPress={() => handleSearch('')}>
+                        <TouchableOpacity onPress={() => handleSearch('')} style={tw`p-1`}>
                             <Ionicons name="close-circle" size={20} color="#CBD5E1" />
                         </TouchableOpacity>
                     )}
                 </View>
             </View>
 
+            {/* NEW: Scan Venue Button added right below the search bar */}
+            <View style={tw`px-6 mb-6`}>
+                <TouchableOpacity
+                    style={tw`flex-row bg-[#00686F] p-4 rounded-2xl items-center justify-center shadow-sm`}
+                    onPress={() => navigation.navigate('CaptureVenue')}
+                >
+                    <Ionicons name="scan" size={20} color="#FFF" />
+                    <CustomText fontFamily="bold" style={tw`text-white text-[15px] ml-2`}>
+                        Scan a Room into 3D
+                    </CustomText>
+                </TouchableOpacity>
+            </View>
+
+            {/* List of Venues */}
             <FlatList
                 data={venues}
                 keyExtractor={item => item.id}
                 renderItem={renderVenueCard}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={tw`px-6 pb-10 pt-2`}
                 showsVerticalScrollIndicator={false}
                 ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Ionicons name="search-outline" size={48} color="#CBD5E1" />
-                        <CustomText style={styles.emptyText}>No venues found.</CustomText>
+                    <View style={tw`items-center justify-center pt-20`}>
+                        <View style={tw`w-20 h-20 rounded-full bg-slate-100 items-center justify-center mb-4`}>
+                            <Ionicons name="search-outline" size={32} color="#94A3B8" />
+                        </View>
+                        <CustomText fontFamily="bold" style={tw`text-slate-500 text-lg`}>No venues found</CustomText>
+                        <CustomText fontFamily="medium" style={tw`text-slate-400 text-sm mt-1`}>Try adjusting your search terms.</CustomText>
                     </View>
                 }
             />
         </SafeAreaView>
     );
 }
-
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8FAFC' },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 15 },
-    backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#FFF', justifyContent: 'center', alignItems: 'center', elevation: 2 },
-    headerTextContainer: { flex: 1, alignItems: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B' },
-    headerSubtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
-    searchContainer: { paddingHorizontal: 20, marginBottom: 15 },
-    searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 16, paddingHorizontal: 15, height: 50, borderWidth: 1, borderColor: '#E2E8F0' },
-    searchInput: { flex: 1, marginLeft: 10, fontSize: 15, color: '#1E293B' },
-    listContent: { paddingHorizontal: 20, paddingBottom: 40 },
-    cardContainer: { backgroundColor: '#FFF', borderRadius: 24, marginBottom: 20, overflow: 'hidden', elevation: 4 },
-    cardImage: { width: '100%', height: 180, backgroundColor: '#E2E8F0' },
-    arBadge: { position: 'absolute', top: 15, right: 15, backgroundColor: 'rgba(0, 104, 111, 0.9)', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-    arBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '800', marginLeft: 4 },
-    cardContent: { padding: 20 },
-    cardHeader: { marginBottom: 10 },
-    venueName: { fontSize: 18, fontWeight: '800', color: '#1E293B' },
-    venuePrice: { fontSize: 14, fontWeight: '700', color: '#00686F' },
-    infoRow: { flexDirection: 'row', marginBottom: 20, gap: 15 },
-    infoItem: { flexDirection: 'row', alignItems: 'center' },
-    infoText: { fontSize: 12, color: '#64748B', marginLeft: 4, fontWeight: '500' },
-    actionRow: { flexDirection: 'row', gap: 12 },
-    detailsBtn: { flex: 1, paddingVertical: 12, borderRadius: 14, backgroundColor: '#F1F5F9', alignItems: 'center' },
-    detailsBtnText: { color: '#475569', fontWeight: '700', fontSize: 14 },
-    arBtn: { flex: 1.2, flexDirection: 'row', paddingVertical: 12, borderRadius: 14, backgroundColor: '#00686F', alignItems: 'center', justifyContent: 'center' },
-    arBtnText: { color: '#FFF', fontWeight: '800', fontSize: 14, marginLeft: 8 },
-    noArBtn: { flex: 1.2, paddingVertical: 12, borderRadius: 14, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
-    noArBtnText: { color: '#94A3B8', fontWeight: '600', fontSize: 12 },
-    emptyState: { alignItems: 'center', paddingTop: 60 },
-    emptyText: { color: '#94A3B8', marginTop: 15, fontSize: 16, fontWeight: '600' }
-});

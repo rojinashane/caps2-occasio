@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'; // Added useCallback
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
     View,
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
-    StyleSheet,
     Animated,
     Platform,
     UIManager,
@@ -12,10 +11,10 @@ import {
     TouchableWithoutFeedback,
     Alert,
     Image,
-    FlatList
+    StyleSheet
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native'; // Added useFocusEffect
+import { useFocusEffect } from '@react-navigation/native';
 import { Calendar } from 'react-native-calendars';
 import CustomText from '../components/CustomText';
 import DashboardHeader from '../components/Header';
@@ -32,19 +31,20 @@ import {
     or,
     where
 } from 'firebase/firestore';
+import tw from 'twrnc';
 
 const { width } = Dimensions.get('window');
 
 // --- MOCK DATA FOR FEATURED SECTION ---
 const FEATURED_VENUES = [
-     {
+    {
         id: '1',
         name: "Lilia's Fortune Hall",
         location: 'Ricacho Subdivision, Sorsogon City',
         coordinates: { latitude: 12.973938, longitude: 124.005313 },
         capacity: '500 Pax',
         price: '₱50,000 / day',
-        image: 'https://lh3.googleusercontent.com/p/AF1QipOcI3QEVc5BMawcJXoW24Zw0ddegvEKdE57OGmH=s1360-w1360-h1020-rw',
+        image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800', // Updated placeholder for better visual
         hasAR: true,
     },
     {
@@ -64,7 +64,7 @@ const FEATURED_VENUES = [
         coordinates: { latitude: 12.9622, longitude: 123.9961 },
         capacity: '50 Pax',
         price: '₱15,000 / day',
-        image: 'https://lh3.googleusercontent.com/p/AF1QipN1Rh-OKX2LzCGmeHR2j3_f73KgxfgpyfvRnaZT=s1360-w1360-h1020-rw',
+        image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800', // Updated placeholder for better visual
         hasAR: false,
     },
 ];
@@ -92,10 +92,9 @@ export default function DashboardScreen({ navigation }) {
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     const [menuVisible, setMenuVisible] = useState(false);
-    const [notifVisible, setNotifVisible] = useState(false); 
+    const [notifVisible, setNotifVisible] = useState(false);
     const slideAnim = useRef(new Animated.Value(width)).current;
 
-    // --- FIX: REFRESH USER DATA ON FOCUS ---
     useFocusEffect(
         useCallback(() => {
             fetchUserData();
@@ -184,7 +183,7 @@ export default function DashboardScreen({ navigation }) {
 
     const setGreetingMessage = () => {
         const hour = new Date().getHours();
-        setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
+        setGreeting(hour < 12 ? 'Good morning,' : hour < 18 ? 'Good afternoon,' : 'Good evening,');
     };
 
     const listData = useMemo(() => {
@@ -223,7 +222,7 @@ export default function DashboardScreen({ navigation }) {
                 marks[dateStr] = {
                     startingDay: isStart,
                     endingDay: isEnd,
-                    color: isStart || isEnd ? '#00686F' : 'rgba(0, 104, 111, 0.2)',
+                    color: isStart || isEnd ? '#00686F' : '#E0F2F3',
                     textColor: isStart || isEnd ? '#ffffff' : '#00686F',
                 };
                 curr.setDate(curr.getDate() + 1);
@@ -234,14 +233,14 @@ export default function DashboardScreen({ navigation }) {
 
     if (loading) {
         return (
-            <View style={styles.loadingContainer}>
+            <View style={tw`flex-1 justify-center items-center bg-[#F8FAFC]`}>
                 <ActivityIndicator size="large" color="#00686F" />
             </View>
         );
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={tw`flex-1 bg-[#F8FAFC]`} edges={['top']}>
             <ScrollView showsVerticalScrollIndicator={false}>
                 <DashboardHeader
                     userData={userData}
@@ -250,83 +249,107 @@ export default function DashboardScreen({ navigation }) {
                     onOpenNotifications={() => setNotifVisible(true)}
                 />
 
-                <View style={styles.content}>
-                    <View style={styles.featuredHeader}>
-                        <CustomText style={styles.sectionTitle}>Explore Venues in AR</CustomText>
+                <View style={tw`px-6 pt-2 pb-24`}>
+
+                    {/* FEATURED VENUES SECTION */}
+                    <View style={tw`flex-row justify-between items-end mt-6 mb-4`}>
+                        <CustomText fontFamily="bold" style={tw`text-lg text-slate-800`}>Explore Venues</CustomText>
                         <TouchableOpacity onPress={() => navigation.navigate('Venues')}>
-                            <CustomText style={styles.viewAllLink}>View All</CustomText>
+                            <CustomText fontFamily="semibold" style={tw`text-sm text-[#00686F]`}>View All</CustomText>
                         </TouchableOpacity>
                     </View>
-                    
-                    <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
-                        style={styles.featuredCarousel}
-                        contentContainerStyle={{ paddingRight: 20 }}
+
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={tw`-mx-6 pl-6 mb-8`}
+                        contentContainerStyle={{ paddingRight: 24 }}
                     >
                         {FEATURED_VENUES.map((venue) => (
-                            <TouchableOpacity 
-                                key={venue.id} 
-                                style={styles.featuredCard}
+                            <TouchableOpacity
+                                key={venue.id}
+                                style={[
+                                    tw`w-[260px] h-[150px] rounded-[24px] mr-4 overflow-hidden bg-slate-200 relative`,
+                                    { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 }
+                                ]}
                                 onPress={() => navigation.navigate('ARVenue', { venueId: venue.id, venueName: venue.name })}
                             >
-                                <Image source={{ uri: venue.image }} style={styles.featuredImage} />
-                                <View style={styles.arBadgeSmall}>
-                                    <Ionicons name="cube" size={10} color="#FFF" />
-                                    <CustomText style={styles.arBadgeTextSmall}>AR</CustomText>
-                                </View>
-                                <View style={styles.featuredOverlay}>
-                                    <CustomText style={styles.featuredVenueName} numberOfLines={1}>{venue.name}</CustomText>
-                                    <View style={styles.featuredLocRow}>
-                                        <Ionicons name="location" size={10} color="#CCC" />
-                                        <CustomText style={styles.featuredVenueLoc}>{venue.location}</CustomText>
+                                <Image source={{ uri: venue.image }} style={tw`w-full h-full absolute`} />
+
+                                {/* Gradient Overlay */}
+                                <View style={tw`absolute inset-0 bg-black/30`} />
+
+                                {venue.hasAR && (
+                                    <View style={tw`absolute top-3 right-3 bg-white/20 px-2.5 py-1.5 rounded-full flex-row items-center`}>
+                                        <Ionicons name="cube" size={12} color="#FFF" />
+                                        <CustomText fontFamily="bold" style={tw`text-white text-[10px] ml-1 tracking-wider`}>AR</CustomText>
+                                    </View>
+                                )}
+
+                                <View style={tw`absolute bottom-0 left-0 right-0 p-4`}>
+                                    <CustomText fontFamily="bold" style={tw`text-white text-[15px] mb-0.5`} numberOfLines={1}>{venue.name}</CustomText>
+                                    <View style={tw`flex-row items-center opacity-90`}>
+                                        <Ionicons name="location" size={12} color="#FFF" />
+                                        <CustomText fontFamily="regular" style={tw`text-white text-[11px] ml-1`} numberOfLines={1}>{venue.location}</CustomText>
                                     </View>
                                 </View>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
 
-                    <CustomText style={styles.sectionTitle}>Quick Access</CustomText>
-                    <View style={styles.quickAccessRow}>
-                        <QuickBtn icon="time-outline" label="Past Events" color="#6B7280" active={currentFilter === 'past'} onPress={() => { setCurrentFilter('past'); setViewMode('list'); }} />
+                    {/* QUICK ACCESS SECTION */}
+                    <CustomText fontFamily="bold" style={tw`text-lg text-slate-800 mb-4`}>Quick Access</CustomText>
+                    <View style={tw`flex-row justify-between mb-8`}>
+                        <QuickBtn icon="time-outline" label="Past" color="#64748B" active={currentFilter === 'past'} onPress={() => { setCurrentFilter('past'); setViewMode('list'); }} />
                         <QuickBtn icon="calendar" label="My Events" color="#00686F" active={currentFilter === 'my'} onPress={() => { setCurrentFilter('my'); setViewMode('list'); }} />
                         <QuickBtn icon="people" label="Shared" color="#8B5CF6" active={currentFilter === 'shared'} onPress={() => { setCurrentFilter('shared'); setViewMode('list'); }} />
                         <QuickBtn icon="location-outline" label="Venue" color="#F59E0B" onPress={() => navigation.navigate('Venues')} />
                     </View>
 
-                    <View style={styles.viewSwitcher}>
-                        <TouchableOpacity style={[styles.switchBtn, viewMode === 'list' && styles.switchBtnActive]} onPress={() => setViewMode('list')}>
-                            <Ionicons name="list" size={18} color={viewMode === 'list' ? '#FFF' : '#6B7280'} />
-                            <CustomText style={[styles.switchText, viewMode === 'list' && { color: '#FFF' }]}>List View</CustomText>
+                    {/* VIEW SWITCHER */}
+                    <View style={tw`flex-row bg-slate-200/70 rounded-2xl p-1 mb-6`}>
+                        <TouchableOpacity
+                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}
+                            onPress={() => setViewMode('list')}
+                        >
+                            <Ionicons name="list" size={18} color={viewMode === 'list' ? '#00686F' : '#64748B'} />
+                            <CustomText fontFamily="semibold" style={tw`ml-2 text-[13px] ${viewMode === 'list' ? 'text-slate-800' : 'text-slate-500'}`}>List View</CustomText>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.switchBtn, viewMode === 'calendar' && styles.switchBtnActive]} onPress={() => { setViewMode('calendar'); setCurrentFilter('upcoming'); }}>
-                            <Ionicons name="calendar" size={18} color={viewMode === 'calendar' ? '#FFF' : '#6B7280'} />
-                            <CustomText style={[styles.switchText, viewMode === 'calendar' && { color: '#FFF' }]}>Calendar</CustomText>
+                        <TouchableOpacity
+                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl ${viewMode === 'calendar' ? 'bg-white shadow-sm' : ''}`}
+                            onPress={() => { setViewMode('calendar'); setCurrentFilter('upcoming'); }}
+                        >
+                            <Ionicons name="calendar" size={18} color={viewMode === 'calendar' ? '#00686F' : '#64748B'} />
+                            <CustomText fontFamily="semibold" style={tw`ml-2 text-[13px] ${viewMode === 'calendar' ? 'text-slate-800' : 'text-slate-500'}`}>Calendar</CustomText>
                         </TouchableOpacity>
                     </View>
 
+                    {/* DYNAMIC CONTENT AREA */}
                     {viewMode === 'calendar' ? (
-                        <Animated.View style={[styles.calendarContainer, { opacity: fadeAnim }]}>
+                        <Animated.View style={[{ opacity: fadeAnim }, tw`bg-white rounded-[24px] p-2 overflow-hidden shadow-sm border border-slate-100`]}>
                             <Calendar markingType={'period'} theme={calendarTheme} markedDates={markedDates} />
                         </Animated.View>
                     ) : (
-                        <View style={{ marginBottom: 100 }}>
-                            <View style={styles.listHeader}>
-                                <CustomText style={styles.sectionSubTitle}>
+                        <View>
+                            <View style={tw`flex-row justify-between items-center mb-4`}>
+                                <CustomText fontFamily="bold" style={tw`text-base text-slate-800`}>
                                     {currentFilter === 'past' ? 'Past Events' : currentFilter === 'my' ? 'My Events' : currentFilter === 'shared' ? 'Shared with Me' : 'Upcoming Events'}
                                 </CustomText>
                                 {currentFilter !== 'upcoming' && (
                                     <TouchableOpacity onPress={() => setCurrentFilter('upcoming')}>
-                                        <CustomText style={styles.resetFilter}>Show All Upcoming</CustomText>
+                                        <CustomText fontFamily="semibold" style={tw`text-[#00686F] text-xs`}>Show All</CustomText>
                                     </TouchableOpacity>
                                 )}
                             </View>
+
                             {listData.length > 0 ? (
                                 listData.map(item => <EventItem key={item.id} item={item} navigation={navigation} />)
                             ) : (
-                                <View style={styles.emptyState}>
-                                    <Ionicons name="file-tray-outline" size={40} color="#D1D5DB" />
-                                    <CustomText style={styles.emptyText}>No events found in this category.</CustomText>
+                                <View style={tw`items-center justify-center mt-10 p-6 bg-white rounded-[24px] border border-slate-100 border-dashed`}>
+                                    <View style={tw`w-16 h-16 rounded-full bg-slate-50 items-center justify-center mb-3`}>
+                                        <Ionicons name="folder-open-outline" size={28} color="#94A3B8" />
+                                    </View>
+                                    <CustomText fontFamily="medium" style={tw`text-slate-500 text-[14px]`}>No events found here.</CustomText>
                                 </View>
                             )}
                         </View>
@@ -339,43 +362,55 @@ export default function DashboardScreen({ navigation }) {
                 onClose={() => setNotifVisible(false)}
             />
 
+            {/* SIDE DRAWER MENU */}
             {menuVisible && (
-                <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                <View style={tw`absolute inset-0 z-50`} pointerEvents="box-none">
                     <TouchableWithoutFeedback onPress={() => toggleMenu(false)}>
-                        <View style={styles.drawerOverlay} />
+                        <View style={tw`absolute inset-0 bg-slate-900/40`} />
                     </TouchableWithoutFeedback>
 
-                    <Animated.View style={[styles.sideDrawer, { transform: [{ translateX: slideAnim }] }]}>
-                        <SafeAreaView style={{ flex: 1 }}>
-                            <View style={styles.drawerHeader}>
-                                <CustomText style={styles.drawerMenuTitle}>Menu</CustomText>
-                                <TouchableOpacity onPress={() => toggleMenu(false)}>
-                                    <Ionicons name="close" size={28} color="#1E293B" />
-                                </TouchableOpacity>
-                            </View>
+                    <Animated.View style={[
+                        tw`absolute top-0 right-0 bottom-0 bg-white rounded-l-[32px] px-6 pt-16`,
+                        { width: width * 0.75, transform: [{ translateX: slideAnim }], shadowColor: '#000', shadowOffset: { width: -10, height: 0 }, shadowOpacity: 0.1, shadowRadius: 20 }
+                    ]}>
+                        <View style={tw`flex-row justify-between items-center pb-6 border-b border-slate-100`}>
+                            <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800`}>Menu</CustomText>
+                            <TouchableOpacity onPress={() => toggleMenu(false)} style={tw`p-2 bg-slate-50 rounded-full`}>
+                                <Ionicons name="close" size={20} color="#334155" />
+                            </TouchableOpacity>
+                        </View>
 
-                            <View style={styles.drawerItems}>
-                                <TouchableOpacity style={styles.drawerItem} onPress={() => { toggleMenu(false); navigation.navigate('Profile'); }}>
-                                    <View style={[styles.drawerIcon, { backgroundColor: '#F0F9FA' }]}>
-                                        <Ionicons name="person-outline" size={22} color="#00686F" />
-                                    </View>
-                                    <CustomText style={styles.drawerText}>Profile</CustomText>
-                                </TouchableOpacity>
+                        <View style={tw`mt-6`}>
+                            <TouchableOpacity
+                                style={tw`flex-row items-center py-4`}
+                                onPress={() => { toggleMenu(false); navigation.navigate('Profile'); }}
+                            >
+                                <View style={tw`w-12 h-12 rounded-2xl bg-[#F0F9FA] justify-center items-center mr-4`}>
+                                    <Ionicons name="person-outline" size={20} color="#00686F" />
+                                </View>
+                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-slate-700`}>Profile Settings</CustomText>
+                            </TouchableOpacity>
 
-                                <TouchableOpacity style={styles.drawerItem} onPress={handleLogout}>
-                                    <View style={[styles.drawerIcon, { backgroundColor: '#FEF2F2' }]}>
-                                        <Ionicons name="log-out-outline" size={22} color="#EF4444" />
-                                    </View>
-                                    <CustomText style={[styles.drawerText, { color: '#EF4444' }]}>Log Out</CustomText>
-                                </TouchableOpacity>
-                            </View>
-                        </SafeAreaView>
+                            <TouchableOpacity style={tw`flex-row items-center py-4`} onPress={handleLogout}>
+                                <View style={tw`w-12 h-12 rounded-2xl bg-red-50 justify-center items-center mr-4`}>
+                                    <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+                                </View>
+                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-red-500`}>Log Out</CustomText>
+                            </TouchableOpacity>
+                        </View>
                     </Animated.View>
                 </View>
             )}
 
-            <TouchableOpacity style={styles.fab} onPress={() => navigation.navigate('AddEvent')}>
-                <Ionicons name="add" size={32} color="#FFF" />
+            {/* FLOATING ACTION BUTTON */}
+            <TouchableOpacity
+                style={[
+                    tw`absolute right-6 bottom-8 bg-[#00686F] w-14 h-14 rounded-[20px] justify-center items-center`,
+                    { shadowColor: '#00686F', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 }
+                ]}
+                onPress={() => navigation.navigate('AddEvent')}
+            >
+                <Ionicons name="add" size={28} color="#FFF" />
             </TouchableOpacity>
         </SafeAreaView>
     );
@@ -383,87 +418,67 @@ export default function DashboardScreen({ navigation }) {
 
 // --- SUB-COMPONENTS ---
 const QuickBtn = ({ icon, label, color, onPress, active }) => (
-    <TouchableOpacity style={styles.quickBtn} onPress={onPress}>
-        <View style={[styles.quickIcon, { backgroundColor: color + '15' }, active && { backgroundColor: color }]}>
-            <Ionicons name={icon} size={22} color={active ? '#FFF' : color} />
+    <TouchableOpacity style={tw`items-center w-[22%]`} onPress={onPress}>
+        <View
+            style={[
+                tw`w-[54px] h-[54px] rounded-[20px] justify-center items-center mb-2`,
+                { backgroundColor: active ? color : color + '15' }
+            ]}
+        >
+            <Ionicons name={icon} size={24} color={active ? '#FFF' : color} />
         </View>
-        <CustomText style={[styles.quickLabel, active && { color: color, fontWeight: '800' }]}>{label}</CustomText>
+        <CustomText
+            fontFamily={active ? "bold" : "medium"}
+            style={[tw`text-[10px] text-center`, { color: active ? color : '#64748B' }]}
+        >
+            {label}
+        </CustomText>
     </TouchableOpacity>
 );
 
 const EventItem = ({ item, navigation }) => {
     const start = parseDateToObj(item.startDate);
     const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
     return (
-        <TouchableOpacity style={styles.eventCard} onPress={() => navigation.navigate('EventDetails', { eventId: item.id })}>
-            <View style={styles.iconBox}><Ionicons name="calendar" size={20} color="#00686F" /></View>
-            <View style={{ flex: 1 }}>
-                <CustomText style={styles.eventTitle}>{item.title}</CustomText>
-                <CustomText style={styles.eventDate}>{startStr}</CustomText>
+        <TouchableOpacity
+            style={tw`bg-white p-4 rounded-[20px] mb-3 flex-row items-center border border-slate-100`}
+            onPress={() => navigation.navigate('EventDetails', { eventId: item.id })}
+        >
+            <View style={tw`w-12 h-12 rounded-2xl bg-[#F0F9FA] justify-center items-center mr-4`}>
+                <Ionicons name="calendar" size={20} color="#00686F" />
             </View>
-            <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+            <View style={tw`flex-1`}>
+                <CustomText fontFamily="bold" style={tw`text-[15px] text-slate-800 mb-0.5`}>{item.title}</CustomText>
+                <CustomText fontFamily="medium" style={tw`text-[#94A3B8] text-[12px]`}>{startStr}</CustomText>
+            </View>
+            <View style={tw`w-8 h-8 rounded-full bg-slate-50 justify-center items-center`}>
+                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+            </View>
         </TouchableOpacity>
     );
 };
 
+// Cleaned up calendar theme to match the sleek UI
 const calendarTheme = {
     calendarBackground: '#ffffff',
-    todayTextColor: '#EF4444',
-    dayTextColor: '#374151',
-    monthTextColor: '#111827',
+    todayTextColor: '#00686F',
+    dayTextColor: '#334155',
+    monthTextColor: '#0f172a',
     arrowColor: '#00686F',
-    textDayFontWeight: '500',
+    textDayFontFamily: 'Poppins-Medium',
+    textMonthFontFamily: 'Poppins-Bold',
+    textDayHeaderFontFamily: 'Poppins-SemiBold',
     textMonthFontWeight: 'bold',
     textDayHeaderFontWeight: '600',
+    'stylesheet.calendar.header': {
+        header: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            paddingLeft: 10,
+            paddingRight: 10,
+            marginTop: 6,
+            alignItems: 'center'
+        }
+    }
 };
-
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8F9FA' },
-    content: { paddingHorizontal: 20 },
-    loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FA' },
-    
-    featuredHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 , marginTop: 10},
-    viewAllLink: { color: '#00686F', fontWeight: 'bold', fontSize: 12 },
-    featuredCarousel: { marginBottom: 25, marginHorizontal: -20, paddingLeft: 20 },
-    featuredCard: { width: width * 0.6, height: 130, borderRadius: 20, marginRight: 15, overflow: 'hidden', backgroundColor: '#DDD' },
-    featuredImage: { ...StyleSheet.absoluteFillObject },
-    featuredOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12, backgroundColor: 'rgba(0,0,0,0.4)' },
-    featuredVenueName: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
-    featuredLocRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-    featuredVenueLoc: { color: '#CCC', fontSize: 10, marginLeft: 3 },
-    arBadgeSmall: { position: 'absolute', top: 10, right: 10, backgroundColor: '#00686F', flexDirection: 'row', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, alignItems: 'center' },
-    arBadgeTextSmall: { color: '#FFF', fontSize: 9, fontWeight: 'bold', marginLeft: 3 },
-
-    quickAccessRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-    quickBtn: { alignItems: 'center', width: '23%' },
-    quickIcon: { width: 50, height: 50, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
-    quickLabel: { fontSize: 9, fontWeight: '700', color: '#374151', textAlign: 'center' },
-    viewSwitcher: { flexDirection: 'row', backgroundColor: '#E5E7EB', borderRadius: 14, padding: 4, marginBottom: 20 },
-    switchBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: 11 },
-    switchBtnActive: { backgroundColor: '#00686F' },
-    switchText: { marginLeft: 8, fontSize: 13, fontWeight: 'bold', color: '#6B7280' },
-    calendarContainer: { backgroundColor: '#FFF', borderRadius: 24, padding: 10, elevation: 4 },
-    sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#111827' },
-    sectionSubTitle: { fontSize: 16, fontWeight: 'bold', color: '#111827' },
-    listHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-    resetFilter: { color: '#00686F', fontWeight: 'bold', fontSize: 11 },
-    eventCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 20, marginBottom: 12, flexDirection: 'row', alignItems: 'center', elevation: 1 },
-    iconBox: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F0F9FA', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    eventTitle: { fontWeight: 'bold', fontSize: 14, color: '#111827' },
-    eventDate: { color: '#9CA3AF', fontSize: 11, marginTop: 2 },
-    emptyState: { alignItems: 'center', marginTop: 40 },
-    emptyText: { color: '#9CA3AF', marginTop: 10, fontSize: 13 },
-    fab: { position: 'absolute', right: 20, bottom: 30, backgroundColor: '#00686F', width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', elevation: 6 },
-    drawerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
-    sideDrawer: {
-        position: 'absolute', top: 0, right: 0, bottom: 0, width: width * 0.75,
-        backgroundColor: '#FFF', paddingHorizontal: 20, elevation: 20,
-        shadowColor: '#000', shadowOffset: { width: -10, height: 0 }, shadowOpacity: 0.1, shadowRadius: 10
-    },
-    drawerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-    drawerMenuTitle: { fontSize: 20, fontWeight: '800', color: '#1E293B' },
-    drawerItems: { marginTop: 20 },
-    drawerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
-    drawerIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-    drawerText: { fontSize: 16, fontWeight: '600', color: '#1E293B' },
-});
