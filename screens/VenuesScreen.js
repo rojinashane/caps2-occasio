@@ -183,19 +183,6 @@ export default function VenuesScreen({ navigation }) {
                 </View>
             </View>
 
-            {/* NEW: Scan Venue Button added right below the search bar */}
-            <View style={tw`px-6 mb-6`}>
-                <TouchableOpacity
-                    style={tw`flex-row bg-[#00686F] p-4 rounded-2xl items-center justify-center shadow-sm`}
-                    onPress={() => navigation.navigate('CaptureVenue')}
-                >
-                    <Ionicons name="scan" size={20} color="#FFF" />
-                    <CustomText fontFamily="bold" style={tw`text-white text-[15px] ml-2`}>
-                        Scan a Room into 3D
-                    </CustomText>
-                </TouchableOpacity>
-            </View>
-
             {/* List of Venues */}
             <FlatList
                 data={venues}
