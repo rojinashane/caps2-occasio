@@ -1,27 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    View, Modal, StyleSheet, TouchableOpacity, ScrollView, 
-    ActivityIndicator, Alert 
+import {
+    View, Modal, TouchableOpacity, ScrollView,
+    ActivityIndicator, Alert, StyleSheet
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
-import { 
-    collection, query, where, onSnapshot, 
-    doc, updateDoc, arrayUnion, deleteDoc 
+import {
+    collection, query, where, onSnapshot,
+    doc, updateDoc, arrayUnion, deleteDoc
 } from 'firebase/firestore';
 import CustomText from './CustomText';
+import tw from 'twrnc';
 
 export default function NotificationModal({ visible, onClose }) {
     const [notifications, setNotifications] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Essential: only run if the modal is visible and user is logged in
         if (!visible || !auth.currentUser) return;
 
         setLoading(true);
-        
-        // Use the current user's ID
         const uid = auth.currentUser.uid;
 
         const q = query(
@@ -31,9 +29,9 @@ export default function NotificationModal({ visible, onClose }) {
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const list = snapshot.docs.map(doc => ({ 
-                id: doc.id, 
-                ...doc.data() 
+            const list = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
             }));
             setNotifications(list);
             setLoading(false);
@@ -43,9 +41,8 @@ export default function NotificationModal({ visible, onClose }) {
         });
 
         return () => unsubscribe();
-    }, [visible]); // Re-run when modal opens to ensure fresh data
+    }, [visible]);
 
-    
     const handleAccept = async (notif) => {
         try {
             if (!notif.eventId) {
@@ -53,15 +50,12 @@ export default function NotificationModal({ visible, onClose }) {
                 return;
             }
 
-            // 1. Add user's email to the event's collaborators array
             const eventRef = doc(db, 'events', notif.eventId);
             await updateDoc(eventRef, {
                 collaborators: arrayUnion(auth.currentUser.email.toLowerCase())
             });
 
-            // 2. Delete the notification after success
             await deleteDoc(doc(db, 'notifications', notif.id));
-            
             Alert.alert("Success", `You joined ${notif.eventTitle || 'the event'}`);
         } catch (error) {
             console.error("Accept Error:", error);
@@ -78,76 +72,91 @@ export default function NotificationModal({ visible, onClose }) {
         }
     };
 
-    const getIcon = (type) => {
-    switch(type) {
-        case 'card_added': return 'add-circle';
-        case 'item_checked': return 'checkmark-done-circle';
-        case 'list_added': return 'list-outline';
-        default: return 'notifications';
-        }
-    };
-
     return (
-        <Modal 
-            visible={visible} 
-            animationType="slide" 
+        <Modal
+            visible={visible}
+            animationType="slide"
             transparent={true}
             onRequestClose={onClose}
         >
-            <View style={styles.overlay}>
+            <View style={tw`flex-1 justify-end bg-slate-900/50`}>
                 {/* Touchable background to close modal */}
-                <TouchableOpacity 
-                    style={StyleSheet.absoluteFill} 
-                    onPress={onClose} 
-                    activeOpacity={1} 
+                <TouchableOpacity
+                    style={StyleSheet.absoluteFill}
+                    onPress={onClose}
+                    activeOpacity={1}
                 />
-                
-                <View style={styles.container}>
-                    <View style={styles.header}>
-                        <CustomText style={styles.headerTitle}>Notifications</CustomText>
-                        <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                            <Ionicons name="close" size={24} color="#1E293B" />
+
+                {/* Bottom Sheet Container */}
+                <View style={[
+                    tw`bg-white h-[75%] rounded-t-[32px] px-6 pt-3 pb-8`,
+                    { shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 20 }
+                ]}>
+
+                    {/* Drag Indicator Pill */}
+                    <View style={tw`w-12 h-1.5 bg-slate-200 rounded-full self-center mb-6`} />
+
+                    {/* Header */}
+                    <View style={tw`flex-row justify-between items-center mb-6`}>
+                        <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800 tracking-tight`}>
+                            Notifications
+                        </CustomText>
+                        <TouchableOpacity
+                            onPress={onClose}
+                            style={tw`w-8 h-8 bg-slate-100 rounded-full justify-center items-center`}
+                        >
+                            <Ionicons name="close" size={18} color="#64748B" />
                         </TouchableOpacity>
                     </View>
 
+                    {/* Content Area */}
                     {loading ? (
-                        <View style={styles.center}>
+                        <View style={tw`flex-1 justify-center items-center`}>
                             <ActivityIndicator size="large" color="#00686F" />
                         </View>
                     ) : notifications.length === 0 ? (
-                        <View style={styles.emptyState}>
-                            <Ionicons name="notifications-off-outline" size={60} color="#CBD5E1" />
-                            <CustomText style={styles.emptyText}>No new invitations</CustomText>
+                        <View style={tw`flex-1 justify-center items-center pb-20`}>
+                            <View style={tw`w-24 h-24 bg-slate-50 rounded-full justify-center items-center mb-4`}>
+                                <Ionicons name="notifications-off-outline" size={48} color="#CBD5E1" />
+                            </View>
+                            <CustomText fontFamily="bold" style={tw`text-slate-700 text-[18px] mb-1`}>All Caught Up!</CustomText>
+                            <CustomText fontFamily="medium" style={tw`text-slate-400 text-[14px]`}>You have no new invitations right now.</CustomText>
                         </View>
                     ) : (
-                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
+                        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={tw`pb-10`}>
                             {notifications.map((notif) => (
-                                <View key={notif.id} style={styles.notifCard}>
-                                    <View style={styles.notifIcon}>
+                                <View
+                                    key={notif.id}
+                                    style={tw`bg-white p-4 rounded-[24px] mb-4 border border-slate-100 shadow-sm flex-row`}
+                                >
+                                    <View style={tw`w-12 h-12 rounded-full bg-[#E0F2F3] justify-center items-center mr-4`}>
                                         <Ionicons name="people" size={20} color="#00686F" />
                                     </View>
-                                    <View style={styles.notifContent}>
-                                        <CustomText style={styles.notifTitle}>Collaboration Request</CustomText>
-                                        <CustomText style={styles.notifBody}>
-                                            <CustomText style={{fontWeight: '700'}}>
+
+                                    <View style={tw`flex-1`}>
+                                        <CustomText fontFamily="bold" style={tw`text-[11px] text-[#00686F] mb-1 uppercase tracking-widest`}>
+                                            Collaboration Request
+                                        </CustomText>
+                                        <CustomText fontFamily="medium" style={tw`text-[14px] text-slate-600 leading-5 mb-4`}>
+                                            <CustomText fontFamily="bold" style={tw`text-slate-800`}>
                                                 {notif.senderName || 'Someone'}
-                                            </CustomText> invited you to work on <CustomText style={{fontWeight: '700'}}>
+                                            </CustomText> invited you to work on <CustomText fontFamily="bold" style={tw`text-slate-800`}>
                                                 {notif.eventTitle || 'an event'}
                                             </CustomText>.
                                         </CustomText>
-                                        
-                                        <View style={styles.actionRow}>
-                                            <TouchableOpacity 
-                                                style={styles.declineBtn} 
+
+                                        <View style={tw`flex-row justify-end`}>
+                                            <TouchableOpacity
+                                                style={tw`py-2.5 px-6 rounded-xl bg-slate-100 mr-3`}
                                                 onPress={() => handleDecline(notif.id)}
                                             >
-                                                <CustomText style={styles.declineText}>Decline</CustomText>
+                                                <CustomText fontFamily="bold" style={tw`text-slate-500 text-[13px]`}>Decline</CustomText>
                                             </TouchableOpacity>
-                                            <TouchableOpacity 
-                                                style={styles.acceptBtn} 
+                                            <TouchableOpacity
+                                                style={tw`py-2.5 px-6 rounded-xl bg-[#00686F]`}
                                                 onPress={() => handleAccept(notif)}
                                             >
-                                                <CustomText style={styles.acceptText}>Accept</CustomText>
+                                                <CustomText fontFamily="bold" style={tw`text-white text-[13px]`}>Accept</CustomText>
                                             </TouchableOpacity>
                                         </View>
                                     </View>
@@ -160,25 +169,3 @@ export default function NotificationModal({ visible, onClose }) {
         </Modal>
     );
 }
-
-const styles = StyleSheet.create({
-    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    container: { backgroundColor: '#FFF', height: '75%', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 20, elevation: 20 },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-    headerTitle: { fontSize: 22, fontWeight: '800', color: '#1E293B' },
-    closeBtn: { padding: 4 },
-    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    list: { paddingBottom: 40 },
-    emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 100 },
-    emptyText: { color: '#94A3B8', marginTop: 15, fontSize: 16, fontWeight: '600' },
-    notifCard: { flexDirection: 'row', backgroundColor: '#F8FAFC', padding: 16, borderRadius: 20, marginBottom: 15, borderWidth: 1, borderColor: '#F1F5F9' },
-    notifIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#E0F2F1', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
-    notifContent: { flex: 1 },
-    notifTitle: { fontSize: 13, fontWeight: '800', color: '#00686F', marginBottom: 4, textTransform: 'uppercase' },
-    notifBody: { fontSize: 15, color: '#475569', lineHeight: 22 },
-    actionRow: { flexDirection: 'row', marginTop: 15, justifyContent: 'flex-end' },
-    acceptBtn: { backgroundColor: '#00686F', paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12, marginLeft: 10 },
-    acceptText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
-    declineBtn: { paddingVertical: 10, paddingHorizontal: 24, borderRadius: 12, borderWidth: 1, borderColor: '#CBD5E1' },
-    declineText: { color: '#64748B', fontWeight: '700', fontSize: 14 }
-});

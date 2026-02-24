@@ -44,7 +44,7 @@ const FEATURED_VENUES = [
         coordinates: { latitude: 12.973938, longitude: 124.005313 },
         capacity: '500 Pax',
         price: '₱50,000 / day',
-        image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800', // Updated placeholder for better visual
+        image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800',
         hasAR: true,
     },
     {
@@ -64,7 +64,7 @@ const FEATURED_VENUES = [
         coordinates: { latitude: 12.9622, longitude: 123.9961 },
         capacity: '50 Pax',
         price: '₱15,000 / day',
-        image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800', // Updated placeholder for better visual
+        image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800',
         hasAR: false,
     },
 ];
@@ -109,7 +109,7 @@ export default function DashboardScreen({ navigation }) {
                 collection(db, 'events'),
                 or(
                     where('userId', '==', user.uid),
-                    where('collaborators', 'array-contains', user.email.toLowerCase())
+                    where('collaborators', 'array-contains', user.email?.toLowerCase() || '')
                 )
             );
 
@@ -122,6 +122,8 @@ export default function DashboardScreen({ navigation }) {
             });
 
             return () => unsubscribe();
+        } else {
+            setLoading(false);
         }
     }, []);
 
@@ -252,8 +254,8 @@ export default function DashboardScreen({ navigation }) {
                 <View style={tw`px-6 pt-2 pb-24`}>
 
                     {/* FEATURED VENUES SECTION */}
-                    <View style={tw`flex-row justify-between items-end mt-6 mb-4`}>
-                        <CustomText fontFamily="bold" style={tw`text-lg text-slate-800`}>Explore Venues</CustomText>
+                    <View style={tw`flex-row justify-between items-end mt-4 mb-4`}>
+                        <CustomText fontFamily="bold" style={tw`text-xl text-slate-800 tracking-tight`}>Explore Venues</CustomText>
                         <TouchableOpacity onPress={() => navigation.navigate('Venues')}>
                             <CustomText fontFamily="semibold" style={tw`text-sm text-[#00686F]`}>View All</CustomText>
                         </TouchableOpacity>
@@ -269,58 +271,58 @@ export default function DashboardScreen({ navigation }) {
                             <TouchableOpacity
                                 key={venue.id}
                                 style={[
-                                    tw`w-[260px] h-[150px] rounded-[24px] mr-4 overflow-hidden bg-slate-200 relative`,
-                                    { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3 }
+                                    tw`w-[280px] h-[160px] rounded-[24px] mr-4 overflow-hidden bg-slate-200 relative`,
+                                    { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 }
                                 ]}
                                 onPress={() => navigation.navigate('ARVenue', { venueId: venue.id, venueName: venue.name })}
                             >
                                 <Image source={{ uri: venue.image }} style={tw`w-full h-full absolute`} />
 
-                                {/* Gradient Overlay */}
-                                <View style={tw`absolute inset-0 bg-black/30`} />
+                                {/* Improved Gradient Overlay for Text Legibility */}
+                                <View style={tw`absolute inset-0 bg-black/20`} />
+                                <View style={tw`absolute bottom-0 left-0 right-0 h-2/3 bg-black/40`} />
 
                                 {venue.hasAR && (
-                                    <View style={tw`absolute top-3 right-3 bg-white/20 px-2.5 py-1.5 rounded-full flex-row items-center`}>
-                                        <Ionicons name="cube" size={12} color="#FFF" />
-                                        <CustomText fontFamily="bold" style={tw`text-white text-[10px] ml-1 tracking-wider`}>AR</CustomText>
+                                    <View style={tw`absolute top-3 right-3 bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full flex-row items-center border border-white/20`}>
+                                        <Ionicons name="cube" size={14} color="#FFF" />
+                                        <CustomText fontFamily="bold" style={tw`text-white text-[11px] ml-1.5 tracking-wider`}>AR PREVIEW</CustomText>
                                     </View>
                                 )}
 
                                 <View style={tw`absolute bottom-0 left-0 right-0 p-4`}>
-                                    <CustomText fontFamily="bold" style={tw`text-white text-[15px] mb-0.5`} numberOfLines={1}>{venue.name}</CustomText>
+                                    <CustomText fontFamily="bold" style={tw`text-white text-[16px] mb-1 tracking-tight`} numberOfLines={1}>{venue.name}</CustomText>
                                     <View style={tw`flex-row items-center opacity-90`}>
-                                        <Ionicons name="location" size={12} color="#FFF" />
-                                        <CustomText fontFamily="regular" style={tw`text-white text-[11px] ml-1`} numberOfLines={1}>{venue.location}</CustomText>
+                                        <Ionicons name="location" size={12} color="#E2E8F0" />
+                                        <CustomText fontFamily="medium" style={tw`text-slate-200 text-[12px] ml-1`} numberOfLines={1}>{venue.location}</CustomText>
                                     </View>
                                 </View>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
 
-                    {/* QUICK ACCESS SECTION */}
-                    <CustomText fontFamily="bold" style={tw`text-lg text-slate-800 mb-4`}>Quick Access</CustomText>
-                    <View style={tw`flex-row justify-between mb-8`}>
+                    {/* QUICK ACCESS SECTION - Redesigned as a unified control center card */}
+                    <View style={[tw`bg-white rounded-[24px] p-4 mb-8 border border-slate-100 flex-row justify-between`, { shadowColor: '#64748B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }]}>
                         <QuickBtn icon="time-outline" label="Past" color="#64748B" active={currentFilter === 'past'} onPress={() => { setCurrentFilter('past'); setViewMode('list'); }} />
                         <QuickBtn icon="calendar" label="My Events" color="#00686F" active={currentFilter === 'my'} onPress={() => { setCurrentFilter('my'); setViewMode('list'); }} />
                         <QuickBtn icon="people" label="Shared" color="#8B5CF6" active={currentFilter === 'shared'} onPress={() => { setCurrentFilter('shared'); setViewMode('list'); }} />
                         <QuickBtn icon="location-outline" label="Venue" color="#F59E0B" onPress={() => navigation.navigate('Venues')} />
                     </View>
 
-                    {/* VIEW SWITCHER */}
-                    <View style={tw`flex-row bg-slate-200/70 rounded-2xl p-1 mb-6`}>
+                    {/* VIEW SWITCHER - Sleek native-like segmented control */}
+                    <View style={tw`flex-row bg-slate-100 rounded-[16px] p-1 mb-6`}>
                         <TouchableOpacity
-                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl ${viewMode === 'list' ? 'bg-white shadow-sm' : ''}`}
+                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-[12px] ${viewMode === 'list' ? 'bg-white shadow-sm border border-slate-50' : ''}`}
                             onPress={() => setViewMode('list')}
                         >
                             <Ionicons name="list" size={18} color={viewMode === 'list' ? '#00686F' : '#64748B'} />
-                            <CustomText fontFamily="semibold" style={tw`ml-2 text-[13px] ${viewMode === 'list' ? 'text-slate-800' : 'text-slate-500'}`}>List View</CustomText>
+                            <CustomText fontFamily={viewMode === 'list' ? "bold" : "medium"} style={tw`ml-2 text-[13px] ${viewMode === 'list' ? 'text-slate-800' : 'text-slate-500'}`}>List View</CustomText>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl ${viewMode === 'calendar' ? 'bg-white shadow-sm' : ''}`}
+                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-[12px] ${viewMode === 'calendar' ? 'bg-white shadow-sm border border-slate-50' : ''}`}
                             onPress={() => { setViewMode('calendar'); setCurrentFilter('upcoming'); }}
                         >
                             <Ionicons name="calendar" size={18} color={viewMode === 'calendar' ? '#00686F' : '#64748B'} />
-                            <CustomText fontFamily="semibold" style={tw`ml-2 text-[13px] ${viewMode === 'calendar' ? 'text-slate-800' : 'text-slate-500'}`}>Calendar</CustomText>
+                            <CustomText fontFamily={viewMode === 'calendar' ? "bold" : "medium"} style={tw`ml-2 text-[13px] ${viewMode === 'calendar' ? 'text-slate-800' : 'text-slate-500'}`}>Calendar</CustomText>
                         </TouchableOpacity>
                     </View>
 
@@ -332,24 +334,25 @@ export default function DashboardScreen({ navigation }) {
                     ) : (
                         <View>
                             <View style={tw`flex-row justify-between items-center mb-4`}>
-                                <CustomText fontFamily="bold" style={tw`text-base text-slate-800`}>
+                                <CustomText fontFamily="bold" style={tw`text-lg text-slate-800 tracking-tight`}>
                                     {currentFilter === 'past' ? 'Past Events' : currentFilter === 'my' ? 'My Events' : currentFilter === 'shared' ? 'Shared with Me' : 'Upcoming Events'}
                                 </CustomText>
                                 {currentFilter !== 'upcoming' && (
                                     <TouchableOpacity onPress={() => setCurrentFilter('upcoming')}>
-                                        <CustomText fontFamily="semibold" style={tw`text-[#00686F] text-xs`}>Show All</CustomText>
+                                        <CustomText fontFamily="semibold" style={tw`text-[#00686F] text-xs bg-[#E0F2F3] px-3 py-1.5 rounded-full`}>Show All</CustomText>
                                     </TouchableOpacity>
                                 )}
                             </View>
 
                             {listData.length > 0 ? (
-                                listData.map(item => <EventItem key={item.id} item={item} navigation={navigation} />)
+                                listData.map(item => <EventItem key={item.id} item={item} navigation={navigation} isPast={currentFilter === 'past'} />)
                             ) : (
-                                <View style={tw`items-center justify-center mt-10 p-6 bg-white rounded-[24px] border border-slate-100 border-dashed`}>
-                                    <View style={tw`w-16 h-16 rounded-full bg-slate-50 items-center justify-center mb-3`}>
-                                        <Ionicons name="folder-open-outline" size={28} color="#94A3B8" />
+                                <View style={tw`items-center justify-center mt-6 p-8 bg-white rounded-[24px] border border-slate-200 border-dashed`}>
+                                    <View style={tw`w-16 h-16 rounded-full bg-slate-50 items-center justify-center mb-4`}>
+                                        <Ionicons name="calendar-clear-outline" size={32} color="#94A3B8" />
                                     </View>
-                                    <CustomText fontFamily="medium" style={tw`text-slate-500 text-[14px]`}>No events found here.</CustomText>
+                                    <CustomText fontFamily="bold" style={tw`text-slate-700 text-[16px] mb-1`}>No Events Found</CustomText>
+                                    <CustomText fontFamily="medium" style={tw`text-slate-400 text-[13px] text-center`}>Looks like your schedule is clear for now.</CustomText>
                                 </View>
                             )}
                         </View>
@@ -374,7 +377,7 @@ export default function DashboardScreen({ navigation }) {
                         { width: width * 0.75, transform: [{ translateX: slideAnim }], shadowColor: '#000', shadowOffset: { width: -10, height: 0 }, shadowOpacity: 0.1, shadowRadius: 20 }
                     ]}>
                         <View style={tw`flex-row justify-between items-center pb-6 border-b border-slate-100`}>
-                            <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800`}>Menu</CustomText>
+                            <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800 tracking-tight`}>Menu</CustomText>
                             <TouchableOpacity onPress={() => toggleMenu(false)} style={tw`p-2 bg-slate-50 rounded-full`}>
                                 <Ionicons name="close" size={20} color="#334155" />
                             </TouchableOpacity>
@@ -405,8 +408,8 @@ export default function DashboardScreen({ navigation }) {
             {/* FLOATING ACTION BUTTON */}
             <TouchableOpacity
                 style={[
-                    tw`absolute right-6 bottom-8 bg-[#00686F] w-14 h-14 rounded-[20px] justify-center items-center`,
-                    { shadowColor: '#00686F', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 }
+                    tw`absolute right-6 bottom-8 bg-[#00686F] w-14 h-14 rounded-full justify-center items-center`,
+                    { shadowColor: '#00686F', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 }
                 ]}
                 onPress={() => navigation.navigate('AddEvent')}
             >
@@ -421,36 +424,40 @@ const QuickBtn = ({ icon, label, color, onPress, active }) => (
     <TouchableOpacity style={tw`items-center w-[22%]`} onPress={onPress}>
         <View
             style={[
-                tw`w-[54px] h-[54px] rounded-[20px] justify-center items-center mb-2`,
+                tw`w-[50px] h-[50px] rounded-full justify-center items-center mb-2`,
                 { backgroundColor: active ? color : color + '15' }
             ]}
         >
-            <Ionicons name={icon} size={24} color={active ? '#FFF' : color} />
+            <Ionicons name={icon} size={22} color={active ? '#FFF' : color} />
         </View>
         <CustomText
             fontFamily={active ? "bold" : "medium"}
-            style={[tw`text-[10px] text-center`, { color: active ? color : '#64748B' }]}
+            style={[tw`text-[11px] text-center tracking-tight`, { color: active ? color : '#64748B' }]}
         >
             {label}
         </CustomText>
     </TouchableOpacity>
 );
 
-const EventItem = ({ item, navigation }) => {
+const EventItem = ({ item, navigation, isPast }) => {
     const start = parseDateToObj(item.startDate);
     const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const indicatorColor = isPast ? 'bg-slate-300' : 'bg-[#00686F]';
 
     return (
         <TouchableOpacity
-            style={tw`bg-white p-4 rounded-[20px] mb-3 flex-row items-center border border-slate-100`}
+            style={[tw`bg-white p-4 rounded-[20px] mb-3 flex-row items-center border border-slate-100 overflow-hidden`, { shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }]}
             onPress={() => navigation.navigate('EventDetails', { eventId: item.id })}
         >
-            <View style={tw`w-12 h-12 rounded-2xl bg-[#F0F9FA] justify-center items-center mr-4`}>
-                <Ionicons name="calendar" size={20} color="#00686F" />
+            {/* Color accent bar on the left */}
+            <View style={tw`absolute left-0 top-0 bottom-0 w-1 ${indicatorColor}`} />
+
+            <View style={tw`w-12 h-12 rounded-2xl bg-[#F8FAFC] justify-center items-center mr-4 ml-1`}>
+                <Ionicons name="calendar" size={20} color={isPast ? "#94A3B8" : "#00686F"} />
             </View>
             <View style={tw`flex-1`}>
-                <CustomText fontFamily="bold" style={tw`text-[15px] text-slate-800 mb-0.5`}>{item.title}</CustomText>
-                <CustomText fontFamily="medium" style={tw`text-[#94A3B8] text-[12px]`}>{startStr}</CustomText>
+                <CustomText fontFamily="bold" style={tw`text-[15px] text-slate-800 mb-0.5 tracking-tight`}>{item.title}</CustomText>
+                <CustomText fontFamily="medium" style={tw`text-[#64748B] text-[12px]`}>{startStr}</CustomText>
             </View>
             <View style={tw`w-8 h-8 rounded-full bg-slate-50 justify-center items-center`}>
                 <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
@@ -459,7 +466,6 @@ const EventItem = ({ item, navigation }) => {
     );
 };
 
-// Cleaned up calendar theme to match the sleek UI
 const calendarTheme = {
     calendarBackground: '#ffffff',
     todayTextColor: '#00686F',
