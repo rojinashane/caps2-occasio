@@ -10,15 +10,13 @@ import {
     Dimensions,
     TouchableWithoutFeedback,
     Alert,
-    Image,
-    StyleSheet
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Calendar } from 'react-native-calendars';
 import CustomText from '../components/CustomText';
-import DashboardHeader from '../components/Header';
 import NotificationModal from '../components/NotificationModal';
+import BottomNav from '../components/BottomNav';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
@@ -29,128 +27,131 @@ import {
     query,
     onSnapshot,
     or,
-    where
+    where,
 } from 'firebase/firestore';
 import tw from 'twrnc';
 
 const { width } = Dimensions.get('window');
 
-// --- MOCK DATA FOR FEATURED SECTION ---
-const FEATURED_VENUES = [
-    {
-        id: '1',
-        name: "Lilia's Fortune Hall",
-        location: 'Ricacho Subdivision, Sorsogon City',
-        coordinates: { latitude: 12.973938, longitude: 124.005313 },
-        capacity: '500 Pax',
-        price: '₱50,000 / day',
-        image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800',
-        hasAR: true,
-    },
-    {
-        id: '2',
-        name: "Hilda's Love Function Hall",
-        location: 'Quezon Street, Sorsogon City',
-        coordinates: { latitude: 12.9691, longitude: 124.0044 },
-        capacity: '200 Pax',
-        price: '₱35,000 / day',
-        image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&q=80&w=800',
-        hasAR: true,
-    },
-    {
-        id: '3',
-        name: 'The Clover Leaf Place',
-        location: 'El Retiro, Sorsogon City',
-        coordinates: { latitude: 12.9622, longitude: 123.9961 },
-        capacity: '50 Pax',
-        price: '₱15,000 / day',
-        image: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800',
-        hasAR: false,
-    },
-];
+// ── UTILITIES ──────────────────────────────────────────────
+const toDate = (val) => {
+    if (!val) return new Date();
+    if (typeof val === 'object' && 'seconds' in val) return new Date(val.seconds * 1000);
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? new Date() : d;
+};
 
-// --- UTILITY FUNCTIONS ---
-const parseDateToObj = (dateVal) => {
-    if (!dateVal) return new Date();
-    let d = dateVal.seconds ? new Date(dateVal.seconds * 1000) : new Date(dateVal);
-    if (isNaN(d.getTime())) return new Date();
+const parseDateToObj = (val) => {
+    const d = toDate(val);
     return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
+const formatDate = (val) => {
+    const d = toDate(val);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+const formatDateShort = (val) => {
+    const d = toDate(val);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const daysUntil = (val) => {
+    const target = parseDateToObj(val);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((target - today) / (1000 * 60 * 60 * 24));
 };
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+const EVENT_ICONS = {
+    Wedding: 'heart',
+    'Birthday Party': 'gift',
+    Corporate: 'briefcase',
+    Charity: 'ribbon',
+    Others: 'star',
+};
+
+const EVENT_COLORS = {
+    Wedding: '#E8626A',
+    'Birthday Party': '#F59E0B',
+    Corporate: '#3B82F6',
+    Charity: '#10B981',
+    Others: '#8B5CF6',
+};
+
+// ── SCREEN ─────────────────────────────────────────────────
 export default function DashboardScreen({ navigation }) {
-    const [userData, setUserData] = useState(null);
+    const [userData, setUserData]   = useState(null);
     const [allEvents, setAllEvents] = useState([]);
-    const [viewMode, setViewMode] = useState('list');
-    const [currentFilter, setCurrentFilter] = useState('upcoming');
-    const [loading, setLoading] = useState(true);
-    const [greeting, setGreeting] = useState('');
-    const [stats, setStats] = useState({ total: 0, upcoming3Months: 0, shared: 0 });
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-
-    const [menuVisible, setMenuVisible] = useState(false);
+    const [loading, setLoading]     = useState(true);
+    const [greeting, setGreeting]   = useState('');
+    const [emoji, setEmoji]         = useState('');
     const [notifVisible, setNotifVisible] = useState(false);
-    const slideAnim = useRef(new Animated.Value(width)).current;
+    const [menuVisible, setMenuVisible]   = useState(false);
 
-    useFocusEffect(
-        useCallback(() => {
-            fetchUserData();
-            setGreetingMessage();
-        }, [])
-    );
+    const fadeAnim   = useRef(new Animated.Value(0)).current;
+    const slideAnim  = useRef(new Animated.Value(width)).current;
+    const heroSlide  = useRef(new Animated.Value(24)).current;
+
+    useFocusEffect(useCallback(() => {
+        fetchUserData();
+        const h = new Date().getHours();
+        if (h < 12) { setGreeting('Good morning');   setEmoji('☀️'); }
+        else if (h < 18) { setGreeting('Good afternoon'); setEmoji('👋'); }
+        else { setGreeting('Good evening');  setEmoji('🌙'); }
+    }, []));
 
     useEffect(() => {
         const user = auth.currentUser;
-        if (user) {
-            const q = query(
-                collection(db, 'events'),
-                or(
-                    where('userId', '==', user.uid),
-                    where('collaborators', 'array-contains', user.email?.toLowerCase() || '')
-                )
-            );
+        if (!user) { setLoading(false); return; }
 
-            const unsubscribe = onSnapshot(q, (snapshot) => {
-                const rawData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setAllEvents(rawData);
-                calculateStats(rawData, user.uid);
-                setLoading(false);
-                Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }).start();
-            });
+        const q = query(
+            collection(db, 'events'),
+            or(
+                where('userId', '==', user.uid),
+                where('collaborators', 'array-contains', user.email?.toLowerCase() || '')
+            )
+        );
 
-            return () => unsubscribe();
-        } else {
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            setAllEvents(data);
             setLoading(false);
-        }
+            Animated.parallel([
+                Animated.timing(fadeAnim,  { toValue: 1, duration: 500, useNativeDriver: true }),
+                Animated.spring(heroSlide, { toValue: 0, tension: 55, friction: 9, useNativeDriver: true }),
+            ]).start();
+        });
+
+        return () => unsubscribe();
     }, []);
 
     const fetchUserData = async () => {
         const user = auth.currentUser;
-        if (user) {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-                setUserData(userDoc.data());
-            }
+        if (!user) return;
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (snap.exists()) {
+            setUserData(snap.data());
+        } else {
+            setUserData({
+                name: user.displayName || '',
+                email: user.email || '',
+                photoURL: user.photoURL || '',
+            });
         }
     };
 
     const toggleMenu = (open) => {
         if (open) {
             setMenuVisible(true);
-            Animated.timing(slideAnim, {
-                toValue: width * 0.25,
-                duration: 300,
-                useNativeDriver: true,
-            }).start();
+            Animated.timing(slideAnim, { toValue: width * 0.25, duration: 300, useNativeDriver: true }).start();
         } else {
-            Animated.timing(slideAnim, {
-                toValue: width,
-                duration: 250,
-                useNativeDriver: true,
-            }).start(() => setMenuVisible(false));
+            Animated.timing(slideAnim, { toValue: width, duration: 250, useNativeDriver: true })
+                .start(() => setMenuVisible(false));
         }
     };
 
@@ -160,72 +161,45 @@ export default function DashboardScreen({ navigation }) {
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Logout', style: 'destructive', onPress: async () => {
-                    try {
-                        await signOut(auth);
-                        navigation.replace('Landing');
-                    } catch (error) {
-                        Alert.alert('Error', 'Failed to logout.');
-                    }
-                }
-            }
+                    try { await signOut(auth); navigation.replace('Landing'); }
+                    catch { Alert.alert('Error', 'Failed to logout.'); }
+                },
+            },
         ]);
     };
 
-    const calculateStats = (events, userId) => {
-        const now = new Date().getTime();
-        const threeMonths = now + (90 * 24 * 60 * 60 * 1000);
-        let u3m = 0, shared = 0;
-        events.forEach(e => {
-            const start = parseDateToObj(e.startDate).getTime();
-            if (e.userId !== userId) shared++;
-            if (start >= now && start <= threeMonths) u3m++;
-        });
-        setStats({ total: events.length, upcoming3Months: u3m, shared });
-    };
-
-    const setGreetingMessage = () => {
-        const hour = new Date().getHours();
-        setGreeting(hour < 12 ? 'Good morning,' : hour < 18 ? 'Good afternoon,' : 'Good evening,');
-    };
-
-    const listData = useMemo(() => {
+    // ── derived data ──
+    const upcomingEvents = useMemo(() => {
         const today = new Date().setHours(0, 0, 0, 0);
-        const user = auth.currentUser;
-        if (!user) return [];
-        let filtered = [...allEvents];
-        if (currentFilter === 'past') {
-            filtered = filtered.filter(e => {
-                const end = e.endDate ? parseDateToObj(e.endDate).getTime() : parseDateToObj(e.startDate).getTime();
-                return end < today;
-            });
-        } else if (currentFilter === 'my') {
-            filtered = filtered.filter(e => e.userId === user.uid);
-        } else if (currentFilter === 'shared') {
-            filtered = filtered.filter(e => e.userId !== user.uid);
-        } else {
-            filtered = filtered.filter(e => {
-                const end = e.endDate ? parseDateToObj(e.endDate).getTime() : parseDateToObj(e.startDate).getTime();
+        return [...allEvents]
+            .filter(e => {
+                const end = e.endDate
+                    ? parseDateToObj(e.endDate).getTime()
+                    : parseDateToObj(e.startDate).getTime();
                 return end >= today;
-            });
-        }
-        return filtered.sort((a, b) => parseDateToObj(a.startDate) - parseDateToObj(b.startDate));
-    }, [allEvents, currentFilter]);
+            })
+            .sort((a, b) => parseDateToObj(a.startDate) - parseDateToObj(b.startDate));
+    }, [allEvents]);
+
+    const nextEvent     = upcomingEvents[0] || null;
+    const previewEvents = upcomingEvents.slice(1, 4);
 
     const markedDates = useMemo(() => {
-        let marks = {};
+        const marks = {};
         allEvents.forEach(event => {
             const start = parseDateToObj(event.startDate);
-            const end = (event.isMultiDay && event.endDate) ? parseDateToObj(event.endDate) : start;
+            const end   = event.isMultiDay && event.endDate ? parseDateToObj(event.endDate) : start;
+            const color = EVENT_COLORS[event.eventType] || '#00686F';
             let curr = new Date(start);
             while (curr <= end) {
-                const dateStr = curr.toISOString().split('T')[0];
+                const key     = curr.toISOString().split('T')[0];
                 const isStart = curr.getTime() === start.getTime();
-                const isEnd = curr.getTime() === end.getTime();
-                marks[dateStr] = {
+                const isEnd   = curr.getTime() === end.getTime();
+                marks[key] = {
                     startingDay: isStart,
-                    endingDay: isEnd,
-                    color: isStart || isEnd ? '#00686F' : '#E0F2F3',
-                    textColor: isStart || isEnd ? '#ffffff' : '#00686F',
+                    endingDay:   isEnd,
+                    color:       isStart || isEnd ? color : color + '40',
+                    textColor:   isStart || isEnd ? '#fff' : color,
                 };
                 curr.setDate(curr.getDate() + 1);
             }
@@ -235,154 +209,325 @@ export default function DashboardScreen({ navigation }) {
 
     if (loading) {
         return (
-            <View style={tw`flex-1 justify-center items-center bg-[#F8FAFC]`}>
+            <View style={tw`flex-1 justify-center items-center bg-[#F0F4F8]`}>
                 <ActivityIndicator size="large" color="#00686F" />
             </View>
         );
     }
 
+    const fullName =
+        userData?.name ||
+        userData?.displayName ||
+        userData?.fullName ||
+        userData?.username ||
+        userData?.firstName ||
+        auth.currentUser?.displayName ||
+        '';
+    const firstName = fullName.trim().split(' ')[0] || 'there';
+
+    const todayStr = new Date().toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric',
+    });
+
     return (
-        <SafeAreaView style={tw`flex-1 bg-[#F8FAFC]`} edges={['top']}>
-            <ScrollView showsVerticalScrollIndicator={false}>
-                <DashboardHeader
-                    userData={userData}
-                    greeting={greeting}
-                    onPressAvatar={() => toggleMenu(true)}
-                    onOpenNotifications={() => setNotifVisible(true)}
-                />
+        <SafeAreaView style={tw`flex-1 bg-[#F0F4F8]`} edges={['top']}>
 
-                <View style={tw`px-6 pt-2 pb-24`}>
-
-                    {/* FEATURED VENUES SECTION */}
-                    <View style={tw`flex-row justify-between items-end mt-4 mb-4`}>
-                        <CustomText fontFamily="bold" style={tw`text-xl text-slate-800 tracking-tight`}>Explore Venues</CustomText>
-                        <TouchableOpacity onPress={() => navigation.navigate('Venues')}>
-                            <CustomText fontFamily="semibold" style={tw`text-sm text-[#00686F]`}>View All</CustomText>
-                        </TouchableOpacity>
+            {/* ── FIXED HEADER ───────────────────────────────── */}
+            <View style={[
+                tw`px-5 pt-4 pb-3 flex-row items-center justify-between`,
+                {
+                    backgroundColor: '#F0F4F8',
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#E8EEF4',
+                },
+            ]}>
+                <View style={tw`flex-1`}>
+                    <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12 }}>
+                        {todayStr}
+                    </CustomText>
+                    <View style={tw`flex-row items-center mt-0.5`}>
+                        <CustomText fontFamily="extrabold" style={{ color: '#0F172A', fontSize: 22 }}>
+                            {greeting},{' '}
+                        </CustomText>
+                        <CustomText fontFamily="extrabold" style={{ color: '#00686F', fontSize: 22 }}>
+                            {firstName}
+                        </CustomText>
+                        <CustomText style={{ fontSize: 20, marginLeft: 6 }}>{emoji}</CustomText>
                     </View>
-
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={tw`-mx-6 pl-6 mb-8`}
-                        contentContainerStyle={{ paddingRight: 24 }}
-                    >
-                        {FEATURED_VENUES.map((venue) => (
-                            <TouchableOpacity
-                                key={venue.id}
-                                style={[
-                                    tw`w-[280px] h-[160px] rounded-[24px] mr-4 overflow-hidden bg-slate-200 relative`,
-                                    { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 }
-                                ]}
-                                onPress={() => navigation.navigate('ARVenue', { venueId: venue.id, venueName: venue.name })}
-                            >
-                                <Image source={{ uri: venue.image }} style={tw`w-full h-full absolute`} />
-
-                                {/* Improved Gradient Overlay for Text Legibility */}
-                                <View style={tw`absolute inset-0 bg-black/20`} />
-                                <View style={tw`absolute bottom-0 left-0 right-0 h-2/3 bg-black/40`} />
-
-                                {venue.hasAR && (
-                                    <View style={tw`absolute top-3 right-3 bg-black/30 backdrop-blur-md px-3 py-1.5 rounded-full flex-row items-center border border-white/20`}>
-                                        <Ionicons name="cube" size={14} color="#FFF" />
-                                        <CustomText fontFamily="bold" style={tw`text-white text-[11px] ml-1.5 tracking-wider`}>AR PREVIEW</CustomText>
-                                    </View>
-                                )}
-
-                                <View style={tw`absolute bottom-0 left-0 right-0 p-4`}>
-                                    <CustomText fontFamily="bold" style={tw`text-white text-[16px] mb-1 tracking-tight`} numberOfLines={1}>{venue.name}</CustomText>
-                                    <View style={tw`flex-row items-center opacity-90`}>
-                                        <Ionicons name="location" size={12} color="#E2E8F0" />
-                                        <CustomText fontFamily="medium" style={tw`text-slate-200 text-[12px] ml-1`} numberOfLines={1}>{venue.location}</CustomText>
-                                    </View>
-                                </View>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-
-                    {/* QUICK ACCESS SECTION - Redesigned as a unified control center card */}
-                    <View style={[tw`bg-white rounded-[24px] p-4 mb-8 border border-slate-100 flex-row justify-between`, { shadowColor: '#64748B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }]}>
-                        <QuickBtn icon="time-outline" label="Past" color="#64748B" active={currentFilter === 'past'} onPress={() => { setCurrentFilter('past'); setViewMode('list'); }} />
-                        <QuickBtn icon="calendar" label="My Events" color="#00686F" active={currentFilter === 'my'} onPress={() => { setCurrentFilter('my'); setViewMode('list'); }} />
-                        <QuickBtn icon="people" label="Shared" color="#8B5CF6" active={currentFilter === 'shared'} onPress={() => { setCurrentFilter('shared'); setViewMode('list'); }} />
-                        <QuickBtn icon="location-outline" label="Venue" color="#F59E0B" onPress={() => navigation.navigate('Venues')} />
-                    </View>
-
-                    {/* VIEW SWITCHER - Sleek native-like segmented control */}
-                    <View style={tw`flex-row bg-slate-100 rounded-[16px] p-1 mb-6`}>
-                        <TouchableOpacity
-                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-[12px] ${viewMode === 'list' ? 'bg-white shadow-sm border border-slate-50' : ''}`}
-                            onPress={() => setViewMode('list')}
-                        >
-                            <Ionicons name="list" size={18} color={viewMode === 'list' ? '#00686F' : '#64748B'} />
-                            <CustomText fontFamily={viewMode === 'list' ? "bold" : "medium"} style={tw`ml-2 text-[13px] ${viewMode === 'list' ? 'text-slate-800' : 'text-slate-500'}`}>List View</CustomText>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-[12px] ${viewMode === 'calendar' ? 'bg-white shadow-sm border border-slate-50' : ''}`}
-                            onPress={() => { setViewMode('calendar'); setCurrentFilter('upcoming'); }}
-                        >
-                            <Ionicons name="calendar" size={18} color={viewMode === 'calendar' ? '#00686F' : '#64748B'} />
-                            <CustomText fontFamily={viewMode === 'calendar' ? "bold" : "medium"} style={tw`ml-2 text-[13px] ${viewMode === 'calendar' ? 'text-slate-800' : 'text-slate-500'}`}>Calendar</CustomText>
-                        </TouchableOpacity>
-                    </View>
-
-                    {/* DYNAMIC CONTENT AREA */}
-                    {viewMode === 'calendar' ? (
-                        <Animated.View style={[{ opacity: fadeAnim }, tw`bg-white rounded-[24px] p-2 overflow-hidden shadow-sm border border-slate-100`]}>
-                            <Calendar markingType={'period'} theme={calendarTheme} markedDates={markedDates} />
-                        </Animated.View>
-                    ) : (
-                        <View>
-                            <View style={tw`flex-row justify-between items-center mb-4`}>
-                                <CustomText fontFamily="bold" style={tw`text-lg text-slate-800 tracking-tight`}>
-                                    {currentFilter === 'past' ? 'Past Events' : currentFilter === 'my' ? 'My Events' : currentFilter === 'shared' ? 'Shared with Me' : 'Upcoming Events'}
-                                </CustomText>
-                                {currentFilter !== 'upcoming' && (
-                                    <TouchableOpacity onPress={() => setCurrentFilter('upcoming')}>
-                                        <CustomText fontFamily="semibold" style={tw`text-[#00686F] text-xs bg-[#E0F2F3] px-3 py-1.5 rounded-full`}>Show All</CustomText>
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-
-                            {listData.length > 0 ? (
-                                listData.map(item => <EventItem key={item.id} item={item} navigation={navigation} isPast={currentFilter === 'past'} />)
-                            ) : (
-                                <View style={tw`items-center justify-center mt-6 p-8 bg-white rounded-[24px] border border-slate-200 border-dashed`}>
-                                    <View style={tw`w-16 h-16 rounded-full bg-slate-50 items-center justify-center mb-4`}>
-                                        <Ionicons name="calendar-clear-outline" size={32} color="#94A3B8" />
-                                    </View>
-                                    <CustomText fontFamily="bold" style={tw`text-slate-700 text-[16px] mb-1`}>No Events Found</CustomText>
-                                    <CustomText fontFamily="medium" style={tw`text-slate-400 text-[13px] text-center`}>Looks like your schedule is clear for now.</CustomText>
-                                </View>
-                            )}
-                        </View>
-                    )}
                 </View>
+
+                {/* Notification bell */}
+                <TouchableOpacity
+                    onPress={() => setNotifVisible(true)}
+                    style={[
+                        tw`w-10 h-10 rounded-full justify-center items-center`,
+                        { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+                    ]}
+                >
+                    <Ionicons name="notifications-outline" size={20} color="#334155" />
+                </TouchableOpacity>
+            </View>
+
+            {/* ── SCROLLABLE CONTENT ─────────────────────────── */}
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 110, paddingHorizontal: 20, paddingTop: 20 }}
+            >
+
+                {/* ── NEXT EVENT HERO ─────────────────────────── */}
+                <Animated.View style={{
+                    opacity: fadeAnim,
+                    transform: [{ translateY: heroSlide }],
+                    marginBottom: 16,
+                }}>
+                    {nextEvent ? (
+                        <TouchableOpacity
+                            activeOpacity={0.93}
+                            onPress={() => navigation.navigate('EventDetails', { eventId: nextEvent.id })}
+                            style={[
+                                tw`rounded-[26px] overflow-hidden`,
+                                {
+                                    shadowColor: '#00686F',
+                                    shadowOffset: { width: 0, height: 8 },
+                                    shadowOpacity: 0.13,
+                                    shadowRadius: 18,
+                                    elevation: 6,
+                                },
+                            ]}
+                        >
+                            <View style={{ backgroundColor: '#E8F5F5', borderRadius: 26 }}>
+                                <View style={{
+                                    height: 4,
+                                    backgroundColor: '#00686F',
+                                    borderTopLeftRadius: 26,
+                                    borderTopRightRadius: 26,
+                                }} />
+
+                                <View style={tw`p-5`}>
+                                    <View style={tw`flex-row justify-between items-center mb-3`}>
+                                        <View style={[tw`flex-row items-center px-3 py-1 rounded-full`, { backgroundColor: '#00686F15' }]}>
+                                            <View style={[tw`w-1.5 h-1.5 rounded-full mr-1.5`, { backgroundColor: '#00686F' }]} />
+                                            <CustomText fontFamily="bold" style={{ color: '#00686F', fontSize: 10, letterSpacing: 1 }}>
+                                                NEXT EVENT
+                                            </CustomText>
+                                        </View>
+                                        <CountdownBadge date={nextEvent.startDate} />
+                                    </View>
+
+                                    <View style={tw`flex-row items-center mb-2`}>
+                                        <View style={[
+                                            tw`w-6 h-6 rounded-full justify-center items-center mr-2`,
+                                            { backgroundColor: (EVENT_COLORS[nextEvent.eventType] || '#00686F') + '22' },
+                                        ]}>
+                                            <Ionicons
+                                                name={EVENT_ICONS[nextEvent.eventType] || 'star'}
+                                                size={13}
+                                                color={EVENT_COLORS[nextEvent.eventType] || '#00686F'}
+                                            />
+                                        </View>
+                                        <CustomText fontFamily="semibold" style={{ color: '#64748B', fontSize: 12 }}>
+                                            {typeof nextEvent.eventType === 'string' ? nextEvent.eventType : 'Event'}
+                                        </CustomText>
+                                    </View>
+
+                                    <CustomText
+                                        fontFamily="extrabold"
+                                        style={{ color: '#0F172A', fontSize: 21, lineHeight: 27, marginBottom: 10 }}
+                                        numberOfLines={2}
+                                    >
+                                        {typeof nextEvent.title === 'string' ? nextEvent.title : ''}
+                                    </CustomText>
+
+                                    <View style={{ height: 1, backgroundColor: '#00686F1A', marginBottom: 12 }} />
+
+                                    <View style={tw`flex-row items-center mb-2`}>
+                                        <Ionicons name="calendar-outline" size={13} color="#00686F" />
+                                        <CustomText fontFamily="semibold" style={{ color: '#334155', fontSize: 13, marginLeft: 7 }}>
+                                            {formatDate(nextEvent.startDate)}
+                                            {nextEvent.startTime ? `  ·  ${nextEvent.startTime}` : ''}
+                                        </CustomText>
+                                    </View>
+
+                                    {nextEvent.location && nextEvent.location !== 'To be decided' && (
+                                        <View style={tw`flex-row items-center mb-4`}>
+                                            <Ionicons name="location-outline" size={13} color="#00686F" />
+                                            <CustomText
+                                                fontFamily="semibold"
+                                                style={{ color: '#334155', fontSize: 13, marginLeft: 7, flex: 1 }}
+                                                numberOfLines={1}
+                                            >
+                                                {typeof nextEvent.location === 'string' ? nextEvent.location : ''}
+                                            </CustomText>
+                                        </View>
+                                    )}
+
+                                    <TouchableOpacity
+                                        onPress={() => navigation.navigate('EventDetails', { eventId: nextEvent.id })}
+                                        style={[
+                                            tw`flex-row items-center justify-center py-3 rounded-[14px]`,
+                                            {
+                                                backgroundColor: '#00686F',
+                                                shadowColor: '#00686F',
+                                                shadowOffset: { width: 0, height: 4 },
+                                                shadowOpacity: 0.25,
+                                                shadowRadius: 8,
+                                                elevation: 4,
+                                            },
+                                        ]}
+                                    >
+                                        <CustomText fontFamily="bold" style={{ color: '#FFF', fontSize: 14 }}>
+                                            View Details
+                                        </CustomText>
+                                        <Ionicons name="arrow-forward" size={15} color="#FFF" style={{ marginLeft: 6 }} />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity
+                            activeOpacity={0.88}
+                            onPress={() => navigation.navigate('AddEvent')}
+                            style={[
+                                tw`rounded-[26px] p-6 items-center justify-center`,
+                                {
+                                    borderWidth: 2,
+                                    borderColor: '#00686F',
+                                    borderStyle: 'dashed',
+                                    backgroundColor: '#F0F9FA',
+                                    minHeight: 140,
+                                },
+                            ]}
+                        >
+                            <View style={[tw`w-14 h-14 rounded-full justify-center items-center mb-3`, { backgroundColor: '#E0F2F3' }]}>
+                                <Ionicons name="add" size={28} color="#00686F" />
+                            </View>
+                            <CustomText fontFamily="bold" style={{ color: '#00686F', fontSize: 16 }}>
+                                Plan Your First Event
+                            </CustomText>
+                            <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 13, marginTop: 3 }}>
+                                Tap to get started
+                            </CustomText>
+                        </TouchableOpacity>
+                    )}
+                </Animated.View>
+
+                {/* ── COMING UP PREVIEW ───────────────────────── */}
+                <Animated.View style={{ opacity: fadeAnim, marginBottom: 20 }}>
+                    <View style={tw`flex-row justify-between items-center mb-3`}>
+                        <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>
+                            Coming Up
+                        </CustomText>
+                    </View>
+
+                    {previewEvents.length > 0 ? (
+                        previewEvents.map((event, index) => (
+                            <UpcomingEventRow
+                                key={event.id}
+                                event={event}
+                                onPress={() => navigation.navigate('EventDetails', { eventId: event.id })}
+                                isLast={index === previewEvents.length - 1}
+                            />
+                        ))
+                    ) : (
+                        upcomingEvents.length <= 1 && (
+                            <View style={[
+                                tw`items-center py-6 rounded-[20px]`,
+                                {
+                                    backgroundColor: '#FFFFFF',
+                                    borderWidth: 1,
+                                    borderColor: '#E2E8F0',
+                                    borderStyle: 'dashed',
+                                },
+                            ]}>
+                                <Ionicons name="calendar-outline" size={28} color="#CBD5E1" style={{ marginBottom: 8 }} />
+                                <CustomText fontFamily="semibold" style={{ color: '#94A3B8', fontSize: 13 }}>
+                                    No more events scheduled
+                                </CustomText>
+                                <TouchableOpacity
+                                    onPress={() => navigation.navigate('AddEvent')}
+                                    style={[tw`mt-3 px-5 py-2 rounded-full`, { backgroundColor: '#E0F2F3' }]}
+                                >
+                                    <CustomText fontFamily="bold" style={{ color: '#00686F', fontSize: 12 }}>
+                                        + Add Event
+                                    </CustomText>
+                                </TouchableOpacity>
+                            </View>
+                        )
+                    )}
+                </Animated.View>
+
+                {/* ── CALENDAR ────────────────────────────────── */}
+                <Animated.View style={{ opacity: fadeAnim }}>
+                    <View style={tw`flex-row justify-between items-center mb-3`}>
+                        <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>
+                            Event Calendar
+                        </CustomText>
+                    </View>
+
+                    <View style={[
+                        tw`bg-white rounded-[24px] overflow-hidden`,
+                        {
+                            shadowColor: '#64748B',
+                            shadowOffset: { width: 0, height: 4 },
+                            shadowOpacity: 0.07,
+                            shadowRadius: 12,
+                            elevation: 3,
+                        },
+                    ]}>
+                        <Calendar
+                            markingType="period"
+                            theme={calendarTheme}
+                            markedDates={markedDates}
+                        />
+
+                        {/* Color legend */}
+                        <View style={tw`px-4 pb-4`}>
+                            <View style={{ borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 10 }}>
+                                <CustomText fontFamily="semibold" style={{ color: '#94A3B8', fontSize: 10, letterSpacing: 0.8, marginBottom: 7 }}>
+                                    EVENT TYPES
+                                </CustomText>
+                                <View style={tw`flex-row flex-wrap`}>
+                                    {Object.entries(EVENT_COLORS).map(([type, color]) => (
+                                        <View key={type} style={tw`flex-row items-center mr-4 mb-1`}>
+                                            <View style={[tw`w-2 h-2 rounded-full mr-1.5`, { backgroundColor: color }]} />
+                                            <CustomText fontFamily="medium" style={{ color: '#64748B', fontSize: 11 }}>
+                                                {type}
+                                            </CustomText>
+                                        </View>
+                                    ))}
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+                </Animated.View>
+
             </ScrollView>
 
-            <NotificationModal
-                visible={notifVisible}
-                onClose={() => setNotifVisible(false)}
-            />
+            <NotificationModal visible={notifVisible} onClose={() => setNotifVisible(false)} />
 
-            {/* SIDE DRAWER MENU */}
+            {/* ── SIDE DRAWER ─────────────────────────────────── */}
             {menuVisible && (
                 <View style={tw`absolute inset-0 z-50`} pointerEvents="box-none">
                     <TouchableWithoutFeedback onPress={() => toggleMenu(false)}>
                         <View style={tw`absolute inset-0 bg-slate-900/40`} />
                     </TouchableWithoutFeedback>
-
                     <Animated.View style={[
                         tw`absolute top-0 right-0 bottom-0 bg-white rounded-l-[32px] px-6 pt-16`,
-                        { width: width * 0.75, transform: [{ translateX: slideAnim }], shadowColor: '#000', shadowOffset: { width: -10, height: 0 }, shadowOpacity: 0.1, shadowRadius: 20 }
+                        {
+                            width: width * 0.75,
+                            transform: [{ translateX: slideAnim }],
+                            shadowColor: '#000',
+                            shadowOffset: { width: -10, height: 0 },
+                            shadowOpacity: 0.1,
+                            shadowRadius: 20,
+                        },
                     ]}>
                         <View style={tw`flex-row justify-between items-center pb-6 border-b border-slate-100`}>
-                            <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800 tracking-tight`}>Menu</CustomText>
+                            <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800`}>Menu</CustomText>
                             <TouchableOpacity onPress={() => toggleMenu(false)} style={tw`p-2 bg-slate-50 rounded-full`}>
                                 <Ionicons name="close" size={20} color="#334155" />
                             </TouchableOpacity>
                         </View>
-
                         <View style={tw`mt-6`}>
                             <TouchableOpacity
                                 style={tw`flex-row items-center py-4`}
@@ -391,100 +536,167 @@ export default function DashboardScreen({ navigation }) {
                                 <View style={tw`w-12 h-12 rounded-2xl bg-[#F0F9FA] justify-center items-center mr-4`}>
                                     <Ionicons name="person-outline" size={20} color="#00686F" />
                                 </View>
-                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-slate-700`}>Profile Settings</CustomText>
+                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-slate-700`}>
+                                    Profile Settings
+                                </CustomText>
                             </TouchableOpacity>
-
                             <TouchableOpacity style={tw`flex-row items-center py-4`} onPress={handleLogout}>
                                 <View style={tw`w-12 h-12 rounded-2xl bg-red-50 justify-center items-center mr-4`}>
                                     <Ionicons name="log-out-outline" size={20} color="#EF4444" />
                                 </View>
-                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-red-500`}>Log Out</CustomText>
+                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-red-500`}>
+                                    Log Out
+                                </CustomText>
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
                 </View>
             )}
 
-            {/* FLOATING ACTION BUTTON */}
-            <TouchableOpacity
-                style={[
-                    tw`absolute right-6 bottom-8 bg-[#00686F] w-14 h-14 rounded-full justify-center items-center`,
-                    { shadowColor: '#00686F', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 12, elevation: 6 }
-                ]}
-                onPress={() => navigation.navigate('AddEvent')}
-            >
-                <Ionicons name="add" size={28} color="#FFF" />
-            </TouchableOpacity>
+            <BottomNav navigation={navigation} activeRoute="Dashboard" userData={userData} />
         </SafeAreaView>
     );
 }
 
-// --- SUB-COMPONENTS ---
-const QuickBtn = ({ icon, label, color, onPress, active }) => (
-    <TouchableOpacity style={tw`items-center w-[22%]`} onPress={onPress}>
-        <View
-            style={[
-                tw`w-[50px] h-[50px] rounded-full justify-center items-center mb-2`,
-                { backgroundColor: active ? color : color + '15' }
-            ]}
-        >
-            <Ionicons name={icon} size={22} color={active ? '#FFF' : color} />
-        </View>
-        <CustomText
-            fontFamily={active ? "bold" : "medium"}
-            style={[tw`text-[11px] text-center tracking-tight`, { color: active ? color : '#64748B' }]}
-        >
-            {label}
-        </CustomText>
-    </TouchableOpacity>
-);
+// ── SUB-COMPONENTS ──────────────────────────────────────────
 
-const EventItem = ({ item, navigation, isPast }) => {
-    const start = parseDateToObj(item.startDate);
-    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const indicatorColor = isPast ? 'bg-slate-300' : 'bg-[#00686F]';
+const CountdownBadge = ({ date }) => {
+    const days = daysUntil(date);
+    let bg = '#E8F5F5', color = '#00686F', text = `${days}d away`;
+    if (days === 0)      { bg = '#FEF3C7'; color = '#D97706'; text = 'Today! 🎉'; }
+    else if (days === 1) { bg = '#EDE9FE'; color = '#7C3AED'; text = 'Tomorrow'; }
+    else if (days <= 7)  { bg = '#DCFCE7'; color = '#16A34A'; text = `In ${days} days`; }
+    return (
+        <View style={[tw`flex-row items-center px-3 py-1 rounded-full`, { backgroundColor: bg }]}>
+            <Ionicons name="time-outline" size={12} color={color} />
+            <CustomText fontFamily="bold" style={{ color, fontSize: 12, marginLeft: 4 }}>{text}</CustomText>
+        </View>
+    );
+};
+
+// ── UPCOMING EVENT ROW ──────────────────────────────────────
+const UpcomingEventRow = ({ event, onPress, isLast }) => {
+    const user = auth.currentUser;
+    const isShared = event.userId !== user?.uid;
+    const accentColor = isShared
+        ? '#8B5CF6'
+        : EVENT_COLORS[event.eventType] || '#00686F';
+
+    const days = daysUntil(event.startDate);
+    const startStr  = formatDateShort(event.startDate);
+    const endStr    = event.isMultiDay && event.endDate ? formatDateShort(event.endDate) : null;
+    const dateLabel = endStr ? `${startStr} → ${endStr}` : startStr;
 
     return (
         <TouchableOpacity
-            style={[tw`bg-white p-4 rounded-[20px] mb-3 flex-row items-center border border-slate-100 overflow-hidden`, { shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 }]}
-            onPress={() => navigation.navigate('EventDetails', { eventId: item.id })}
+            onPress={onPress}
+            activeOpacity={0.8}
+            style={[
+                tw`bg-white rounded-[18px] flex-row items-center overflow-hidden`,
+                !isLast && { marginBottom: 10 },
+                {
+                    shadowColor: '#64748B',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.06,
+                    shadowRadius: 8,
+                    elevation: 2,
+                },
+            ]}
         >
-            {/* Color accent bar on the left */}
-            <View style={tw`absolute left-0 top-0 bottom-0 w-1 ${indicatorColor}`} />
+            {/* Left color bar */}
+            <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
 
-            <View style={tw`w-12 h-12 rounded-2xl bg-[#F8FAFC] justify-center items-center mr-4 ml-1`}>
-                <Ionicons name="calendar" size={20} color={isPast ? "#94A3B8" : "#00686F"} />
+            {/* Day countdown box */}
+            <View style={[
+                tw`items-center justify-center mx-4`,
+                { width: 44, height: 44, borderRadius: 12, backgroundColor: accentColor + '15' },
+            ]}>
+                <CustomText fontFamily="extrabold" style={{ fontSize: 16, color: accentColor, lineHeight: 19 }}>
+                    {days === 0 ? '🎉' : String(days)}
+                </CustomText>
+                {days !== 0 && (
+                    <CustomText fontFamily="medium" style={{ fontSize: 9, color: accentColor }}>
+                        {days === 1 ? 'day' : 'days'}
+                    </CustomText>
+                )}
             </View>
-            <View style={tw`flex-1`}>
-                <CustomText fontFamily="bold" style={tw`text-[15px] text-slate-800 mb-0.5 tracking-tight`}>{item.title}</CustomText>
-                <CustomText fontFamily="medium" style={tw`text-[#64748B] text-[12px]`}>{startStr}</CustomText>
+
+            {/* Event info */}
+            <View style={tw`flex-1 py-3.5 pr-3`}>
+                <CustomText
+                    fontFamily="bold"
+                    style={{ color: '#0F172A', fontSize: 14, marginBottom: 3 }}
+                    numberOfLines={1}
+                >
+                    {typeof event.title === 'string' ? event.title : ''}
+                </CustomText>
+
+                <View style={tw`flex-row items-center`}>
+                    <Ionicons name="calendar-outline" size={11} color="#94A3B8" />
+                    <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 11, marginLeft: 4 }}>
+                        {dateLabel}
+                    </CustomText>
+                </View>
+
+                {typeof event.location === 'string' && event.location && event.location !== 'To be decided' && (
+                    <View style={tw`flex-row items-center mt-1`}>
+                        <Ionicons name="location-outline" size={11} color="#94A3B8" />
+                        <CustomText
+                            fontFamily="medium"
+                            style={{ color: '#94A3B8', fontSize: 11, marginLeft: 4 }}
+                            numberOfLines={1}
+                        >
+                            {event.location}
+                        </CustomText>
+                    </View>
+                )}
             </View>
-            <View style={tw`w-8 h-8 rounded-full bg-slate-50 justify-center items-center`}>
-                <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+
+            {/* Right: type badge + shared label */}
+            <View style={tw`items-end pr-4`}>
+                <View style={[tw`px-2.5 py-1 rounded-full mb-1.5`, { backgroundColor: accentColor + '15' }]}>
+                    <CustomText fontFamily="bold" style={{ fontSize: 10, color: accentColor }}>
+                        {typeof event.eventType === 'string' ? event.eventType : 'Event'}
+                    </CustomText>
+                </View>
+                {isShared && (
+                    <View style={tw`flex-row items-center`}>
+                        <Ionicons name="people-outline" size={11} color="#8B5CF6" />
+                        <CustomText fontFamily="medium" style={{ fontSize: 10, color: '#8B5CF6', marginLeft: 3 }}>
+                            Shared
+                        </CustomText>
+                    </View>
+                )}
             </View>
+
+            <Ionicons name="chevron-forward" size={14} color="#CBD5E1" style={{ marginRight: 12 }} />
         </TouchableOpacity>
     );
 };
 
+// ── CALENDAR THEME ──────────────────────────────────────────
 const calendarTheme = {
-    calendarBackground: '#ffffff',
-    todayTextColor: '#00686F',
-    dayTextColor: '#334155',
-    monthTextColor: '#0f172a',
-    arrowColor: '#00686F',
-    textDayFontFamily: 'Poppins-Medium',
-    textMonthFontFamily: 'Poppins-Bold',
-    textDayHeaderFontFamily: 'Poppins-SemiBold',
-    textMonthFontWeight: 'bold',
-    textDayHeaderFontWeight: '600',
+    calendarBackground:         '#ffffff',
+    todayTextColor:             '#00686F',
+    todayBackgroundColor:       '#E0F2F3',
+    dayTextColor:               '#334155',
+    monthTextColor:             '#0f172a',
+    arrowColor:                 '#00686F',
+    textDayFontFamily:          'Poppins-Medium',
+    textMonthFontFamily:        'Poppins-Bold',
+    textDayHeaderFontFamily:    'Poppins-SemiBold',
+    textMonthFontWeight:        'bold',
+    textDayHeaderFontWeight:    '600',
+    selectedDayBackgroundColor: '#00686F',
+    selectedDayTextColor:       '#ffffff',
     'stylesheet.calendar.header': {
         header: {
-            flexDirection: 'row',
+            flexDirection:  'row',
             justifyContent: 'space-between',
-            paddingLeft: 10,
-            paddingRight: 10,
-            marginTop: 6,
-            alignItems: 'center'
-        }
-    }
+            paddingLeft:    10,
+            paddingRight:   10,
+            marginTop:      6,
+            alignItems:     'center',
+        },
+    },
 };

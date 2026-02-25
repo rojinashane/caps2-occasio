@@ -1,349 +1,840 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
     View, ScrollView, TextInput, TouchableOpacity,
-    Alert, ActivityIndicator, Platform, Switch, KeyboardAvoidingView,
-    Animated
+    Alert, ActivityIndicator, Platform, Switch,
+    KeyboardAvoidingView, Animated, Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import CustomText from '../components/CustomText'; 
+import CustomText from '../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
-import { 
-    collection, addDoc, serverTimestamp, 
-    query, where, getDocs 
+import {
+    collection, addDoc, serverTimestamp,
+    query, where, getDocs,
 } from 'firebase/firestore';
-import { Picker } from '@react-native-picker/picker'; 
 import DateTimePicker from '@react-native-community/datetimepicker';
 import tw from 'twrnc';
 
-export default function AddEvent({ navigation }) {
-    const [title, setTitle] = useState('');
-    const [eventType, setEventType] = useState('');
-    const [otherType, setOtherType] = useState('');
-    const [startDate, setStartDate] = useState(new Date());
-    const [endDate, setEndDate] = useState(new Date());
-    
-    // Time State (Start only)
-    const [startTime, setStartTime] = useState(new Date());
-    const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+const { width } = Dimensions.get('window');
 
-    const [isMultiDay, setIsMultiDay] = useState(false);
+// ── EVENT TYPE CONFIG ───────────────────────────────────────
+const EVENT_TYPES = [
+    { key: 'Wedding',        icon: 'heart',              color: '#E8626A', bg: '#FFF0F0', desc: 'Celebrate love'        },
+    { key: 'Birthday Party', icon: 'gift-outline',       color: '#F59E0B', bg: '#FFFBEB', desc: 'Make a wish'           },
+    { key: 'Corporate',      icon: 'briefcase-outline',  color: '#3B82F6', bg: '#EFF6FF', desc: 'Business & networking' },
+    { key: 'Charity',        icon: 'ribbon-outline',     color: '#10B981', bg: '#ECFDF5', desc: 'Give & inspire'        },
+    { key: 'Others',         icon: 'star-outline',       color: '#8B5CF6', bg: '#F5F3FF', desc: 'Something special'     },
+];
+
+// ── THEMES ──────────────────────────────────────────────────
+const THEMES = [
+    { id: 'fairy-tale',     name: 'Fairy Tale',     icon: 'sparkles-outline',        color: '#C084FC', tags: ['Birthday Party'] },
+    { id: 'golden-gala',    name: 'Golden Gala',    icon: 'trophy-outline',           color: '#D97706', tags: ['Wedding', 'Corporate'] },
+    { id: 'garden-bloom',   name: 'Garden Bloom',   icon: 'leaf-outline',             color: '#10B981', tags: ['Wedding'] },
+    { id: 'midnight-luxe',  name: 'Midnight Luxe',  icon: 'moon-outline',             color: '#6366F1', tags: [] },
+    { id: 'tropical-fest',  name: 'Tropical Fest',  icon: 'sunny-outline',            color: '#F97316', tags: ['Birthday Party'] },
+    { id: 'corporate-edge', name: 'Corporate Edge', icon: 'business-outline',         color: '#2563EB', tags: ['Corporate'] },
+    { id: 'rustic-charm',   name: 'Rustic Charm',   icon: 'bonfire-outline',          color: '#B45309', tags: ['Wedding'] },
+    { id: 'neon-fiesta',    name: 'Neon Fiesta',    icon: 'musical-notes-outline',    color: '#EC4899', tags: ['Birthday Party'] },
+    { id: 'ocean-breeze',   name: 'Ocean Breeze',   icon: 'water-outline',            color: '#0EA5E9', tags: [] },
+    { id: 'giving-heart',   name: 'Giving Heart',   icon: 'heart-circle-outline',     color: '#EF4444', tags: ['Charity'] },
+];
+
+// ── HELPERS ─────────────────────────────────────────────────
+const fmt     = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const fmtTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+// ── SCREEN ──────────────────────────────────────────────────
+export default function AddEventScreen({ navigation }) {
+    const [title, setTitle]                           = useState('');
+    const [eventType, setEventType]                   = useState(null);
+    const [otherType, setOtherType]                   = useState('');
+    const [startDate, setStartDate]                   = useState(new Date());
+    const [endDate, setEndDate]                       = useState(new Date());
+    const [startTime, setStartTime]                   = useState(new Date());
+    const [isMultiDay, setIsMultiDay]                 = useState(false);
+    const [location, setLocation]                     = useState('');
+    const [description, setDescription]               = useState('');
+    const [collaboratorEmail, setCollaboratorEmail]   = useState('');
+    const [selectedTheme, setSelectedTheme]           = useState(null);
+    const [customTheme, setCustomTheme]               = useState('');
+    const [loading, setLoading]                       = useState(false);
+    const [submitted, setSubmitted]                   = useState(false);
+
     const [showStartPicker, setShowStartPicker] = useState(false);
-    const [showEndPicker, setShowEndPicker] = useState(false);
-    const [location, setLocation] = useState('');
-    const [description, setDescription] = useState('');
-    const [collaboratorEmail, setCollaboratorEmail] = useState(''); 
-    const [loading, setLoading] = useState(false);
+    const [showEndPicker, setShowEndPicker]     = useState(false);
+    const [showTimePicker, setShowTimePicker]   = useState(false);
 
-    const eventTypes = ['Wedding', 'Birthday Party', 'Corporate', 'Charity', 'Others'];
-
-    // --- ANIMATION VALUES ---
-    const headerFade = useRef(new Animated.Value(0)).current;
-    const headerSlide = useRef(new Animated.Value(-20)).current;
-    
-    // Create animated values for 5 distinct form sections
-    const numSections = 6; 
-    const fieldAnims = useRef([...Array(numSections)].map(() => new Animated.Value(40))).current;
-    const fieldFades = useRef([...Array(numSections)].map(() => new Animated.Value(0))).current;
+    // Animations — now 6 cards instead of 5
+    const heroScale  = useRef(new Animated.Value(0.96)).current;
+    const cardAnims  = useRef([0,1,2,3,4,5].map(() => new Animated.Value(40))).current;
+    const cardFades  = useRef([0,1,2,3,4,5].map(() => new Animated.Value(0))).current;
 
     useEffect(() => {
-        // 1. Animate Header
         Animated.parallel([
-            Animated.timing(headerFade, { toValue: 1, duration: 400, useNativeDriver: true }),
-            Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+            Animated.spring(heroScale, { toValue: 1, tension: 60, friction: 10, useNativeDriver: true }),
+            Animated.stagger(90, cardAnims.map((anim, i) =>
+                Animated.parallel([
+                    Animated.spring(anim, { toValue: 0, tension: 55, friction: 9, useNativeDriver: true }),
+                    Animated.timing(cardFades[i], { toValue: 1, duration: 350, useNativeDriver: true }),
+                ])
+            )),
         ]).start();
-
-        // 2. Stagger Form Sections
-        const staggerAnimations = fieldAnims.map((anim, index) => {
-            return Animated.parallel([
-                Animated.spring(anim, {
-                    toValue: 0,
-                    tension: 50,
-                    friction: 8,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(fieldFades[index], {
-                    toValue: 1,
-                    duration: 400,
-                    useNativeDriver: true,
-                })
-            ]);
-        });
-
-        Animated.stagger(80, staggerAnimations).start();
     }, []);
 
-    const formatDateDisplay = (date) => {
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-    };
-
-    const formatTimeDisplay = (time) => {
-        return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    };
-
-    const onStartChange = (event, selectedDate) => {
-        setShowStartPicker(Platform.OS === 'ios');
-        if (selectedDate) {
-            setStartDate(selectedDate);
-            if (selectedDate > endDate) setEndDate(selectedDate);
+    const handleSelectType = (type) => {
+        setEventType(type);
+        if (selectedTheme && !selectedTheme.tags.includes(type.key) && selectedTheme.tags.length > 0) {
+            setSelectedTheme(null);
         }
     };
 
-    const onEndChange = (event, selectedDate) => {
-        setShowEndPicker(Platform.OS === 'ios');
-        if (selectedDate) setEndDate(selectedDate);
-    };
+    const isEmailValid = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-    const onStartTimeChange = (event, selectedTime) => {
-        setShowStartTimePicker(Platform.OS === 'ios');
-        if (selectedTime) setStartTime(selectedTime);
-    };
+    const handleCreate = async () => {
+        setSubmitted(true);
+        const finalType = eventType?.key === 'Others' ? otherType.trim() : eventType?.key;
+        const emailInvalid = collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim());
 
-    const handleCreateEvent = async () => {
-        const finalType = eventType === 'Others' ? otherType : eventType;
-        if (!title || !finalType) {
-            Alert.alert('Missing Info', 'Please fill in the required fields (*)');
-            return;
-        }
+        if (!title.trim() || !finalType || emailInvalid) return;
 
         setLoading(true);
         try {
+            const themeValue = customTheme.trim() || selectedTheme?.name || null;
+
             const eventRef = await addDoc(collection(db, 'events'), {
-                userId: auth.currentUser.uid,
-                title,
-                eventType: finalType,
-                startDate: startDate, 
-                startTime: formatTimeDisplay(startTime),
-                endDate: isMultiDay ? endDate : null,
+                userId:        auth.currentUser.uid,
+                title:         title.trim(),
+                eventType:     finalType,
+                startDate,
+                startTime:     fmtTime(startTime),
+                endDate:       isMultiDay ? endDate : null,
                 isMultiDay,
-                location: location || 'To be decided',
-                description,
-                collaborators: [], 
-                createdAt: serverTimestamp(),
+                location:      location.trim() || 'To be decided',
+                description:   description.trim(),
+                theme:         themeValue,
+                themeAccent:   selectedTheme?.color || null,
+                collaborators: [],
+                createdAt:     serverTimestamp(),
             });
 
             if (collaboratorEmail.trim()) {
-                const cleanEmail = collaboratorEmail.trim().toLowerCase();
-                const userQuery = query(collection(db, 'users'), where('email', '==', cleanEmail));
-                const userSnapshot = await getDocs(userQuery);
-
-                if (!userSnapshot.empty) {
-                    const recipientId = userSnapshot.docs[0].id;
+                const email = collaboratorEmail.trim().toLowerCase();
+                const snap  = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
+                if (!snap.empty) {
                     await addDoc(collection(db, 'notifications'), {
-                        recipientId: recipientId,
-                        senderId: auth.currentUser.uid,
-                        senderName: auth.currentUser.displayName || "An organizer",
-                        eventId: eventRef.id,
-                        eventTitle: title,
-                        status: 'pending',
-                        type: 'invitation',
-                        createdAt: serverTimestamp()
+                        recipientId: snap.docs[0].id,
+                        senderId:    auth.currentUser.uid,
+                        senderName:  auth.currentUser.displayName || 'An organizer',
+                        eventId:     eventRef.id,
+                        eventTitle:  title.trim(),
+                        status:      'pending',
+                        type:        'invitation',
+                        createdAt:   serverTimestamp(),
                     });
                 }
             }
 
-            Alert.alert('Success ✨', 'Event listed!', [{ text: 'Done', onPress: () => navigation.goBack() }]);
-        } catch (error) {
-            console.error("Create Event Error:", error);
-            Alert.alert('Error', 'Could not save event.');
+            Alert.alert('Event Created!', `"${title.trim()}" is all set.`, [
+                { text: 'Great!', onPress: () => navigation.goBack() },
+            ]);
+        } catch (e) {
+            console.error(e);
+            Alert.alert('Error', 'Could not save event. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
+    const accentColor    = '#00686F';
+    const accentBg       = '#E0F2F3';
+    const accentIcon     = eventType?.icon  || 'calendar-outline';
+
+    const suggestedThemes = THEMES.filter(t => t.tags.includes(eventType?.key));
+    const remainingThemes = THEMES.filter(t => !t.tags.includes(eventType?.key));
+
     return (
-        <SafeAreaView style={tw`flex-1 bg-[#F8FAFC]`} edges={['top']}>
-            <KeyboardAvoidingView 
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-                style={tw`flex-1`}
-            >
-                {/* HEADER */}
-                <Animated.View 
-                    style={[
-                        tw`px-6 pt-4 pb-4 flex-row items-center justify-between z-10 bg-[#F8FAFC]`,
-                        { opacity: headerFade, transform: [{ translateY: headerSlide }] }
-                    ]}
-                >
-                    <TouchableOpacity 
-                        onPress={() => navigation.goBack()}
-                        style={tw`w-10 h-10 bg-white rounded-full justify-center items-center border border-slate-200 shadow-sm`}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                        <Ionicons name="chevron-back" size={22} color="#334155" />
-                    </TouchableOpacity>
-                    <CustomText fontFamily="extrabold" style={tw`text-xl text-slate-800 tracking-tight`}>
-                        New Event
-                    </CustomText>
-                    <View style={tw`w-10 h-10`} /> 
+        <SafeAreaView style={tw`flex-1 bg-[#F0F4F8]`} edges={['top']}>
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={tw`flex-1`}>
+
+                {/* ── HERO HEADER ─────────────────────────────── */}
+                <Animated.View style={{
+                    transform: [{ scale: heroScale }],
+                    marginHorizontal: 16,
+                    marginTop: 12,
+                    marginBottom: 4,
+                    borderRadius: 28,
+                    overflow: 'hidden',
+                    backgroundColor: accentBg,
+                    borderWidth: 1.5,
+                    borderColor: accentColor + '30',
+                    shadowColor: accentColor,
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: 0.18,
+                    shadowRadius: 20,
+                    elevation: 6,
+                }}>
+                    <View style={{ height: 5, backgroundColor: accentColor }} />
+
+                    <View style={tw`px-5 py-4`}>
+                        <View style={tw`flex-row items-center justify-between mb-4`}>
+                            <TouchableOpacity
+                                onPress={() => navigation.goBack()}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                style={[
+                                    tw`w-9 h-9 rounded-full justify-center items-center`,
+                                    { backgroundColor: accentColor + '20' },
+                                ]}
+                            >
+                                <Ionicons name="arrow-back" size={18} color={accentColor} />
+                            </TouchableOpacity>
+
+                            <CustomText fontFamily="extrabold" style={{ color: accentColor, fontSize: 16, letterSpacing: 0.3 }}>
+                                Plan Your Event
+                            </CustomText>
+
+                            <View style={[
+                                tw`w-9 h-9 rounded-full justify-center items-center`,
+                                { backgroundColor: '#00686F20' },
+                            ]}>
+                                <Ionicons name={accentIcon} size={17} color="#00686F" />
+                            </View>
+                        </View>
+
+                        <CustomText fontFamily="bold" style={{ color: accentColor + 'AA', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>
+                            EVENT NAME <CustomText style={{ color: '#EF4444' }}>*</CustomText>
+                        </CustomText>
+                        <TextInput
+                            style={{
+                                fontFamily: 'Poppins-ExtraBold',
+                                fontSize: 24,
+                                color: accentColor,
+                                padding: 0,
+                                letterSpacing: -0.5,
+                                borderBottomWidth: submitted && !title.trim() ? 1.5 : 0,
+                                borderBottomColor: '#EF4444',
+                                paddingBottom: submitted && !title.trim() ? 4 : 0,
+                            }}
+                            value={title}
+                            onChangeText={(v) => { setTitle(v); if (submitted && v.trim()) setSubmitted(false); }}
+                            placeholder={eventType ? `Name your ${eventType.key.toLowerCase()}...` : 'What are we celebrating?'}
+                            placeholderTextColor={accentColor + '45'}
+                            multiline
+                            returnKeyType="done"
+                            blurOnSubmit
+                        />
+                        {submitted && !title.trim() && (
+                            <InlineError message="Event name is required" />
+                        )}
+
+                        {(eventType || selectedTheme || (customTheme.trim())) && (
+                            <View style={tw`flex-row items-center flex-wrap mt-3`}>
+                                {eventType && (
+                                    <View style={[
+                                        tw`flex-row items-center px-3 py-1 rounded-full mr-2 mb-1`,
+                                        { backgroundColor: accentColor + '20' },
+                                    ]}>
+                                        <Ionicons name={eventType.icon} size={11} color={accentColor} />
+                                        <CustomText fontFamily="semibold" style={{ color: accentColor, fontSize: 11, marginLeft: 4 }}>
+                                            {eventType.key === 'Others' && otherType ? otherType : eventType.key}
+                                        </CustomText>
+                                    </View>
+                                )}
+                                <View style={[
+                                    tw`flex-row items-center px-3 py-1 rounded-full mr-2 mb-1`,
+                                    { backgroundColor: accentColor + '20' },
+                                ]}>
+                                    <Ionicons name="calendar-outline" size={11} color={accentColor} />
+                                    <CustomText fontFamily="semibold" style={{ color: accentColor, fontSize: 11, marginLeft: 4 }}>
+                                        {fmt(startDate)}
+                                    </CustomText>
+                                </View>
+                                {(selectedTheme || customTheme.trim()) && (
+                                    <View style={[
+                                        tw`flex-row items-center px-3 py-1 rounded-full mb-1`,
+                                        { backgroundColor: accentColor + '20' },
+                                    ]}>
+                                        <Ionicons
+                                            name={selectedTheme?.icon || 'color-palette-outline'}
+                                            size={11}
+                                            color={accentColor}
+                                        />
+                                        <CustomText fontFamily="semibold" style={{ color: accentColor, fontSize: 11, marginLeft: 4 }}>
+                                            {customTheme.trim() || selectedTheme?.name}
+                                        </CustomText>
+                                    </View>
+                                )}
+                            </View>
+                        )}
+                    </View>
                 </Animated.View>
 
-                <ScrollView contentContainerStyle={tw`px-6 pt-2 pb-24`} showsVerticalScrollIndicator={false}>
-                    
-                    {/* SECTION 1: Basic Info Card */}
-                    <Animated.View style={{ opacity: fieldFades[0], transform: [{ translateY: fieldAnims[0] }] }}>
-                        <View style={tw`bg-white p-5 rounded-[24px] mb-5 border border-slate-100 shadow-sm`}>
-                            <CustomText fontFamily="bold" style={tw`text-slate-400 text-[11px] uppercase tracking-wider mb-2`}>Event Name *</CustomText>
-                            <TextInput 
-                                style={[tw`bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-[15px] text-slate-800 mb-5`, { fontFamily: 'Poppins-Medium' }]}
-                                value={title} 
-                                onChangeText={setTitle} 
-                                placeholder="e.g. Maureen's Birthday" 
-                                placeholderTextColor="#94A3B8"
+                {/* ── SCROLLABLE FORM ──────────────────────────── */}
+                <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120 }}
+                    keyboardShouldPersistTaps="handled"
+                >
+
+                    {/* ══ SECTION 1: EVENT TYPE ════════════════════ */}
+                    <FormCard anim={cardAnims[0]} fade={cardFades[0]} error={submitted && !eventType}>
+                        <SectionHeader icon="apps-outline" label="Event Type" color={accentColor} required />
+
+                        <View style={tw`flex-row flex-wrap mt-1`}>
+                            {EVENT_TYPES.map((type) => {
+                                const active = eventType?.key === type.key;
+                                const tileColor  = active ? type.color : '#64748B';
+                                const tileBorder = active ? type.color : '#E8EEF4';
+                                const tileBg     = active ? type.color + '12' : '#F8FAFC';
+                                const iconBg     = active ? type.color + '25' : '#E8EEF4';
+                                const iconColor  = active ? type.color : '#94A3B8';
+                                return (
+                                    <TouchableOpacity
+                                        key={type.key}
+                                        onPress={() => handleSelectType(type)}
+                                        activeOpacity={0.75}
+                                        style={[
+                                            tw`mr-2 mb-2 rounded-[16px]`,
+                                            {
+                                                borderWidth: 2,
+                                                borderColor: tileBorder,
+                                                backgroundColor: tileBg,
+                                            },
+                                        ]}
+                                    >
+                                        <View style={tw`flex-row items-center px-4 py-2.5`}>
+                                            <View style={[
+                                                tw`w-7 h-7 rounded-full justify-center items-center mr-2.5`,
+                                                { backgroundColor: iconBg },
+                                            ]}>
+                                                <Ionicons name={type.icon} size={14} color={iconColor} />
+                                            </View>
+                                            <View>
+                                                <CustomText fontFamily={active ? 'bold' : 'semibold'} style={{ fontSize: 13, color: tileColor }}>
+                                                    {type.key}
+                                                </CustomText>
+                                                <CustomText fontFamily="medium" style={{ fontSize: 10, color: active ? type.color + 'AA' : '#94A3B8' }}>
+                                                    {type.desc}
+                                                </CustomText>
+                                            </View>
+                                            {active && (
+                                                <Ionicons name="checkmark-circle" size={16} color={type.color} style={{ marginLeft: 8 }} />
+                                            )}
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {eventType?.key === 'Others' && (
+                            <>
+                                <View style={[
+                                    tw`flex-row items-center mt-2 px-4 rounded-[14px]`,
+                                    {
+                                        backgroundColor: '#F8FAFC',
+                                        borderWidth: 1.5,
+                                        borderColor: submitted && !otherType.trim() ? '#EF4444' : '#E2E8F0',
+                                    },
+                                ]}>
+                                    <Ionicons name="pencil-outline" size={16} color={submitted && !otherType.trim() ? '#EF4444' : '#94A3B8'} />
+                                    <TextInput
+                                        style={[tw`flex-1 ml-3 py-3.5 text-[14px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
+                                        value={otherType}
+                                        onChangeText={setOtherType}
+                                        placeholder="Describe your event type"
+                                        placeholderTextColor="#CBD5E1"
+                                    />
+                                </View>
+                                {submitted && !otherType.trim() && (
+                                    <InlineError message="Please describe your event type" />
+                                )}
+                            </>
+                        )}
+                        {submitted && !eventType && (
+                            <InlineError message="Please select an event type" />
+                        )}
+                    </FormCard>
+
+                    {/* ══ SECTION 2: DATE & TIME ═══════════════════ */}
+                    <FormCard anim={cardAnims[1]} fade={cardFades[1]}>
+                        <SectionHeader icon="calendar-outline" label="Date & Time" color={accentColor} />
+
+                        <View style={tw`flex-row mb-3`}>
+                            <DateTimeButton
+                                label="START DATE"
+                                value={fmt(startDate)}
+                                icon="calendar"
+                                color={accentColor}
+                                onPress={() => setShowStartPicker(true)}
                             />
-                            
-                            <CustomText fontFamily="bold" style={tw`text-slate-400 text-[11px] uppercase tracking-wider mb-2`}>Event Type *</CustomText>
-                            <View style={tw`bg-slate-50 border border-slate-200 rounded-xl overflow-hidden`}>
-                                <Picker 
-                                    selectedValue={eventType} 
-                                    onValueChange={(itemValue) => setEventType(itemValue)}
-                                    style={Platform.OS === 'android' ? tw`text-slate-800` : {}}
-                                >
-                                    <Picker.Item label="Select type..." value="" color="#94A3B8" />
-                                    {eventTypes.map(t => <Picker.Item key={t} label={t} value={t} color={Platform.OS === 'ios' ? '#1E293B' : 'black'} />)}
-                                </Picker>
-                            </View>
+                            <View style={tw`w-3`} />
+                            <DateTimeButton
+                                label="TIME"
+                                value={fmtTime(startTime)}
+                                icon="time"
+                                color={accentColor}
+                                onPress={() => setShowTimePicker(true)}
+                            />
+                        </View>
 
-                            {eventType === 'Others' && (
-                                <TextInput 
-                                    style={[tw`bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-[15px] text-slate-800 mt-4`, { fontFamily: 'Poppins-Medium' }]}
-                                    value={otherType} 
-                                    onChangeText={setOtherType} 
-                                    placeholder="Specify event type" 
-                                    placeholderTextColor="#94A3B8"
-                                />
+                        <View style={[
+                            tw`flex-row items-center justify-between px-4 py-3 rounded-[14px]`,
+                            {
+                                backgroundColor: isMultiDay ? accentColor + '10' : '#F8FAFC',
+                                borderWidth: 1.5,
+                                borderColor: isMultiDay ? accentColor + '40' : '#E8EEF4',
+                            },
+                        ]}>
+                            <View style={tw`flex-row items-center`}>
+                                <View style={[
+                                    tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
+                                    { backgroundColor: isMultiDay ? accentColor + '20' : '#E8EEF4' },
+                                ]}>
+                                    <Ionicons name="git-branch-outline" size={15} color={isMultiDay ? accentColor : '#94A3B8'} />
+                                </View>
+                                <View>
+                                    <CustomText fontFamily="bold" style={{ fontSize: 13, color: isMultiDay ? accentColor : '#334155' }}>
+                                        Multi-day Event
+                                    </CustomText>
+                                    <CustomText fontFamily="medium" style={{ fontSize: 11, color: '#94A3B8' }}>
+                                        Spans multiple days
+                                    </CustomText>
+                                </View>
+                            </View>
+                            <Switch
+                                value={isMultiDay}
+                                onValueChange={setIsMultiDay}
+                                trackColor={{ false: '#E2E8F0', true: accentColor }}
+                                ios_backgroundColor="#E2E8F0"
+                            />
+                        </View>
+
+                        {isMultiDay && (
+                            <TouchableOpacity
+                                onPress={() => setShowEndPicker(true)}
+                                activeOpacity={0.75}
+                                style={[
+                                    tw`flex-row items-center mt-3 px-4 py-3 rounded-[14px]`,
+                                    {
+                                        backgroundColor: accentColor + '10',
+                                        borderWidth: 1.5,
+                                        borderColor: accentColor + '30',
+                                        borderStyle: 'dashed',
+                                    },
+                                ]}
+                            >
+                                <View style={[
+                                    tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
+                                    { backgroundColor: accentColor + '20' },
+                                ]}>
+                                    <Ionicons name="arrow-forward-circle-outline" size={16} color={accentColor} />
+                                </View>
+                                <View style={tw`flex-1`}>
+                                    <CustomText fontFamily="semibold" style={{ fontSize: 10, color: accentColor + 'AA', letterSpacing: 0.8 }}>END DATE</CustomText>
+                                    <CustomText fontFamily="bold" style={{ fontSize: 14, color: accentColor }}>
+                                        {fmt(endDate)}
+                                    </CustomText>
+                                </View>
+                                <Ionicons name="pencil-outline" size={15} color={accentColor} />
+                            </TouchableOpacity>
+                        )}
+                    </FormCard>
+
+                    {/* ══ SECTION 3: THEME ═════════════════════════ */}
+                    <FormCard anim={cardAnims[2]} fade={cardFades[2]}>
+                        <SectionHeader icon="color-palette-outline" label="Event Theme" color={accentColor} />
+                        <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12, marginBottom: 14, marginTop: -8 }}>
+                            Choose a vibe that sets the mood
+                        </CustomText>
+
+                        {suggestedThemes.length > 0 && (
+                            <View style={tw`mb-3`}>
+                                <View style={tw`flex-row items-center mb-2`}>
+                                    <Ionicons name="star" size={11} color={accentColor} />
+                                    <CustomText fontFamily="bold" style={{ color: accentColor, fontSize: 10, letterSpacing: 0.8, marginLeft: 5 }}>
+                                        SUGGESTED
+                                    </CustomText>
+                                </View>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                    <View style={tw`flex-row`}>
+                                        {suggestedThemes.map(theme => (
+                                            <ThemePill
+                                                key={theme.id}
+                                                theme={theme}
+                                                isSelected={selectedTheme?.id === theme.id}
+                                                onPress={() => setSelectedTheme(selectedTheme?.id === theme.id ? null : theme)}
+                                            />
+                                        ))}
+                                    </View>
+                                </ScrollView>
+                            </View>
+                        )}
+
+                        {suggestedThemes.length > 0 && (
+                            <View style={{ height: 1, backgroundColor: '#F1F5F9', marginVertical: 10 }} />
+                        )}
+
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <View style={tw`flex-row`}>
+                                {(suggestedThemes.length > 0 ? remainingThemes : THEMES).map(theme => (
+                                    <ThemePill
+                                        key={theme.id}
+                                        theme={theme}
+                                        isSelected={selectedTheme?.id === theme.id}
+                                        onPress={() => setSelectedTheme(selectedTheme?.id === theme.id ? null : theme)}
+                                    />
+                                ))}
+                            </View>
+                        </ScrollView>
+
+                        <View style={[
+                            tw`flex-row items-center mt-4 px-4 rounded-[14px]`,
+                            {
+                                backgroundColor: '#F8FAFC',
+                                borderWidth: 1.5,
+                                borderColor: customTheme ? accentColor + '60' : '#E2E8F0',
+                                borderStyle: 'dashed',
+                            },
+                        ]}>
+                            <Ionicons name="brush-outline" size={16} color={customTheme ? accentColor : '#CBD5E1'} />
+                            <TextInput
+                                style={[tw`flex-1 ml-3 py-3 text-[14px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
+                                value={customTheme}
+                                onChangeText={(v) => { setCustomTheme(v); if (v) setSelectedTheme(null); }}
+                                placeholder="Or type your own theme..."
+                                placeholderTextColor="#CBD5E1"
+                            />
+                            {customTheme.length > 0 && (
+                                <TouchableOpacity onPress={() => setCustomTheme('')}>
+                                    <Ionicons name="close-circle" size={18} color="#CBD5E1" />
+                                </TouchableOpacity>
                             )}
                         </View>
-                    </Animated.View>
+                    </FormCard>
 
-                    {/* SECTION 2: Date & Time Card */}
-                    <Animated.View style={{ opacity: fieldFades[1], transform: [{ translateY: fieldAnims[1] }] }}>
-                        <View style={tw`bg-white p-5 rounded-[24px] mb-5 border border-slate-100 shadow-sm`}>
-                            <CustomText fontFamily="bold" style={tw`text-slate-400 text-[11px] uppercase tracking-wider mb-3`}>Date & Time</CustomText>
-                            
-                            <View style={tw`flex-row justify-between mb-2`}>
-                                <TouchableOpacity 
-                                    style={tw`flex-1 bg-slate-50 border border-slate-100 rounded-xl p-3 mr-2 flex-row items-center`} 
-                                    onPress={() => setShowStartPicker(true)}
-                                >
-                                    <View style={tw`w-10 h-10 rounded-full bg-white justify-center items-center shadow-sm mr-3`}>
-                                        <Ionicons name="calendar" size={18} color="#00686F" />
-                                    </View>
-                                    <View>
-                                        <CustomText fontFamily="semibold" style={tw`text-[10px] text-slate-500`}>START DATE</CustomText>
-                                        <CustomText fontFamily="bold" style={tw`text-[13px] text-slate-800 mt-0.5`}>{formatDateDisplay(startDate)}</CustomText>
-                                    </View>
-                                </TouchableOpacity>
+                    {/* ══ SECTION 4: VENUE ═════════════════════════ */}
+                    <FormCard anim={cardAnims[3]} fade={cardFades[3]}>
+                        <SectionHeader icon="location-outline" label="Venue" color={accentColor} />
+                        <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12, marginBottom: 14, marginTop: -8 }}>
+                            Where is this happening?
+                        </CustomText>
 
-                                <TouchableOpacity 
-                                    style={tw`flex-1 bg-slate-50 border border-slate-100 rounded-xl p-3 flex-row items-center`} 
-                                    onPress={() => setShowStartTimePicker(true)}
-                                >
-                                    <View style={tw`w-10 h-10 rounded-full bg-white justify-center items-center shadow-sm mr-3`}>
-                                        <Ionicons name="time" size={18} color="#00686F" />
-                                    </View>
-                                    <View>
-                                        <CustomText fontFamily="semibold" style={tw`text-[10px] text-slate-500`}>TIME</CustomText>
-                                        <CustomText fontFamily="bold" style={tw`text-[13px] text-slate-800 mt-0.5`}>{formatTimeDisplay(startTime)}</CustomText>
-                                    </View>
-                                </TouchableOpacity>
+                        <View style={[
+                            tw`flex-row items-center px-4 rounded-[14px]`,
+                            { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E8EEF4' },
+                        ]}>
+                            <View style={[
+                                tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
+                                { backgroundColor: accentColor + '15' },
+                            ]}>
+                                <Ionicons name="location-outline" size={16} color={accentColor} />
                             </View>
-
-                            <View style={tw`flex-row justify-between items-center py-3 px-1 border-b border-slate-100 mb-2`}>
-                                <CustomText fontFamily="medium" style={tw`text-[14px] text-slate-600`}>This is a multi-day event</CustomText>
-                                <Switch 
-                                    value={isMultiDay} 
-                                    onValueChange={setIsMultiDay} 
-                                    trackColor={{ false: "#E2E8F0", true: "#00686F" }} 
-                                    ios_backgroundColor="#E2E8F0"
-                                />
-                            </View>
-
-                            {isMultiDay && (
-                                <TouchableOpacity 
-                                    style={tw`w-full bg-slate-50 border border-slate-100 rounded-xl p-3 flex-row items-center mt-2`} 
-                                    onPress={() => setShowEndPicker(true)}
-                                >
-                                    <View style={tw`w-10 h-10 rounded-full bg-white justify-center items-center shadow-sm mr-3`}>
-                                        <Ionicons name="calendar-outline" size={18} color="#00686F" />
-                                    </View>
-                                    <View>
-                                        <CustomText fontFamily="semibold" style={tw`text-[10px] text-slate-500`}>END DATE</CustomText>
-                                        <CustomText fontFamily="bold" style={tw`text-[13px] text-slate-800 mt-0.5`}>{formatDateDisplay(endDate)}</CustomText>
-                                    </View>
+                            <TextInput
+                                style={[tw`flex-1 py-3.5 text-[14px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
+                                value={location}
+                                onChangeText={setLocation}
+                                placeholder="Venue name or address (optional)"
+                                placeholderTextColor="#CBD5E1"
+                            />
+                            {location.length > 0 && (
+                                <TouchableOpacity onPress={() => setLocation('')}>
+                                    <Ionicons name="close-circle" size={18} color="#CBD5E1" />
                                 </TouchableOpacity>
                             )}
                         </View>
-                    </Animated.View>
+                    </FormCard>
 
-                    {/* SECTION 3: Collaborator Card */}
-                    <Animated.View style={{ opacity: fieldFades[2], transform: [{ translateY: fieldAnims[2] }] }}>
-                        <View style={tw`bg-white p-5 rounded-[24px] mb-5 border border-slate-100 shadow-sm`}>
-                            <CustomText fontFamily="bold" style={tw`text-slate-400 text-[11px] uppercase tracking-wider mb-2`}>Invite Collaborator</CustomText>
-                            <TextInput 
-                                style={[tw`bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-[15px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
-                                value={collaboratorEmail} 
-                                onChangeText={setCollaboratorEmail} 
-                                placeholder="Enter friend's email address" 
-                                placeholderTextColor="#94A3B8"
+                    {/* ══ SECTION 5: INVITE COLLABORATOR ══════════ */}
+                    <FormCard anim={cardAnims[4]} fade={cardFades[4]}>
+                        <SectionHeader icon="people-outline" label="Invite Collaborator" color={accentColor} />
+                        <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12, marginBottom: 14, marginTop: -8 }}>
+                            Co-manage this event with someone
+                        </CustomText>
+
+                        <View style={[
+                            tw`flex-row items-center px-4 rounded-[14px]`,
+                            {
+                                backgroundColor: '#F8FAFC',
+                                borderWidth: 1.5,
+                                borderColor: submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
+                                    ? '#EF4444' : '#E8EEF4',
+                            },
+                        ]}>
+                            <View style={[
+                                tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
+                                {
+                                    backgroundColor: submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
+                                        ? '#FEF2F2' : accentColor + '15',
+                                },
+                            ]}>
+                                <Ionicons
+                                    name="person-add-outline"
+                                    size={16}
+                                    color={submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
+                                        ? '#EF4444' : accentColor}
+                                />
+                            </View>
+                            <TextInput
+                                style={[tw`flex-1 py-3.5 text-[14px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
+                                value={collaboratorEmail}
+                                onChangeText={setCollaboratorEmail}
+                                placeholder="Enter their email address"
+                                placeholderTextColor="#CBD5E1"
                                 autoCapitalize="none"
                                 keyboardType="email-address"
                             />
-                        </View>
-                    </Animated.View>
-
-                    {/* SECTION 4: Additional Details Card */}
-                    <Animated.View style={{ opacity: fieldFades[3], transform: [{ translateY: fieldAnims[3] }] }}>
-                        <View style={tw`bg-white p-5 rounded-[24px] mb-8 border border-slate-100 shadow-sm`}>
-                            <CustomText fontFamily="bold" style={tw`text-slate-400 text-[11px] uppercase tracking-wider mb-2`}>Location</CustomText>
-                            <TextInput 
-                                style={[tw`bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-[15px] text-slate-800 mb-5`, { fontFamily: 'Poppins-Medium' }]}
-                                value={location} 
-                                onChangeText={setLocation} 
-                                placeholder="Venue address or 'TBD'" 
-                                placeholderTextColor="#94A3B8"
-                            />
-                            
-                            <CustomText fontFamily="bold" style={tw`text-slate-400 text-[11px] uppercase tracking-wider mb-2`}>Notes (Optional)</CustomText>
-                            <TextInput 
-                                style={[tw`bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-[15px] text-slate-800 min-h-[100px]`, { fontFamily: 'Poppins-Medium', textAlignVertical: 'top' }]}
-                                value={description} 
-                                onChangeText={setDescription} 
-                                placeholder="Additional details..." 
-                                placeholderTextColor="#94A3B8"
-                                multiline
-                            />
-                        </View>
-                    </Animated.View>
-
-                    {/* SECTION 5: Submit Button */}
-                    <Animated.View style={{ opacity: fieldFades[4], transform: [{ translateY: fieldAnims[4] }] }}>
-                        <TouchableOpacity 
-                            style={[
-                                tw`bg-[#00686F] py-4 rounded-[20px] items-center flex-row justify-center`,
-                                loading && {opacity: 0.7},
-                                { shadowColor: '#00686F', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 }
-                            ]} 
-                            onPress={handleCreateEvent} 
-                            disabled={loading}
-                        >
-                            {loading ? (
-                                <ActivityIndicator color="#FFF" /> 
-                            ) : (
-                                <>
-                                    <Ionicons name="checkmark-circle" size={22} color="#FFF" style={tw`mr-2`} />
-                                    <CustomText fontFamily="bold" style={tw`text-white text-[16px] tracking-wide`}>Create Event</CustomText>
-                                </>
+                            {collaboratorEmail.length > 0 && (
+                                <TouchableOpacity onPress={() => setCollaboratorEmail('')}>
+                                    <Ionicons name="close-circle" size={18} color="#CBD5E1" />
+                                </TouchableOpacity>
                             )}
-                        </TouchableOpacity>
-                    </Animated.View>
-                    
+                        </View>
+
+                        {submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim()) && (
+                            <InlineError message="Please enter a valid email address" />
+                        )}
+
+                        {/* Info hint */}
+                        <View style={[
+                            tw`flex-row items-start mt-3 px-3 py-2.5 rounded-[12px]`,
+                            { backgroundColor: accentColor + '08', borderWidth: 1, borderColor: accentColor + '20' },
+                        ]}>
+                            <Ionicons name="information-circle-outline" size={14} color={accentColor} style={{ marginTop: 1 }} />
+                            <CustomText fontFamily="medium" style={{ color: accentColor + 'BB', fontSize: 11, marginLeft: 6, flex: 1, lineHeight: 16 }}>
+                                They'll receive an invitation notification and can help manage this event.
+                            </CustomText>
+                        </View>
+                    </FormCard>
+
+                    {/* ══ SECTION 6: NOTES ═════════════════════════ */}
+                    <FormCard anim={cardAnims[5]} fade={cardFades[5]}>
+                        <SectionHeader icon="document-text-outline" label="Notes" color={accentColor} />
+                        <TextInput
+                            style={[
+                                tw`px-4 py-3.5 text-[14px] text-slate-800 rounded-[14px]`,
+                                {
+                                    fontFamily: 'Poppins-Medium',
+                                    minHeight: 100,
+                                    textAlignVertical: 'top',
+                                    backgroundColor: '#F8FAFC',
+                                    borderWidth: 1.5,
+                                    borderColor: '#E8EEF4',
+                                },
+                            ]}
+                            value={description}
+                            onChangeText={setDescription}
+                            placeholder="Dress code, special instructions, details..."
+                            placeholderTextColor="#CBD5E1"
+                            multiline
+                        />
+                    </FormCard>
+
                 </ScrollView>
+
+                {/* ── FIXED BOTTOM CTA ─────────────────────────── */}
+                <View style={[
+                    tw`px-5 pb-8 pt-4`,
+                    { backgroundColor: '#F0F4F8', borderTopWidth: 1, borderTopColor: '#E8EEF4' },
+                ]}>
+                    <View style={tw`flex-row items-center mb-3 flex-wrap`}>
+                        <ReadinessChip label="Name"  done={!!title.trim()}                             color={accentColor} />
+                        <ReadinessChip label="Type"  done={!!eventType}                                color={accentColor} />
+                        <ReadinessChip label="Date"  done                                              color={accentColor} />
+                        <ReadinessChip label="Theme" done={!!(selectedTheme || customTheme.trim())}    color={accentColor} optional />
+                        <ReadinessChip label="Venue" done={!!location.trim()}                          color={accentColor} optional />
+                    </View>
+
+                    <TouchableOpacity
+                        onPress={handleCreate}
+                        disabled={loading}
+                        activeOpacity={0.88}
+                        style={[
+                            tw`flex-row items-center justify-center py-4 rounded-[20px]`,
+                            {
+                                backgroundColor: loading ? '#94A3B8' : accentColor,
+                                shadowColor: accentColor,
+                                shadowOffset: { width: 0, height: 8 },
+                                shadowOpacity: 0.35,
+                                shadowRadius: 16,
+                                elevation: 8,
+                            },
+                        ]}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#FFF" />
+                        ) : (
+                            <>
+                                <View style={[
+                                    tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
+                                    { backgroundColor: 'rgba(255,255,255,0.2)' },
+                                ]}>
+                                    <Ionicons name={accentIcon} size={17} color="#FFF" />
+                                </View>
+                                <CustomText fontFamily="extrabold" style={{ color: '#FFF', fontSize: 17 }}>
+                                    Create Event
+                                </CustomText>
+                                <Ionicons name="arrow-forward" size={18} color="rgba(255,255,255,0.65)" style={{ marginLeft: 10 }} />
+                            </>
+                        )}
+                    </TouchableOpacity>
+                </View>
+
             </KeyboardAvoidingView>
 
-            {/* DateTime Pickers */}
-            {showStartPicker && <DateTimePicker value={startDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onStartChange} />}
-            {showEndPicker && <DateTimePicker value={endDate} mode="date" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onEndChange} />}
-            {showStartTimePicker && <DateTimePicker value={startTime} mode="time" is24Hour={false} display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={onStartTimeChange} />}
+            {/* ── PICKERS ──────────────────────────────────────── */}
+            {showStartPicker && (
+                <DateTimePicker
+                    value={startDate} mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(e, d) => {
+                        setShowStartPicker(Platform.OS === 'ios');
+                        if (d) { setStartDate(d); if (d > endDate) setEndDate(d); }
+                    }}
+                />
+            )}
+            {showEndPicker && (
+                <DateTimePicker
+                    value={endDate} mode="date" minimumDate={startDate}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(e, d) => { setShowEndPicker(Platform.OS === 'ios'); if (d) setEndDate(d); }}
+                />
+            )}
+            {showTimePicker && (
+                <DateTimePicker
+                    value={startTime} mode="time" is24Hour={false}
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(e, t) => { setShowTimePicker(Platform.OS === 'ios'); if (t) setStartTime(t); }}
+                />
+            )}
         </SafeAreaView>
     );
 }
+
+// ── SUB-COMPONENTS ───────────────────────────────────────────
+
+const FormCard = ({ children, anim, fade, error }) => (
+    <Animated.View style={{
+        opacity: fade,
+        transform: [{ translateY: anim }],
+        backgroundColor: '#FFFFFF',
+        borderRadius: 24,
+        padding: 20,
+        marginBottom: 12,
+        borderWidth: error ? 1.5 : 1,
+        borderColor: error ? '#EF4444' : '#EEF2F7',
+        shadowColor: error ? '#EF4444' : '#94A3B8',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: error ? 0.1 : 0.07,
+        shadowRadius: 10,
+        elevation: 2,
+    }}>
+        {children}
+    </Animated.View>
+);
+
+const InlineError = ({ message }) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+        <Ionicons name="alert-circle" size={13} color="#EF4444" />
+        <CustomText fontFamily="semibold" style={{ color: '#EF4444', fontSize: 12, marginLeft: 4 }}>
+            {message}
+        </CustomText>
+    </View>
+);
+
+const SectionHeader = ({ icon, label, color, required }) => (
+    <View style={[tw`flex-row items-center`, { marginBottom: 14 }]}>
+        <View style={[
+            tw`w-7 h-7 rounded-full justify-center items-center mr-2.5`,
+            { backgroundColor: color + '18' },
+        ]}>
+            <Ionicons name={icon} size={14} color={color} />
+        </View>
+        <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 14 }}>
+            {label}
+            {required && <CustomText style={{ color: '#EF4444' }}> *</CustomText>}
+        </CustomText>
+    </View>
+);
+
+const DateTimeButton = ({ label, value, icon, color, onPress }) => (
+    <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.75}
+        style={[
+            tw`flex-1 flex-row items-center p-3.5 rounded-[16px]`,
+            { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E8EEF4' },
+        ]}
+    >
+        <View style={[
+            tw`w-9 h-9 rounded-full justify-center items-center mr-3`,
+            { backgroundColor: color + '15' },
+        ]}>
+            <Ionicons name={icon} size={16} color={color} />
+        </View>
+        <View>
+            <CustomText fontFamily="semibold" style={{ fontSize: 9, color: '#94A3B8', letterSpacing: 0.8 }}>
+                {label}
+            </CustomText>
+            <CustomText fontFamily="bold" style={{ fontSize: 12, color: '#0F172A', marginTop: 1 }}>
+                {value}
+            </CustomText>
+        </View>
+    </TouchableOpacity>
+);
+
+const ThemePill = ({ theme, isSelected, onPress }) => (
+    <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.75}
+        style={[
+            tw`mr-2 mb-1 flex-row items-center px-4 py-2.5 rounded-[14px]`,
+            {
+                backgroundColor: isSelected ? theme.color + '15' : '#F8FAFC',
+                borderWidth: 2,
+                borderColor: isSelected ? theme.color : '#E8EEF4',
+                shadowColor: isSelected ? theme.color : 'transparent',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: isSelected ? 0.2 : 0,
+                shadowRadius: 6,
+                elevation: isSelected ? 3 : 0,
+            },
+        ]}
+    >
+        <View style={[
+            tw`w-6 h-6 rounded-full justify-center items-center mr-2`,
+            { backgroundColor: isSelected ? theme.color + '25' : '#E8EEF4' },
+        ]}>
+            <Ionicons name={theme.icon} size={12} color={isSelected ? theme.color : '#94A3B8'} />
+        </View>
+        <CustomText fontFamily={isSelected ? 'bold' : 'semibold'} style={{ fontSize: 12, color: isSelected ? theme.color : '#64748B' }}>
+            {theme.name}
+        </CustomText>
+        {isSelected && (
+            <Ionicons name="checkmark-circle" size={14} color={theme.color} style={{ marginLeft: 6 }} />
+        )}
+    </TouchableOpacity>
+);
+
+const ReadinessChip = ({ label, done, color, optional }) => (
+    <View style={[
+        tw`flex-row items-center mr-2 mb-1 px-2.5 py-1 rounded-full`,
+        {
+            backgroundColor: done ? color + '18' : optional ? '#F8FAFC' : '#FEF2F2',
+            borderWidth: 1,
+            borderColor:     done ? color + '40' : optional ? '#E8EEF4' : '#FECACA',
+        },
+    ]}>
+        <Ionicons
+            name={done ? 'checkmark-circle' : optional ? 'ellipse-outline' : 'alert-circle-outline'}
+            size={11}
+            color={done ? color : optional ? '#CBD5E1' : '#F87171'}
+        />
+        <CustomText fontFamily="semibold" style={{
+            fontSize: 10,
+            marginLeft: 3,
+            color: done ? color : optional ? '#CBD5E1' : '#F87171',
+        }}>
+            {label}
+        </CustomText>
+    </View>
+);

@@ -363,13 +363,22 @@ export default function EventDetailsScreen({ route, navigation }) {
         }
     };
 
+    // ── FIXED: Centralized modal close — resets all modal state reliably ───────
+    const closeModal = () => {
+        setModalVisible(false);
+        setInputText('');
+        setSubmittingModal(false);
+        submitLock.current = false;
+    };
+
+    // ── FIXED: handleModalSubmit ───────────────────────────────────────────────
     const handleModalSubmit = async () => {
-        // If it's already locked or empty, completely ignore the tap
-        if (!inputText.trim() || submitLock.current) return; 
-        
-        submitLock.current = true; // Instantly lock the function
+        // Guard: empty input or already running
+        if (!inputText.trim() || submitLock.current) return;
+
+        submitLock.current = true;
         setSubmittingModal(true);
-        
+
         try {
             let newColumns = [...columns];
             let notificationType = '';
@@ -403,15 +412,17 @@ export default function EventDetailsScreen({ route, navigation }) {
 
             setColumns(newColumns);
             await syncToFirebase(newColumns);
-            if (notificationType) await sendUniversalNotification(notificationType, notificationDetail);
-            setModalVisible(false);
-            setInputText('');
+
+            // Fire-and-forget — a notification failure must NOT block modal close
+            if (notificationType) {
+                sendUniversalNotification(notificationType, notificationDetail).catch(console.error);
+            }
         } finally {
-            // Unlock it only when the entire process is finished
-            submitLock.current = false; 
-            setSubmittingModal(false);
+            // Always runs regardless of success or error — modal always closes cleanly
+            closeModal();
         }
     };
+
     const handleSearchUsers = async (text) => {
         setCollabEmail(text);
         if (text.length < 3) { setFoundUsers([]); return; }
@@ -453,7 +464,6 @@ export default function EventDetailsScreen({ route, navigation }) {
                             tw`bg-white rounded-3xl p-5 mr-4`,
                             { width: COLUMN_WIDTH, height: height * 0.72, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 }
                         ]}>
-                            {/* Column title row */}
                             <View style={tw`flex-row items-center justify-between mb-5`}>
                                 <View style={tw`flex-row items-center`}>
                                     <View style={tw`w-9 h-9 rounded-2xl bg-slate-100`} />
@@ -462,7 +472,6 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 <View style={tw`h-7 w-14 rounded-full bg-slate-100`} />
                             </View>
 
-                            {/* RSVP card skeleton */}
                             <View style={tw`bg-slate-100 rounded-2xl p-4 mb-4`}>
                                 <View style={tw`h-2.5 w-20 rounded-full bg-slate-200 mb-3`} />
                                 <View style={tw`flex-row gap-2`}>
@@ -471,7 +480,6 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 </View>
                             </View>
 
-                            {/* Info row skeletons */}
                             {[90, 120, 80, 70, 150].map((w, i) => (
                                 <View key={i} style={tw`flex-row items-start py-3 border-b border-slate-100`}>
                                     <View style={tw`w-8 h-8 rounded-xl bg-slate-100 mr-3`} />
@@ -494,7 +502,6 @@ export default function EventDetailsScreen({ route, navigation }) {
                             </View>
                             <View style={tw`h-1.5 bg-slate-200 rounded-full mb-4`} />
 
-                            {/* Task card skeletons */}
                             {[['70%', true], ['55%', false], ['80%', true], ['60%', false]].map(([w, hasBadge], i) => (
                                 <View key={i} style={[
                                     tw`bg-white rounded-2xl p-3.5 mb-2`,
@@ -946,8 +953,9 @@ export default function EventDetailsScreen({ route, navigation }) {
                     onSubmitEditing={handleModalSubmit}
                 />
                 <View style={tw`flex-row gap-3`}>
+                    {/* FIXED: Cancel now calls closeModal() to fully reset lock + state */}
                     <TouchableOpacity
-                        onPress={() => setModalVisible(false)}
+                        onPress={closeModal}
                         style={tw`flex-1 bg-slate-100 py-3.5 rounded-2xl items-center`}
                     >
                         <CustomText style={tw`text-slate-500 font-semibold`}>Cancel</CustomText>
