@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { db, auth } from '../firebase';
+import { db, auth } from '../firebase'; 
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -28,23 +28,24 @@ export default function AdminDashboardScreen({ navigation }) {
     const [modalVisible, setModalVisible] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [currentVenueId, setCurrentVenueId] = useState(null);
-
+    
     // Form State
     const [newName, setNewName] = useState('');
     const [newLocation, setNewLocation] = useState('');
     const [newCapacity, setNewCapacity] = useState('');
     const [newPrice, setNewPrice] = useState('');
     const [newDescription, setNewDescription] = useState('');
-    const [imageLink, setImageLink] = useState('');
-    const [selectedImage, setSelectedImage] = useState(null);
+    const [imageLink, setImageLink] = useState(''); 
+    const [selectedImage, setSelectedImage] = useState(null); 
     const [phone, setPhone] = useState('');
     const [fbPage, setFbPage] = useState('');
     const [igHandle, setIgHandle] = useState('');
     const [selectedModel, setSelectedModel] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dgvbemrgw/image/upload';
-    const UPLOAD_PRESET = 'venues';
+    // Cloudinary Config
+    const CLOUD_NAME = 'dgvbemrgw';
+    const UPLOAD_PRESET = 'venues'; // Ensure this preset allows "Unsigned" uploads in Cloudinary settings
 
     useEffect(() => {
         const q = query(collection(db, 'venues'));
@@ -81,13 +82,11 @@ export default function AdminDashboardScreen({ navigation }) {
     const handleDelete = (venueId) => {
         Alert.alert("Delete Venue", "Are you sure you want to remove this venue permanently?", [
             { text: "Cancel", style: "cancel" },
-            {
-                text: "Delete", style: "destructive", onPress: async () => {
-                    try {
-                        await deleteDoc(doc(db, 'venues', venueId));
-                    } catch (e) { Alert.alert("Error", "Could not delete venue."); }
-                }
-            }
+            { text: "Delete", style: "destructive", onPress: async () => {
+                try {
+                    await deleteDoc(doc(db, 'venues', venueId));
+                } catch (e) { Alert.alert("Error", "Could not delete venue."); }
+            }}
         ]);
     };
 
@@ -100,7 +99,7 @@ export default function AdminDashboardScreen({ navigation }) {
         });
         if (!result.canceled) {
             setSelectedImage(result.assets[0]);
-            setImageLink('');
+            setImageLink(''); 
         }
     };
 
@@ -118,16 +117,43 @@ export default function AdminDashboardScreen({ navigation }) {
         }
     };
 
+    // FIXED: Corrected logic for large files and GLB resource types
     const uploadFile = async (file, type = 'image') => {
+        const isModel = type === 'auto';
         const data = new FormData();
-        data.append('file', {
-            uri: file.uri,
-            type: type === 'image' ? 'image/jpeg' : 'application/octet-stream',
-            name: file.name || (type === 'image' ? 'upload.jpg' : 'model.glb')
+        
+        // LARGE FILE FIX: GLB files (raw) must use the specific 'raw' or 'auto' endpoint
+        const resourceType = isModel ? 'raw' : 'image';
+        const CLOUDINARY_ENDPOINT = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
+
+        data.append('file', { 
+            uri: file.uri, 
+            type: isModel ? 'application/octet-stream' : 'image/jpeg', 
+            name: file.name || (isModel ? 'model.glb' : 'upload.jpg') 
         });
+        
         data.append('upload_preset', UPLOAD_PRESET);
-        const response = await fetch(CLOUDINARY_URL, { method: 'POST', body: data });
+
+        // This tells Cloudinary to handle a large stream (essential for 3D scans)
+        if (isModel) {
+            data.append('chunk_size', '6000000'); 
+        }
+
+        const response = await fetch(CLOUDINARY_ENDPOINT, { 
+            method: 'POST', 
+            body: data,
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'multipart/form-data',
+            }
+        });
+
         const result = await response.json();
+        
+        if (!result.secure_url) {
+            throw new Error(result.error?.message || "Upload failed");
+        }
+        
         return result.secure_url;
     };
 
@@ -139,9 +165,9 @@ export default function AdminDashboardScreen({ navigation }) {
 
         setIsSubmitting(true);
         try {
-            let finalImageUrl = imageLink;
+            let finalImageUrl = imageLink; 
             if (selectedImage) finalImageUrl = await uploadFile(selectedImage, 'image');
-
+            
             let modelUrl = null;
             if (selectedModel) modelUrl = await uploadFile(selectedModel, 'auto');
 
@@ -151,10 +177,10 @@ export default function AdminDashboardScreen({ navigation }) {
                 capacity: newCapacity ? `${newCapacity} Pax` : "N/A",
                 price: newPrice ? `₱${newPrice} / day` : "Price on Request",
                 description: newDescription,
-                contact: {
-                    phone: phone || '',
-                    facebook: fbPage || '',
-                    instagram: igHandle || ''
+                contact: { 
+                    phone: phone || '', 
+                    facebook: fbPage || '', 
+                    instagram: igHandle || '' 
                 },
                 image: finalImageUrl,
                 updatedAt: serverTimestamp(),
@@ -186,7 +212,7 @@ export default function AdminDashboardScreen({ navigation }) {
             Alert.alert("Success", isEditing ? "Venue updated!" : "Venue published!");
         } catch (error) {
             console.error(error);
-            Alert.alert("Error", "Transaction failed.");
+            Alert.alert("Error", error.message || "Transaction failed.");
         } finally {
             setIsSubmitting(false);
         }
@@ -196,7 +222,7 @@ export default function AdminDashboardScreen({ navigation }) {
         <View style={[tw`bg-white rounded-[24px] mb-6 overflow-hidden`, { elevation: 3 }]}>
             <View style={tw`relative w-full h-48 bg-slate-200`}>
                 <Image source={{ uri: item.image }} style={tw`w-full h-full absolute`} resizeMode="cover" />
-                <TouchableOpacity
+                <TouchableOpacity 
                     onPress={() => handleDelete(item.id)}
                     style={tw`absolute top-4 left-4 bg-red-500 w-10 h-10 rounded-full items-center justify-center shadow-md`}
                 >
@@ -284,28 +310,30 @@ export default function AdminDashboardScreen({ navigation }) {
 
                                 <TextInput style={styles.input} placeholder="Venue Name" value={newName} onChangeText={setNewName} />
                                 <TextInput style={[styles.input, tw`mt-3`]} placeholder="Location" value={newLocation} onChangeText={setNewLocation} />
-
+                                
                                 <View style={tw`flex-row justify-between mt-3`}>
                                     <TextInput style={[styles.input, { width: '48%' }]} placeholder="Capacity (Pax)" value={newCapacity} onChangeText={setNewCapacity} keyboardType="numeric" />
                                     <TextInput style={[styles.input, { width: '48%' }]} placeholder="Price (Numeric)" value={newPrice} onChangeText={setNewPrice} keyboardType="numeric" />
                                 </View>
 
-                                <TextInput
-                                    style={[styles.input, tw`mt-3 h-24`, { textAlignVertical: 'top' }]}
-                                    placeholder="Description"
-                                    multiline
-                                    value={newDescription}
-                                    onChangeText={setNewDescription}
+                                <TextInput 
+                                    style={[styles.input, tw`mt-3 h-24`, { textAlignVertical: 'top' }]} 
+                                    placeholder="Description" 
+                                    multiline 
+                                    value={newDescription} 
+                                    onChangeText={setNewDescription} 
                                 />
 
                                 <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Contact Details</CustomText>
                                 <TextInput style={styles.input} placeholder="Contact Number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-                                <TextInput style={[styles.input, tw`mt-3`]} placeholder="Facebook Page URL" value={fbPage} onChangeText={setFbPage} />
-                                <TextInput style={[styles.input, tw`mt-3`]} placeholder="Instagram Handle (@...)" value={igHandle} onChangeText={setIgHandle} />
+                                <View style={tw`h-3`} />
+                                <TextInput style={styles.input} placeholder="Facebook Page URL" value={fbPage} onChangeText={setFbPage} />
+                                <View style={tw`h-3`} />
+                                <TextInput style={styles.input} placeholder="Instagram Handle (@...)" value={igHandle} onChangeText={setIgHandle} />
 
                                 <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Media & 3D Assets</CustomText>
                                 <TextInput style={styles.input} placeholder="Image URL (Optional)" value={imageLink} onChangeText={setImageLink} />
-
+                                
                                 <View style={tw`flex-row mt-2`}>
                                     <TouchableOpacity style={tw`flex-1 mr-2 p-4 border-dashed border border-slate-300 rounded-xl items-center`} onPress={pickImage}>
                                         <Ionicons name="image-outline" size={20} color={selectedImage ? "#00686F" : "#64748B"} />
@@ -318,8 +346,8 @@ export default function AdminDashboardScreen({ navigation }) {
                                     </TouchableOpacity>
                                 </View>
 
-                                <TouchableOpacity
-                                    style={[tw`mt-8 h-14 rounded-2xl items-center justify-center`, { backgroundColor: '#00686F' }]}
+                                <TouchableOpacity 
+                                    style={[tw`mt-8 h-14 rounded-2xl items-center justify-center`, { backgroundColor: '#00686F' }]} 
                                     onPress={handleSaveVenue}
                                     disabled={isSubmitting}
                                 >
@@ -331,7 +359,7 @@ export default function AdminDashboardScreen({ navigation }) {
                 </View>
             </Modal>
 
-            <TouchableOpacity
+            <TouchableOpacity 
                 style={tw`absolute bottom-8 right-6 w-16 h-16 rounded-2xl bg-[#00686F] items-center justify-center shadow-lg`}
                 onPress={() => { setIsEditing(false); setModalVisible(true); }}
             >
