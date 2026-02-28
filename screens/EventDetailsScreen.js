@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-    View, TouchableOpacity, Dimensions,
+    View, TouchableOpacity, Dimensions, Animated,
     ActivityIndicator, StatusBar, TextInput, Modal, KeyboardAvoidingView,
     Platform, Alert, Linking, Share
 } from 'react-native';
@@ -32,8 +32,9 @@ const formatDate = (dateVal) => {
 
 const formatTime = (timeVal) => {
     if (!timeVal) return 'Not set';
+    if (typeof timeVal === 'string') return timeVal;
     let t = timeVal.seconds ? new Date(timeVal.seconds * 1000) : new Date(timeVal);
-    if (isNaN(t.getTime())) return 'Invalid Time';
+    if (isNaN(t.getTime())) return 'Not set';
     return t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 };
 
@@ -46,39 +47,46 @@ const getPriorityLabel = (p) =>
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const InfoRow = ({ icon, label, value }) => (
-    <View style={tw`flex-row items-start py-3 border-b border-slate-100`}>
-        <View style={tw`w-8 h-8 rounded-xl bg-teal-50 items-center justify-center mr-3 mt-0.5`}>
+    <View style={tw`flex-row items-center py-3 border-b border-slate-100`}>
+        <View style={tw`w-8 h-8 rounded-xl bg-teal-50 items-center justify-center mr-3`}>
             <Ionicons name={icon} size={15} color="#00686F" />
         </View>
         <View style={tw`flex-1`}>
-            <CustomText style={tw`text-xs font-bold text-slate-400 tracking-widest mb-0.5`}>{label}</CustomText>
-            <CustomText style={tw`text-sm text-slate-600 font-medium leading-5`}>{value || 'Not set'}</CustomText>
+            <CustomText style={tw`text-[10px] font-bold text-slate-400 tracking-widest mb-0.5`}>{label}</CustomText>
+            <CustomText style={tw`text-[13px] text-slate-700 font-semibold`} numberOfLines={2}>{value || '—'}</CustomText>
         </View>
     </View>
 );
 
-const CollabChip = ({ email, isOwnerChip }) => (
+const CollabChip = ({ email, isOwnerChip, ownerName }) => (
     <View style={[
         tw`flex-row items-center rounded-2xl px-3 py-1.5 mr-2 mb-2`,
         isOwnerChip
-            ? tw`bg-teal-50 border border-teal-200`
-            : tw`bg-slate-100 border border-slate-200`
+            ? { backgroundColor: '#E8F5F5', borderWidth: 1, borderColor: '#99D6D9' }
+            : { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' }
     ]}>
         <View style={[
             tw`w-5 h-5 rounded-full items-center justify-center mr-1.5`,
-            isOwnerChip ? tw`bg-teal-600` : tw`bg-slate-400`
+            isOwnerChip ? { backgroundColor: '#00686F' } : { backgroundColor: '#94A3B8' }
         ]}>
             {isOwnerChip
                 ? <Ionicons name="star" size={9} color="#FFF" />
                 : <CustomText style={tw`text-white text-xs font-bold`}>{email.charAt(0).toUpperCase()}</CustomText>
             }
         </View>
-        <CustomText
-            style={[tw`text-xs font-semibold`, isOwnerChip ? tw`text-teal-700` : tw`text-slate-600`]}
-            numberOfLines={1}
-        >
-            {isOwnerChip ? 'Owner' : email}
-        </CustomText>
+        <View>
+            {isOwnerChip && (
+                <CustomText style={{ fontSize: 9, color: '#00686F', fontWeight: '900', letterSpacing: 0.5 }}>
+                    OWNER
+                </CustomText>
+            )}
+            <CustomText
+                style={[tw`text-xs font-semibold`, isOwnerChip ? { color: '#00686F' } : tw`text-slate-600`]}
+                numberOfLines={1}
+            >
+                {isOwnerChip ? ownerName : email}
+            </CustomText>
+        </View>
     </View>
 );
 
@@ -89,6 +97,8 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [uploadingInvitation, setUploadingInvitation] = useState(false);
+    const [invitationFile, setInvitationFile] = useState(null); // { url, name }
     const [deletingWorkspace, setDeletingWorkspace] = useState(false);
     const [deletingList, setDeletingList] = useState(false);
     const [sendingInvite, setSendingInvite] = useState(false);
@@ -114,7 +124,40 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [activeTask, setActiveTask] = useState(null);
     const [activeColumnId, setActiveColumnId] = useState(null);
 
+    // ── Scroll navigation refs ─────────────────────────────────────────────────
+    const mainScrollRef = useRef(null);
+    const overviewRef   = useRef(null);
+    const sectionOffsets = useRef({});
+
     const isOwner = useMemo(() => eventData?.userId === auth.currentUser?.uid, [eventData]);
+    const [ownerName, setOwnerName] = useState('Owner');
+    const [overviewCollapsed, setOverviewCollapsed] = useState(true);
+    const overviewAnim = useRef(new Animated.Value(0)).current;
+
+    // ── Overall planning progress (tasks + subtasks across all lists) ──────────
+    const overallProgress = useMemo(() => {
+        if (!columns || columns.length === 0) return null;
+
+        let totalItems = 0;
+        let completedItems = 0;
+
+        columns.forEach(col => {
+            (col.tasks || []).forEach(task => {
+                // Count the task itself
+                totalItems += 1;
+                if (task.completed) completedItems += 1;
+
+                // Count each subtask
+                (task.subtasks || []).forEach(sub => {
+                    totalItems += 1;
+                    if (sub.completed) completedItems += 1;
+                });
+            });
+        });
+
+        if (totalItems === 0) return null;
+        return Math.round((completedItems / totalItems) * 100);
+    }, [columns]);
 
     useFocusEffect(
         useCallback(() => {
@@ -127,6 +170,18 @@ export default function EventDetailsScreen({ route, navigation }) {
                         const data = docSnap.data();
                         setEventData(data);
                         if (data.columns) setColumns(data.columns);
+                        if (data.invitationFile) setInvitationFile(data.invitationFile);
+                        // Fetch owner's display name
+                        if (data.userId) {
+                            try {
+                                const userSnap = await getDocs(query(collection(db, 'users'), where('uid', '==', data.userId), limit(1)));
+                                if (!userSnap.empty) {
+                                    const u = userSnap.docs[0].data();
+                                    const name = u.displayName || u.firstName || u.name || u.email || 'Owner';
+                                    if (isActive) setOwnerName(name);
+                                }
+                            } catch (_) {}
+                        }
                     }
                 } catch (error) {
                     console.error('Fetch Error:', error);
@@ -363,6 +418,61 @@ export default function EventDetailsScreen({ route, navigation }) {
         }
     };
 
+    const handleUploadInvitation = async () => {
+        // ── Cloudinary config — replace with your own values ────────────────────
+        const CLOUDINARY_CLOUD_NAME    = 'dgvbemrgw';    // e.g. 'dxyz123abc'
+        const CLOUDINARY_UPLOAD_PRESET = 'invitation'; // must be Unsigned
+        // ─────────────────────────────────────────────────────────────────────────
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: '*/*',
+                copyToCacheDirectory: true,
+            });
+            if (result.canceled) return;
+            setUploadingInvitation(true);
+
+            const file = result.assets[0];
+            if (!file?.uri) throw new Error('No file URI returned from picker');
+
+            // Build FormData — only params allowed by unsigned presets
+            const formData = new FormData();
+            formData.append('file', {
+                uri:  file.uri,
+                name: file.name,
+                type: file.mimeType || 'application/octet-stream',
+            });
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+            formData.append('folder', `occasio/invitations/${eventId}`);
+
+            const response = await fetch(
+                `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+                { method: 'POST', body: formData }
+            );
+
+            if (!response.ok) {
+                const errBody = await response.json().catch(() => ({}));
+                throw new Error(errBody?.error?.message || `Cloudinary error ${response.status}`);
+            }
+
+            const cloudData = await response.json();
+
+            // Inject fl_attachment into the URL so guests download instead of preview.
+            // This is done on the URL string — NOT as an upload param — so it works
+            // with unsigned presets.
+            const downloadUrl = cloudData.secure_url.replace('/upload/', '/upload/fl_attachment/');
+
+            const invFile = { url: downloadUrl, name: file.name };
+            await updateDoc(doc(db, 'events', eventId), { invitationFile: invFile });
+            setInvitationFile(invFile);
+            Alert.alert('Uploaded!', `"${file.name}" is now attached as the invitation file.`);
+        } catch (error) {
+            console.error('Invitation upload error:', error);
+            Alert.alert('Upload Failed', error.message || 'Something went wrong. Please try again.');
+        } finally {
+            setUploadingInvitation(false);
+        }
+    };
+
     // ── FIXED: Centralized modal close — resets all modal state reliably ───────
     const closeModal = () => {
         setModalVisible(false);
@@ -434,235 +544,507 @@ export default function EventDetailsScreen({ route, navigation }) {
         } catch (error) { console.log(error); }
     };
 
+
+
     // ── Loading ────────────────────────────────────────────────────────────────
     if (loading) {
         return (
-            <View style={tw`flex-1 bg-slate-50`}>
+            <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
                 <StatusBar barStyle="light-content" backgroundColor="#00686F" />
                 <SafeAreaView style={tw`flex-1`} edges={['top', 'left', 'right']}>
-                    {/* Skeleton Header */}
-                    <View style={tw`bg-teal-700 px-4 pt-2 pb-5`}>
-                        <View style={tw`flex-row items-center`}>
-                            <View style={tw`w-10 h-10 rounded-2xl bg-white bg-opacity-20`} />
-                            <View style={tw`flex-1 mx-3`}>
-                                <View style={tw`h-4 w-40 rounded-full bg-white bg-opacity-30 mb-1.5`} />
-                                <View style={tw`h-2.5 w-24 rounded-full bg-white bg-opacity-20`} />
+                    {/* Skeleton Hero */}
+                    <View style={{ backgroundColor: '#00686F', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24 }}>
+                        <View style={tw`flex-row items-center mb-4`}>
+                            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                            <View style={{ flex: 1, marginHorizontal: 12 }}>
+                                <View style={{ height: 18, width: 160, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.3)', marginBottom: 6 }} />
+                                <View style={{ height: 11, width: 100, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.2)' }} />
                             </View>
-                            <View style={tw`w-10 h-10 rounded-2xl bg-white bg-opacity-20`} />
+                            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)' }} />
                         </View>
+                        <View style={{ height: 56, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.12)' }} />
                     </View>
-
-                    {/* Skeleton Board */}
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={tw`px-4 py-4 items-start`}
-                        scrollEnabled={false}
-                    >
-                        {/* Skeleton Overview Column */}
-                        <View style={[
-                            tw`bg-white rounded-3xl p-5 mr-4`,
-                            { width: COLUMN_WIDTH, height: height * 0.72, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 }
-                        ]}>
-                            <View style={tw`flex-row items-center justify-between mb-5`}>
-                                <View style={tw`flex-row items-center`}>
-                                    <View style={tw`w-9 h-9 rounded-2xl bg-slate-100`} />
-                                    <View style={tw`h-4 w-24 rounded-full bg-slate-200 ml-3`} />
-                                </View>
-                                <View style={tw`h-7 w-14 rounded-full bg-slate-100`} />
-                            </View>
-
-                            <View style={tw`bg-slate-100 rounded-2xl p-4 mb-4`}>
-                                <View style={tw`h-2.5 w-20 rounded-full bg-slate-200 mb-3`} />
-                                <View style={tw`flex-row gap-2`}>
-                                    <View style={tw`flex-1 h-9 rounded-xl bg-slate-200`} />
-                                    <View style={tw`flex-1 h-9 rounded-xl bg-slate-200`} />
-                                </View>
-                            </View>
-
-                            {[90, 120, 80, 70, 150].map((w, i) => (
-                                <View key={i} style={tw`flex-row items-start py-3 border-b border-slate-100`}>
-                                    <View style={tw`w-8 h-8 rounded-xl bg-slate-100 mr-3`} />
-                                    <View style={tw`flex-1`}>
-                                        <View style={tw`h-2 w-12 rounded-full bg-slate-200 mb-2`} />
-                                        <View style={[tw`h-3 rounded-full bg-slate-100`, { width: w }]} />
+                    {/* Skeleton tab bar */}
+                    <View style={{ height: 52, backgroundColor: '#FFF', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 8, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                        {[80, 100, 70, 90].map((w, i) => (
+                            <View key={i} style={{ width: w, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9' }} />
+                        ))}
+                    </View>
+                    {/* Skeleton list */}
+                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+                        {[1, 2, 3].map((_, i) => (
+                            <View key={i} style={{ backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 }}>
+                                <View style={{ height: 13, width: 120, borderRadius: 6, backgroundColor: '#F1F5F9', marginBottom: 12 }} />
+                                {[1, 2, 3].map((_, j) => (
+                                    <View key={j} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: j < 2 ? 1 : 0, borderBottomColor: '#F8FAFC' }}>
+                                        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#F1F5F9', marginRight: 12 }} />
+                                        <View style={{ flex: 1, height: 12, borderRadius: 6, backgroundColor: '#F1F5F9' }} />
                                     </View>
-                                </View>
-                            ))}
-                        </View>
-
-                        {/* Skeleton Task Column */}
-                        <View style={[
-                            tw`bg-slate-100 rounded-3xl mr-4 p-4`,
-                            { width: COLUMN_WIDTH, height: height * 0.72, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 }
-                        ]}>
-                            <View style={tw`flex-row items-center justify-between mb-2`}>
-                                <View style={tw`h-3.5 w-28 rounded-full bg-slate-300`} />
-                                <View style={tw`h-6 w-10 rounded-full bg-white`} />
+                                ))}
                             </View>
-                            <View style={tw`h-1.5 bg-slate-200 rounded-full mb-4`} />
-
-                            {[['70%', true], ['55%', false], ['80%', true], ['60%', false]].map(([w, hasBadge], i) => (
-                                <View key={i} style={[
-                                    tw`bg-white rounded-2xl p-3.5 mb-2`,
-                                    { borderLeftWidth: 4, borderLeftColor: '#E2E8F0' }
-                                ]}>
-                                    <View style={tw`flex-row items-center`}>
-                                        <View style={tw`w-5 h-5 rounded-md bg-slate-100 mr-2.5`} />
-                                        <View style={[tw`h-3 rounded-full bg-slate-100`, { width: w }]} />
-                                    </View>
-                                    {hasBadge && (
-                                        <View style={tw`flex-row mt-2.5 ml-7 gap-2`}>
-                                            <View style={tw`h-5 w-12 rounded-lg bg-slate-100`} />
-                                        </View>
-                                    )}
-                                </View>
-                            ))}
-                        </View>
+                        ))}
                     </ScrollView>
                 </SafeAreaView>
             </View>
         );
     }
 
+    // ── Helpers for new layout ─────────────────────────────────────────────────
+    const PRIORITY_META = {
+        A: { label: 'High',   color: '#EF4444', bg: '#FEF2F2' },
+        B: { label: 'Med',    color: '#F59E0B', bg: '#FFFBEB' },
+        C: { label: 'Low',    color: '#10B981', bg: '#F0FDF4' },
+    };
+
+    const totalTasks = columns.reduce((a, c) => a + (c.tasks?.length || 0), 0);
+    const doneTasks  = columns.reduce((a, c) => a + (c.tasks?.filter(t => t.completed).length || 0), 0);
+
+    const toggleOverview = () => {
+        const toValue = overviewCollapsed ? 1 : 0;
+        setOverviewCollapsed(prev => !prev);
+        Animated.timing(overviewAnim, {
+            toValue,
+            duration: 260,
+            useNativeDriver: true,
+        }).start();
+    };
+
     // ── Render ─────────────────────────────────────────────────────────────────
     return (
-        <View style={tw`flex-1 bg-slate-50`}>
+        <View style={{ flex: 1, backgroundColor: '#F4F6F9' }}>
             <StatusBar barStyle="light-content" backgroundColor="#00686F" />
 
-            <SafeAreaView style={tw`flex-1`} edges={['top', 'left', 'right']}>
+            <SafeAreaView style={{ flex: 1 }} edges={['top', 'left', 'right']}>
 
-                {/* ── Header ─────────────────────────────────────────────── */}
-                <View style={tw`bg-teal-700 px-4 pt-2 pb-5`}>
-                    <View style={tw`flex-row items-center`}>
-                        <TouchableOpacity
-                            onPress={() => navigation.goBack()}
-                            style={tw`w-10 h-10 rounded-2xl bg-white bg-opacity-20 items-center justify-center`}
-                        >
-                            <Ionicons name="chevron-back" size={22} color="#FFF" />
-                        </TouchableOpacity>
+                {/* ═══════════════════════════════════════════════════════
+                    HERO HEADER
+                    ─ Deep teal, compact, information-rich
+                ═══════════════════════════════════════════════════════ */}
+                <View style={{ backgroundColor: '#00686F' }}>
+                    <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20 }}>
 
-                        <View style={tw`flex-1 mx-3`}>
-                            <CustomText style={tw`text-white text-lg font-extrabold`} numberOfLines={1}>
-                                {eventData?.title}
-                            </CustomText>
-                            <CustomText style={tw`text-teal-200 text-xs font-bold tracking-widest mt-0.5`}>
-                                EVENT WORKSPACE
-                            </CustomText>
-                        </View>
-
-                        {isOwner && (
+                        {/* Top bar */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
                             <TouchableOpacity
-                                onPress={() => setMenuVisible(true)}
-                                style={tw`w-10 h-10 rounded-2xl bg-white bg-opacity-20 items-center justify-center`}
+                                onPress={() => navigation.goBack()}
+                                style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
                             >
-                                <Ionicons name="ellipsis-horizontal" size={22} color="#FFF" />
+                                <Ionicons name="chevron-back" size={20} color="#FFF" />
                             </TouchableOpacity>
-                        )}
-                    </View>
-                </View>
 
-                {/* ── Board ──────────────────────────────────────────────── */}
-                <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    snapToInterval={COLUMN_WIDTH + 16}
-                    decelerationRate="fast"
-                    contentContainerStyle={tw`px-4 py-4 items-start`}
-                >
-                    {/* ── Overview Column ──────────────────────────────── */}
-                    <View style={[
-                        tw`bg-white rounded-3xl p-5 mr-4`,
-                        { width: COLUMN_WIDTH, maxHeight: height * 0.78, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 }
-                    ]}>
-                        <View style={tw`flex-row items-center justify-between mb-4`}>
-                            <View style={tw`flex-row items-center`}>
-                                <View style={tw`w-9 h-9 rounded-2xl bg-teal-50 items-center justify-center mr-3`}>
-                                    <Ionicons name="stats-chart" size={18} color="#00686F" />
+                            <View style={{ flex: 1, marginHorizontal: 12 }}>
+                                <CustomText style={{ color: '#FFF', fontSize: 18, fontWeight: '800', lineHeight: 22 }} numberOfLines={1}>
+                                    {eventData?.title}
+                                </CustomText>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 6 }}>
+                                    {eventData?.eventType ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 }}>
+                                            <Ionicons name="pricetag-outline" size={9} color="rgba(255,255,255,0.85)" />
+                                            <CustomText style={{ color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700', marginLeft: 3 }}>
+                                                {eventData.eventType}
+                                            </CustomText>
+                                        </View>
+                                    ) : null}
+                                    {eventData?.startDate ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 }}>
+                                            <Ionicons name="calendar-outline" size={9} color="rgba(255,255,255,0.85)" />
+                                            <CustomText style={{ color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: '700', marginLeft: 3 }}>
+                                                {formatDate(eventData.startDate)}
+                                            </CustomText>
+                                        </View>
+                                    ) : null}
                                 </View>
-                                <CustomText style={tw`text-slate-800 text-lg font-extrabold`}>Overview</CustomText>
                             </View>
+
                             {isOwner && (
                                 <TouchableOpacity
-                                    onPress={() => navigation.navigate('UpdateEvent', { eventId, eventData })}
-                                    style={tw`flex-row items-center bg-teal-50 px-3 py-1.5 rounded-full`}
+                                    onPress={() => setMenuVisible(true)}
+                                    style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' }}
                                 >
-                                    <Ionicons name="pencil" size={12} color="#00686F" />
-                                    <CustomText style={tw`text-teal-700 text-xs font-bold ml-1`}>Edit</CustomText>
+                                    <Ionicons name="ellipsis-horizontal" size={20} color="#FFF" />
                                 </TouchableOpacity>
                             )}
                         </View>
 
-                        <ScrollView showsVerticalScrollIndicator={false}>
-                            {/* RSVP Card */}
-                            <View style={tw`bg-teal-50 border border-teal-100 rounded-2xl p-4 mb-4`}>
-                                <CustomText style={tw`text-teal-700 text-xs font-black tracking-widest mb-3`}>RSVP TRACKER</CustomText>
-                                <View style={tw`flex-row gap-2`}>
-                                    {isOwner && (
-                                        <TouchableOpacity
-                                            onPress={handleShareInvitation}
-                                            style={tw`flex-1 flex-row items-center justify-center bg-teal-700 py-2.5 rounded-xl`}
-                                        >
-                                            <Ionicons name="share-social" size={15} color="#FFF" />
-                                            <CustomText style={tw`text-white text-xs font-bold ml-1.5`}>Share Invite</CustomText>
-                                        </TouchableOpacity>
-                                    )}
-                                    <TouchableOpacity
-                                        onPress={openRSVPTracker}
-                                        style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl border border-teal-600`}
-                                    >
-                                        <Ionicons name="people" size={15} color="#00686F" />
-                                        <CustomText style={tw`text-teal-700 text-xs font-bold ml-1.5`}>View Tracker</CustomText>
-                                    </TouchableOpacity>
+                        {/* Progress card — only when tasks exist */}
+                        {overallProgress !== null && (
+                            <View style={{ backgroundColor: 'rgba(0,0,0,0.18)', borderRadius: 18, padding: 14 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons
+                                            name={overallProgress === 100 ? 'checkmark-circle' : 'analytics-outline'}
+                                            size={15}
+                                            color={overallProgress === 100 ? '#6EE7B7' : 'rgba(255,255,255,0.8)'}
+                                        />
+                                        <CustomText style={{ color: 'rgba(255,255,255,0.75)', fontSize: 11, fontWeight: '800', letterSpacing: 0.8, marginLeft: 6 }}>
+                                            PLANNING PROGRESS
+                                        </CustomText>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                                        <CustomText style={{ color: '#FFF', fontSize: 22, fontWeight: '900', lineHeight: 26 }}>
+                                            {overallProgress}
+                                        </CustomText>
+                                        <CustomText style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: '700', marginLeft: 1 }}>%</CustomText>
+                                    </View>
+                                </View>
+
+                                {/* Segmented progress bar */}
+                                <View style={{ height: 6, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                                    <View style={{
+                                        height: '100%',
+                                        width: `${overallProgress}%`,
+                                        backgroundColor: overallProgress === 100 ? '#6EE7B7' : '#FFF',
+                                        borderRadius: 3,
+                                    }} />
+                                </View>
+
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <CustomText style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11, fontWeight: '600' }} numberOfLines={1}>
+                                        {overallProgress === 100
+                                            ? `🎉 ${eventData?.title} is fully planned!`
+                                            : `${doneTasks} of ${totalTasks} tasks done`}
+                                    </CustomText>
+                                    <CustomText style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600' }}>
+                                        {columns.length} {columns.length === 1 ? 'list' : 'lists'}
+                                    </CustomText>
                                 </View>
                             </View>
-
-                            {/* Info Rows */}
-                            <InfoRow icon="pricetag-outline" label="TYPE" value={eventData?.eventType} />
-                            <InfoRow icon="location-outline" label="LOCATION" value={eventData?.location || 'TBD'} />
-                            <InfoRow icon="calendar-outline" label="START DATE" value={formatDate(eventData?.startDate)} />
-                            <InfoRow icon="time-outline" label="START TIME" value={formatTime(eventData?.startTime)} />
-                            <InfoRow icon="document-text-outline" label="DESCRIPTION" value={eventData?.description || 'No description provided'} />
-
-                            {/* Team */}
-                            <View style={tw`pt-4`}>
-                                <CustomText style={tw`text-xs font-black text-slate-400 tracking-widest mb-3`}>TEAM</CustomText>
-                                <View style={tw`flex-row flex-wrap`}>
-                                    <CollabChip email="owner" isOwnerChip={true} />
-                                    {eventData?.collaborators?.map((email, index) => (
-                                        <CollabChip key={index} email={email} isOwnerChip={false} />
-                                    ))}
-                                </View>
-                            </View>
-
-                            <View style={tw`h-6`} />
-                        </ScrollView>
+                        )}
                     </View>
 
-                    {/* ── Task Columns ─────────────────────────────────── */}
-                    {columns.map((col) => {
+                    {/* ── Tab Bar — sticks to bottom of header ── */}
+                    <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}
+                        >
+                            {/* Overview tab */}
+                            <TouchableOpacity
+                                onPress={() => {
+                                    // scroll to overview — handled by ref below
+                                    overviewRef.current?.scrollTo({ y: 0, animated: true });
+                                    mainScrollRef.current?.scrollTo({ y: 0, animated: true });
+                                }}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 7,
+                                    borderRadius: 20,
+                                    backgroundColor: '#00686F',
+                                    shadowColor: '#00686F',
+                                    shadowOpacity: 0.35,
+                                    shadowRadius: 6,
+                                    shadowOffset: { width: 0, height: 2 },
+                                    elevation: 4,
+                                }}
+                            >
+                                <Ionicons name="grid-outline" size={12} color="#FFF" />
+                                <CustomText style={{ color: '#FFF', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>Overview</CustomText>
+                            </TouchableOpacity>
+
+                            {/* + New List tab */}
+                            {isOwner && (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setModalConfig({ type: 'ADD_COLUMN', title: 'New list name' });
+                                        setInputText('');
+                                        setModalVisible(true);
+                                    }}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        paddingHorizontal: 14,
+                                        paddingVertical: 7,
+                                        borderRadius: 20,
+                                        borderWidth: 1.5,
+                                        borderColor: '#00686F',
+                                        borderStyle: 'dashed',
+                                        backgroundColor: '#F0F9F9',
+                                    }}
+                                >
+                                    <Ionicons name="add" size={13} color="#00686F" />
+                                    <CustomText style={{ color: '#00686F', fontSize: 12, fontWeight: '700', marginLeft: 4 }}>New List</CustomText>
+                                </TouchableOpacity>
+                            )}
+
+                            {/* List tabs */}
+                            {columns.map((col) => {
+                                const done = col.tasks?.filter(t => t.completed).length || 0;
+                                const tot  = col.tasks?.length || 0;
+                                const pct  = tot > 0 ? Math.round((done / tot) * 100) : 0;
+                                return (
+                                    <TouchableOpacity
+                                        key={col.id}
+                                        onPress={() => {
+                                            const idx = columns.indexOf(col);
+                                            sectionRefs.current[idx]?.scrollIntoView?.();
+                                            // RN equivalent: scroll main to that section
+                                            sectionOffsets.current[col.id] && mainScrollRef.current?.scrollTo({
+                                                y: sectionOffsets.current[col.id],
+                                                animated: true
+                                            });
+                                        }}
+                                        style={{
+                                            flexDirection: 'row',
+                                            alignItems: 'center',
+                                            paddingHorizontal: 14,
+                                            paddingVertical: 7,
+                                            borderRadius: 20,
+                                            backgroundColor: '#F4F6F9',
+                                            borderWidth: 1,
+                                            borderColor: '#E8ECF0',
+                                        }}
+                                    >
+                                        <CustomText style={{ color: '#475569', fontSize: 12, fontWeight: '700' }}>{col.title}</CustomText>
+                                        {tot > 0 && (
+                                            <View style={{ marginLeft: 6, backgroundColor: pct === 100 ? '#D1FAE5' : '#E8F5F5', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 }}>
+                                                <CustomText style={{ color: pct === 100 ? '#059669' : '#00686F', fontSize: 10, fontWeight: '800' }}>
+                                                    {pct}%
+                                                </CustomText>
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+                                );
+                            })}
+
+                            
+                        </ScrollView>
+                    </View>
+                </View>
+
+                {/* ═══════════════════════════════════════════════════════
+                    MAIN SCROLL CANVAS
+                ═══════════════════════════════════════════════════════ */}
+                <ScrollView
+                    ref={mainScrollRef}
+                    style={{ flex: 1 }}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                    showsVerticalScrollIndicator={false}
+                >
+
+                    {/* ── OVERVIEW SECTION ──────────────────────────────── */}
+                    <View
+                        ref={overviewRef}
+                        style={{
+                            backgroundColor: '#FFF',
+                            marginHorizontal: 16,
+                            marginTop: 16,
+                            borderRadius: 20,
+                            overflow: 'hidden',
+                            shadowColor: '#00686F',
+                            shadowOpacity: 0.08,
+                            shadowRadius: 12,
+                            shadowOffset: { width: 0, height: 3 },
+                            elevation: 3,
+                        }}
+                    >
+                        {/* Section header — tap to collapse/expand */}
+                        <TouchableOpacity
+                            onPress={toggleOverview}
+                            activeOpacity={0.8}
+                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: overviewCollapsed ? 0 : 1, borderBottomColor: '#F8FAFC' }}
+                        >
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#E8F5F5', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                                    <Ionicons name="calendar" size={16} color="#00686F" />
+                                </View>
+                                <View>
+                                    <CustomText style={{ color: '#0F172A', fontSize: 15, fontWeight: '800' }}>Event Overview</CustomText>
+                                    <CustomText style={{ color: '#94A3B8', fontSize: 11, fontWeight: '500', marginTop: 1 }}>
+                                        {overviewCollapsed ? 'Tap to expand' : 'Details & team'}
+                                    </CustomText>
+                                </View>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                {isOwner && !overviewCollapsed && (
+                                    <TouchableOpacity
+                                        onPress={() => navigation.navigate('UpdateEvent', { eventId, eventData })}
+                                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F4F6F9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}
+                                    >
+                                        <Ionicons name="pencil-outline" size={12} color="#64748B" />
+                                        <CustomText style={{ color: '#64748B', fontSize: 12, fontWeight: '700', marginLeft: 4 }}>Edit</CustomText>
+                                    </TouchableOpacity>
+                                )}
+                                <Animated.View style={{
+                                    transform: [{
+                                        rotate: overviewAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })
+                                    }]
+                                }}>
+                                    <Ionicons name="chevron-down" size={18} color="#94A3B8" />
+                                </Animated.View>
+                            </View>
+                        </TouchableOpacity>
+
+                        {!overviewCollapsed && (
+                            <>
+                                {/* Quick stats row */}
+                                <View style={{ flexDirection: 'row', paddingHorizontal: 18, paddingVertical: 14, gap: 10 }}>
+                                    {[
+                                        { icon: 'location-outline',   label: 'Location', value: eventData?.location || 'TBD' },
+                                        { icon: 'time-outline',       label: 'Time',     value: formatTime(eventData?.startTime) },
+                                    ].map((item) => (
+                                        <View key={item.label} style={{ flex: 1, backgroundColor: '#F8FAFC', borderRadius: 14, padding: 12 }}>
+                                            <Ionicons name={item.icon} size={14} color="#00686F" />
+                                            <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginTop: 6, marginBottom: 2 }}>
+                                                {item.label.toUpperCase()}
+                                            </CustomText>
+                                            <CustomText style={{ color: '#334155', fontSize: 12, fontWeight: '700' }} numberOfLines={2}>
+                                                {item.value}
+                                            </CustomText>
+                                        </View>
+                                    ))}
+                                </View>
+
+                                {/* Info rows */}
+                                <View style={{ paddingHorizontal: 18 }}>
+                                    <InfoRow icon="pricetag-outline"   label="TYPE"        value={eventData?.eventType} />
+                                    <InfoRow icon="document-text-outline" label="DESCRIPTION" value={eventData?.description || 'No description provided'} />
+                                    {eventData?.theme && (
+                                        <InfoRow icon="color-palette-outline" label="THEME" value={eventData.theme} />
+                                    )}
+                                </View>
+
+                                {/* RSVP strip */}
+                                <View style={{ marginHorizontal: 18, marginTop: 14, marginBottom: 4, backgroundColor: '#E8F5F5', borderRadius: 14, padding: 14 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                                        <Ionicons name="people-outline" size={13} color="#00686F" />
+                                        <CustomText style={{ color: '#00686F', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginLeft: 5 }}>RSVP</CustomText>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                                        {isOwner && (
+                                            <TouchableOpacity
+                                                onPress={handleShareInvitation}
+                                                style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00686F', paddingVertical: 10, borderRadius: 12 }}
+                                            >
+                                                <Ionicons name="share-social" size={13} color="#FFF" />
+                                                <CustomText style={{ color: '#FFF', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>Share Invite</CustomText>
+                                            </TouchableOpacity>
+                                        )}
+                                        <TouchableOpacity
+                                            onPress={openRSVPTracker}
+                                            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#00686F' }}
+                                        >
+                                            <Ionicons name="list-outline" size={13} color="#00686F" />
+                                            <CustomText style={{ color: '#00686F', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>View Tracker</CustomText>
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    {/* Invitation file — upload (owner) or show attached file */}
+                                    {isOwner && (
+                                        <View style={{ marginTop: 10 }}>
+                                            {invitationFile ? (
+                                                <View style={{ backgroundColor: '#FFF', borderRadius: 12, padding: 10, borderWidth: 1.5, borderColor: '#99D6D9' }}>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                                        <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#E8F5F5', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                                                            <Ionicons name="document-attach-outline" size={15} color="#00686F" />
+                                                        </View>
+                                                        <View style={{ flex: 1 }}>
+                                                            <CustomText style={{ color: '#94A3B8', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 }}>INVITATION FILE</CustomText>
+                                                            <CustomText style={{ color: '#0F172A', fontSize: 12, fontWeight: '700' }} numberOfLines={1}>{invitationFile.name}</CustomText>
+                                                        </View>
+                                                    </View>
+                                                    <TouchableOpacity
+                                                        onPress={handleUploadInvitation}
+                                                        disabled={uploadingInvitation}
+                                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#00686F', borderStyle: 'dashed', borderRadius: 10, paddingVertical: 8 }}
+                                                    >
+                                                        {uploadingInvitation
+                                                            ? <ActivityIndicator size="small" color="#00686F" />
+                                                            : <>
+                                                                <Ionicons name="refresh-outline" size={13} color="#00686F" />
+                                                                <CustomText style={{ color: '#00686F', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>Replace File</CustomText>
+                                                            </>
+                                                        }
+                                                    </TouchableOpacity>
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity
+                                                    onPress={handleUploadInvitation}
+                                                    disabled={uploadingInvitation}
+                                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', paddingVertical: 10, borderRadius: 12, borderWidth: 1.5, borderColor: '#00686F', borderStyle: 'dashed' }}
+                                                >
+                                                    {uploadingInvitation
+                                                        ? <ActivityIndicator size="small" color="#00686F" />
+                                                        : <>
+                                                            <Ionicons name="cloud-upload-outline" size={13} color="#00686F" />
+                                                            <CustomText style={{ color: '#00686F', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>Upload Invitation</CustomText>
+                                                        </>
+                                                    }
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    )}
+                                </View>
+
+                                {/* Team */}
+                                <View style={{ paddingHorizontal: 18, paddingTop: 14, paddingBottom: 16 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                                        <Ionicons name="people-outline" size={12} color="#94A3B8" />
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginLeft: 5 }}>TEAM</CustomText>
+                                    </View>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+                                        <CollabChip email="owner" isOwnerChip={true} ownerName={ownerName} />
+                                        {eventData?.collaborators?.map((email, index) => (
+                                            <CollabChip key={index} email={email} isOwnerChip={false} />
+                                        ))}
+                                    </View>
+                                </View>
+                            </>
+                        )}
+                    </View>
+
+                    {/* ── TASK LIST SECTIONS ─────────────────────────────── */}
+                    {columns.map((col, colIndex) => {
                         const completedCount = col.tasks.filter(t => t.completed).length;
-                        const total = col.tasks.length;
-                        const progressPct = total > 0 ? (completedCount / total) * 100 : 0;
+                        const total          = col.tasks.length;
+                        const progressPct    = total > 0 ? (completedCount / total) * 100 : 0;
+                        const isAllDone      = total > 0 && completedCount === total;
 
                         return (
-                            <View key={col.id} style={[
-                                tw`bg-slate-100 rounded-3xl mr-4 p-4`,
-                                { width: COLUMN_WIDTH, maxHeight: height * 0.78, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2 }
-                            ]}>
-                                {/* Column Header */}
-                                <View style={tw`flex-row items-center justify-between mb-2`}>
-                                    <TextInput
-                                        style={tw`flex-1 text-slate-700 font-extrabold text-sm uppercase tracking-wider`}
-                                        value={col.title}
-                                        editable={isOwner}
-                                        onChangeText={(text) => updateColumnTitle(col.id, text)}
-                                        placeholderTextColor="#94A3B8"
-                                    />
-                                    <View style={tw`flex-row items-center gap-2`}>
+                            <View
+                                key={col.id}
+                                onLayout={(e) => {
+                                    sectionOffsets.current[col.id] = e.nativeEvent.layout.y;
+                                }}
+                                style={{
+                                    marginHorizontal: 16,
+                                    marginTop: 14,
+                                    backgroundColor: '#FFF',
+                                    borderRadius: 20,
+                                    overflow: 'hidden',
+                                    shadowColor: '#64748B',
+                                    shadowOpacity: 0.06,
+                                    shadowRadius: 10,
+                                    shadowOffset: { width: 0, height: 2 },
+                                    elevation: 2,
+                                }}
+                            >
+                                {/* Thin priority accent line */}
+                                <View style={{ height: 3, backgroundColor: isAllDone ? '#10B981' : '#00686F' }} />
+
+                                {/* List header */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 }}>
+                                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}>
+                                        {isAllDone ? (
+                                            <Ionicons name="checkmark-circle" size={16} color="#10B981" style={{ marginRight: 6 }} />
+                                        ) : (
+                                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#00686F', marginRight: 8 }} />
+                                        )}
+                                        <TextInput
+                                            style={{ flex: 1, fontSize: 14, fontWeight: '800', color: isAllDone ? '#10B981' : '#1E293B', letterSpacing: 0.3, textTransform: 'uppercase', padding: 0 }}
+                                            value={col.title}
+                                            editable={isOwner}
+                                            onChangeText={(text) => updateColumnTitle(col.id, text)}
+                                            placeholderTextColor="#94A3B8"
+                                        />
+                                    </View>
+
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                         {total > 0 && (
-                                            <View style={tw`bg-white px-2.5 py-0.5 rounded-full`}>
-                                                <CustomText style={tw`text-xs font-bold text-slate-500`}>
+                                            <View style={{ backgroundColor: isAllDone ? '#D1FAE5' : '#F4F6F9', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                                <CustomText style={{ color: isAllDone ? '#059669' : '#64748B', fontSize: 11, fontWeight: '800' }}>
                                                     {completedCount}/{total}
                                                 </CustomText>
                                             </View>
@@ -670,28 +1052,41 @@ export default function EventDetailsScreen({ route, navigation }) {
                                         {isOwner && (
                                             <TouchableOpacity
                                                 onPress={() => triggerDeleteList(col.id)}
-                                                style={tw`w-7 h-7 rounded-full bg-white items-center justify-center`}
+                                                style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center' }}
                                             >
-                                                <Ionicons name="trash-outline" size={14} color="#EF4444" />
+                                                <Ionicons name="trash-outline" size={13} color="#EF4444" />
                                             </TouchableOpacity>
                                         )}
                                     </View>
                                 </View>
 
-                                {/* Progress bar */}
-                                <View style={tw`h-1.5 bg-slate-200 rounded-full mb-3 overflow-hidden`}>
-                                    <View style={[tw`h-full bg-teal-500 rounded-full`, { width: `${progressPct}%` }]} />
+                                {/* Mini progress bar */}
+                                <View style={{ marginHorizontal: 16, height: 3, backgroundColor: '#F1F5F9', borderRadius: 2, marginBottom: 4, overflow: 'hidden' }}>
+                                    <View style={{ height: '100%', width: `${progressPct}%`, backgroundColor: isAllDone ? '#10B981' : '#00686F', borderRadius: 2 }} />
                                 </View>
 
-                                {/* Tasks */}
-                                <ScrollView showsVerticalScrollIndicator={false}>
-                                    {col.tasks.map((task) => (
+                                {/* Empty state */}
+                                {col.tasks.length === 0 && (
+                                    <View style={{ alignItems: 'center', paddingVertical: 24, paddingHorizontal: 16 }}>
+                                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                                            <Ionicons name="clipboard-outline" size={22} color="#CBD5E1" />
+                                        </View>
+                                        <CustomText style={{ color: '#CBD5E1', fontSize: 13, fontWeight: '600' }}>No tasks yet</CustomText>
+                                        <CustomText style={{ color: '#E2E8F0', fontSize: 11, fontWeight: '500', marginTop: 3 }}>Add one below</CustomText>
+                                    </View>
+                                )}
+
+                                {/* Task rows */}
+                                {col.tasks.map((task, taskIndex) => {
+                                    const pm = PRIORITY_META[task.priority] || PRIORITY_META.C;
+                                    const isLast = taskIndex === col.tasks.length - 1 && !isOwner;
+                                    return (
                                         <Swipeable
                                             key={task.id}
                                             enabled={isOwner}
                                             renderRightActions={() => (
                                                 <TouchableOpacity
-                                                    style={tw`bg-red-500 justify-center items-center w-16 rounded-2xl ml-2 mb-2`}
+                                                    style={{ backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', width: 70, marginBottom: 0 }}
                                                     onPress={() => {
                                                         const updated = columns.map(c =>
                                                             c.id === col.id
@@ -702,197 +1097,231 @@ export default function EventDetailsScreen({ route, navigation }) {
                                                         syncToFirebase(updated);
                                                     }}
                                                 >
-                                                    <Ionicons name="trash-outline" size={20} color="#FFF" />
+                                                    <Ionicons name="trash-outline" size={18} color="#FFF" />
                                                 </TouchableOpacity>
                                             )}
                                         >
                                             <TouchableOpacity
                                                 onPress={() => openTaskDetails(col.id, task)}
-                                                activeOpacity={0.8}
-                                                style={[
-                                                    tw`bg-white rounded-2xl p-3.5 mb-2`,
-                                                    {
-                                                        borderLeftWidth: 4,
-                                                        borderLeftColor: getPriorityColor(task.priority),
-                                                        shadowColor: '#000',
-                                                        shadowOpacity: 0.04,
-                                                        shadowRadius: 4,
-                                                        shadowOffset: { width: 0, height: 1 },
-                                                        elevation: 1
-                                                    }
-                                                ]}
+                                                activeOpacity={0.7}
+                                                style={{
+                                                    flexDirection: 'row',
+                                                    alignItems: 'center',
+                                                    paddingHorizontal: 16,
+                                                    paddingVertical: 13,
+                                                    backgroundColor: '#FFF',
+                                                    borderTopWidth: taskIndex === 0 ? 1 : 0,
+                                                    borderBottomWidth: 1,
+                                                    borderColor: '#F8FAFC',
+                                                }}
                                             >
-                                                <View style={tw`flex-row items-start`}>
-                                                    <TouchableOpacity
-                                                        onPress={() => toggleCardCompletion(col.id, task.id)}
-                                                        style={tw`mr-2.5 mt-0.5`}
-                                                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                                {/* Circle checkbox */}
+                                                <TouchableOpacity
+                                                    onPress={() => toggleCardCompletion(col.id, task.id)}
+                                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                                    style={{ marginRight: 12 }}
+                                                >
+                                                    <View style={{
+                                                        width: 22,
+                                                        height: 22,
+                                                        borderRadius: 11,
+                                                        borderWidth: task.completed ? 0 : 2,
+                                                        borderColor: pm.color,
+                                                        backgroundColor: task.completed ? '#10B981' : 'transparent',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                    }}>
+                                                        {task.completed && <Ionicons name="checkmark" size={13} color="#FFF" />}
+                                                    </View>
+                                                </TouchableOpacity>
+
+                                                {/* Task info */}
+                                                <View style={{ flex: 1 }}>
+                                                    <CustomText
+                                                        style={{
+                                                            fontSize: 14,
+                                                            fontWeight: '600',
+                                                            color: task.completed ? '#94A3B8' : '#1E293B',
+                                                            textDecorationLine: task.completed ? 'line-through' : 'none',
+                                                            lineHeight: 20,
+                                                        }}
+                                                        numberOfLines={2}
                                                     >
-                                                        <Ionicons
-                                                            name={task.completed ? 'checkbox' : 'square-outline'}
-                                                            size={20}
-                                                            color={task.completed ? '#10B981' : '#CBD5E1'}
-                                                        />
-                                                    </TouchableOpacity>
-                                                    <CustomText style={[
-                                                        tw`flex-1 text-sm font-semibold text-slate-700 leading-5`,
-                                                        task.completed && tw`line-through text-slate-400`
-                                                    ]}>
                                                         {task.text || task.title}
                                                     </CustomText>
-                                                </View>
 
-                                                {/* Badges */}
-                                                {(task.subtasks?.length > 0 || task.attachments?.length > 0) && (
-                                                    <View style={tw`flex-row mt-2.5 ml-7 gap-2`}>
+                                                    {/* Meta row */}
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
+                                                        {/* Priority pill */}
+                                                        {!task.completed && (
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: pm.bg, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                                                <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: pm.color, marginRight: 4 }} />
+                                                                <CustomText style={{ color: pm.color, fontSize: 10, fontWeight: '700' }}>{pm.label}</CustomText>
+                                                            </View>
+                                                        )}
+                                                        {/* Subtask badge */}
                                                         {task.subtasks?.length > 0 && (
-                                                            <View style={tw`flex-row items-center bg-slate-100 px-2 py-0.5 rounded-lg`}>
-                                                                <Ionicons name="checkmark-done" size={11} color="#64748B" />
-                                                                <CustomText style={tw`text-xs text-slate-500 font-semibold ml-1`}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                                                                <Ionicons name="checkmark-done-outline" size={11} color="#94A3B8" />
+                                                                <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '600' }}>
                                                                     {task.subtasks.filter(s => s.completed).length}/{task.subtasks.length}
                                                                 </CustomText>
                                                             </View>
                                                         )}
+                                                        {/* Attachment badge */}
                                                         {task.attachments?.length > 0 && (
-                                                            <View style={tw`flex-row items-center bg-slate-100 px-2 py-0.5 rounded-lg`}>
-                                                                <Ionicons name="attach" size={11} color="#64748B" />
-                                                                <CustomText style={tw`text-xs text-slate-500 font-semibold ml-1`}>
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                                                                <Ionicons name="attach" size={11} color="#94A3B8" />
+                                                                <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '600' }}>
                                                                     {task.attachments.length}
                                                                 </CustomText>
                                                             </View>
                                                         )}
                                                     </View>
-                                                )}
+                                                </View>
+
+                                                {/* Chevron */}
+                                                <Ionicons name="chevron-forward" size={15} color="#E2E8F0" style={{ marginLeft: 8 }} />
                                             </TouchableOpacity>
                                         </Swipeable>
-                                    ))}
+                                    );
+                                })}
 
-                                    {isOwner && (
-                                        <TouchableOpacity
-                                            style={tw`flex-row items-center justify-center py-3 mt-1 rounded-2xl border border-dashed border-slate-300`}
-                                            onPress={() => {
-                                                setModalConfig({ type: 'ADD_TASK', columnId: col.id, title: 'Add a card' });
-                                                setInputText('');
-                                                setModalVisible(true);
-                                            }}
-                                        >
-                                            <Ionicons name="add" size={18} color="#94A3B8" />
-                                            <CustomText style={tw`text-slate-400 text-sm font-semibold ml-1.5`}>Add a card</CustomText>
-                                        </TouchableOpacity>
-                                    )}
-                                </ScrollView>
+                                {/* Add task row */}
+                                {isOwner && (
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            setModalConfig({ type: 'ADD_TASK', columnId: col.id, title: 'Add a card' });
+                                            setInputText('');
+                                            setModalVisible(true);
+                                        }}
+                                        style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderTopWidth: 1, borderTopColor: '#F8FAFC' }}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: '#E8F5F5', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                            <Ionicons name="add" size={14} color="#00686F" />
+                                        </View>
+                                        <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700' }}>Add task</CustomText>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         );
                     })}
 
-                    {/* ── Add List Button ──────────────────────────────── */}
-                    {isOwner && (
-                        <TouchableOpacity
-                            style={[
-                                tw`flex-row items-center justify-center bg-white rounded-3xl px-5 py-4 mr-4`,
-                                { width: COLUMN_WIDTH * 0.55, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }
-                            ]}
-                            onPress={() => {
-                                setModalConfig({ type: 'ADD_COLUMN', title: 'New list name' });
-                                setInputText('');
-                                setModalVisible(true);
-                            }}
-                        >
-                            <View style={tw`w-8 h-8 rounded-full bg-teal-50 items-center justify-center mr-2`}>
-                                <Ionicons name="add" size={20} color="#00686F" />
-                            </View>
-                            <CustomText style={tw`text-teal-700 font-bold`}>Add list</CustomText>
-                        </TouchableOpacity>
-                    )}
                 </ScrollView>
+
             </SafeAreaView>
 
-            {/* ══════════════════════════════════════════════════════════════ */}
-            {/* MODALS                                                         */}
-            {/* ══════════════════════════════════════════════════════════════ */}
+            {/* ═══════════════════════════════════════════════════════════════
+                MODALS — all logic unchanged
+            ═══════════════════════════════════════════════════════════════ */}
 
-            {/* ── Bottom Sheet Menu ───────────────────────────────────────── */}
+            {/* ── Bottom Sheet Menu ────────────────────────────────────────── */}
             <Modal transparent visible={menuVisible} animationType="slide">
                 <TouchableOpacity
-                    style={tw`flex-1 bg-black bg-opacity-50 justify-end`}
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
                     activeOpacity={1}
                     onPress={() => setMenuVisible(false)}
                 >
-                    <View style={tw`bg-white rounded-t-3xl pb-10 px-5`}>
-                        <View style={tw`w-10 h-1.5 bg-slate-200 rounded-full self-center my-4`} />
-                        <CustomText style={tw`text-slate-400 text-xs font-black tracking-widest px-1 mb-1`}>WORKSPACE OPTIONS</CustomText>
+                    <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 36, paddingHorizontal: 20 }}>
+                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginTop: 12, marginBottom: 20 }} />
 
-                        <TouchableOpacity
-                            style={tw`flex-row items-center py-4 border-b border-slate-100`}
-                            onPress={() => { setMenuVisible(false); setCollabModalVisible(true); }}
-                        >
-                            <View style={tw`w-10 h-10 rounded-2xl bg-teal-50 items-center justify-center mr-3`}>
-                                <Ionicons name="person-add-outline" size={20} color="#00686F" />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+                            <View style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: '#E8F5F5', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <Ionicons name="settings-outline" size={18} color="#00686F" />
                             </View>
-                            <View style={tw`flex-1`}>
-                                <CustomText style={tw`text-slate-800 font-bold text-base`}>Add Collaborator</CustomText>
-                                <CustomText style={tw`text-slate-400 text-xs mt-0.5`}>Invite someone to this workspace</CustomText>
+                            <View>
+                                <CustomText style={{ color: '#0F172A', fontSize: 16, fontWeight: '800' }}>Workspace Options</CustomText>
+                                <CustomText style={{ color: '#94A3B8', fontSize: 12, fontWeight: '500', marginTop: 1 }} numberOfLines={1}>{eventData?.title}</CustomText>
                             </View>
-                            <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
-                        </TouchableOpacity>
+                        </View>
 
-                        <TouchableOpacity
-                            style={tw`flex-row items-center py-4`}
-                            onPress={() => { setMenuVisible(false); setWorkspaceDeleteVisible(true); }}
-                        >
-                            <View style={tw`w-10 h-10 rounded-2xl bg-red-50 items-center justify-center mr-3`}>
-                                <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                            </View>
-                            <View style={tw`flex-1`}>
-                                <CustomText style={tw`text-red-500 font-bold text-base`}>Delete Workspace</CustomText>
-                                <CustomText style={tw`text-slate-400 text-xs mt-0.5`}>Permanently remove this event</CustomText>
-                            </View>
-                            <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
-                        </TouchableOpacity>
+                        {/* Option rows */}
+                        {[
+                            {
+                                icon: 'person-add-outline',
+                                iconBg: '#E8F5F5',
+                                iconColor: '#00686F',
+                                label: 'Add Collaborator',
+                                sub: 'Invite someone to this workspace',
+                                labelColor: '#0F172A',
+                                onPress: () => { setMenuVisible(false); setCollabModalVisible(true); }
+                            },
+                            {
+                                icon: 'trash-outline',
+                                iconBg: '#FEF2F2',
+                                iconColor: '#EF4444',
+                                label: 'Delete Workspace',
+                                sub: 'Permanently remove this event',
+                                labelColor: '#EF4444',
+                                onPress: () => { setMenuVisible(false); setWorkspaceDeleteVisible(true); }
+                            }
+                        ].map((opt, i, arr) => (
+                            <TouchableOpacity
+                                key={opt.label}
+                                onPress={opt.onPress}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    paddingVertical: 14,
+                                    borderBottomWidth: i < arr.length - 1 ? 1 : 0,
+                                    borderBottomColor: '#F8FAFC',
+                                }}
+                            >
+                                <View style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: opt.iconBg, alignItems: 'center', justifyContent: 'center', marginRight: 14 }}>
+                                    <Ionicons name={opt.icon} size={19} color={opt.iconColor} />
+                                </View>
+                                <View style={{ flex: 1 }}>
+                                    <CustomText style={{ color: opt.labelColor, fontSize: 15, fontWeight: '700' }}>{opt.label}</CustomText>
+                                    <CustomText style={{ color: '#94A3B8', fontSize: 12, fontWeight: '500', marginTop: 2 }}>{opt.sub}</CustomText>
+                                </View>
+                                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
+                            </TouchableOpacity>
+                        ))}
                     </View>
                 </TouchableOpacity>
             </Modal>
 
-            {/* ── Delete Workspace Confirm ─────────────────────────────────── */}
+            {/* ── Delete Workspace Confirm ──────────────────────────────────── */}
             <CustomModal visible={workspaceDeleteVisible}>
-                <View style={tw`items-center`}>
-                    <View style={tw`w-16 h-16 rounded-full bg-red-50 items-center justify-center mb-4`}>
-                        <Ionicons name="warning" size={32} color="#EF4444" />
+                <View style={{ alignItems: 'center' }}>
+                    <View style={{ width: 60, height: 60, borderRadius: 30, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                        <Ionicons name="warning" size={28} color="#EF4444" />
                     </View>
-                    <CustomText style={tw`text-slate-800 text-xl font-extrabold mb-2 text-center`}>
+                    <CustomText style={{ color: '#0F172A', fontSize: 18, fontWeight: '800', marginBottom: 8, textAlign: 'center' }}>
                         Delete Workspace?
                     </CustomText>
-                    <CustomText style={tw`text-slate-500 text-sm text-center leading-5 mb-6`}>
+                    <CustomText style={{ color: '#64748B', fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
                         This will permanently delete this event and all associated tasks for everyone. This action cannot be undone.
                     </CustomText>
                     <TouchableOpacity
                         onPress={() => setWorkspaceDeleteVisible(false)}
-                        style={tw`w-full bg-slate-100 py-3.5 rounded-2xl items-center mb-3`}
+                        style={{ width: '100%', backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 16, alignItems: 'center', marginBottom: 10 }}
                     >
-                        <CustomText style={tw`text-slate-600 font-bold`}>Keep Workspace</CustomText>
+                        <CustomText style={{ color: '#475569', fontWeight: '700', fontSize: 15 }}>Keep Workspace</CustomText>
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={confirmDeleteWorkspace}
                         disabled={deletingWorkspace}
-                        style={tw`w-full bg-red-500 py-3.5 rounded-2xl items-center`}
+                        style={{ width: '100%', backgroundColor: '#EF4444', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
                     >
                         {deletingWorkspace
                             ? <ActivityIndicator color="#FFF" size="small" />
-                            : <CustomText style={tw`text-white font-extrabold`}>Delete Forever</CustomText>
+                            : <CustomText style={{ color: '#FFF', fontWeight: '800', fontSize: 15 }}>Delete Forever</CustomText>
                         }
                     </TouchableOpacity>
                 </View>
             </CustomModal>
 
-            {/* ── Invite Collaborator ──────────────────────────────────────── */}
+            {/* ── Invite Collaborator ────────────────────────────────────────── */}
             <CustomModal visible={collabModalVisible} avoidKeyboard={true}>
-                <CustomText style={tw`text-slate-800 text-xl font-extrabold mb-1`}>Invite Collaborator</CustomText>
-                <CustomText style={tw`text-slate-400 text-sm mb-4`}>Enter their registered email address</CustomText>
+                <CustomText style={{ color: '#0F172A', fontSize: 18, fontWeight: '800', marginBottom: 4 }}>Invite Collaborator</CustomText>
+                <CustomText style={{ color: '#94A3B8', fontSize: 13, marginBottom: 16 }}>Enter their registered email address</CustomText>
 
                 <TextInput
-                    style={tw`bg-slate-100 rounded-2xl px-4 py-3.5 text-slate-700 text-sm mb-3`}
+                    style={{ backgroundColor: '#F8FAFC', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, color: '#1E293B', fontSize: 14, borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 10 }}
                     placeholder="colleague@email.com"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor="#CBD5E1"
                     value={collabEmail}
                     onChangeText={handleSearchUsers}
                     autoCapitalize="none"
@@ -900,321 +1329,366 @@ export default function EventDetailsScreen({ route, navigation }) {
                 />
 
                 {foundUsers.length > 0 && (
-                    <View style={tw`bg-slate-50 rounded-2xl mb-4 overflow-hidden border border-slate-200`}>
+                    <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, marginBottom: 14, overflow: 'hidden', borderWidth: 1, borderColor: '#E2E8F0' }}>
                         {foundUsers.map((u) => (
                             <TouchableOpacity
                                 key={u.id}
                                 onPress={() => setCollabEmail(u.email)}
-                                style={tw`flex-row items-center px-4 py-3 border-b border-slate-100`}
+                                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
                             >
-                                <View style={tw`w-8 h-8 rounded-full bg-teal-600 items-center justify-center mr-3`}>
-                                    <CustomText style={tw`text-white text-xs font-bold`}>
+                                <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#00686F', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                                    <CustomText style={{ color: '#FFF', fontSize: 12, fontWeight: '800' }}>
                                         {u.email.charAt(0).toUpperCase()}
                                     </CustomText>
                                 </View>
-                                <CustomText style={tw`text-slate-700 text-sm font-medium`}>{u.email}</CustomText>
+                                <CustomText style={{ color: '#1E293B', fontSize: 13, fontWeight: '600' }}>{u.email}</CustomText>
                             </TouchableOpacity>
                         ))}
                     </View>
                 )}
 
-                <View style={tw`flex-row gap-3`}>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
                     <TouchableOpacity
                         onPress={() => { setCollabModalVisible(false); setCollabEmail(''); setFoundUsers([]); }}
-                        style={tw`flex-1 bg-slate-100 py-3.5 rounded-2xl items-center`}
+                        style={{ flex: 1, backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
                     >
-                        <CustomText style={tw`text-slate-500 font-semibold`}>Cancel</CustomText>
+                        <CustomText style={{ color: '#475569', fontWeight: '700', fontSize: 14 }}>Cancel</CustomText>
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={handleAddCollaborator}
                         disabled={sendingInvite}
-                        style={tw`flex-1 bg-teal-700 py-3.5 rounded-2xl items-center`}
+                        style={{ flex: 1, backgroundColor: '#00686F', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
                     >
                         {sendingInvite
                             ? <ActivityIndicator color="#FFF" size="small" />
-                            : <CustomText style={tw`text-white font-bold`}>Send Invite</CustomText>
+                            : <CustomText style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>Send Invite</CustomText>
                         }
                     </TouchableOpacity>
                 </View>
             </CustomModal>
 
-            {/* ── Add Card / List Modal ────────────────────────────────────── */}
+            {/* ── Add Card / List Modal ─────────────────────────────────────── */}
             <CustomModal visible={modalVisible} avoidKeyboard={true}>
-                <CustomText style={tw`text-slate-800 text-xl font-extrabold mb-4`}>
-                    {modalConfig.title}
-                </CustomText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                    <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: '#E8F5F5', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                        <Ionicons name={modalConfig.type === 'ADD_COLUMN' ? 'list-outline' : 'add-circle-outline'} size={18} color="#00686F" />
+                    </View>
+                    <View>
+                        <CustomText style={{ color: '#0F172A', fontSize: 16, fontWeight: '800' }}>
+                            {modalConfig.type === 'ADD_COLUMN' ? 'New List' : 'New Task'}
+                        </CustomText>
+                        <CustomText style={{ color: '#94A3B8', fontSize: 12, fontWeight: '500' }}>
+                            {modalConfig.type === 'ADD_COLUMN' ? 'Create a planning section' : 'Add a task to this list'}
+                        </CustomText>
+                    </View>
+                </View>
                 <TextInput
-                    style={tw`bg-slate-100 rounded-2xl px-4 py-3.5 text-slate-700 text-sm mb-4`}
+                    style={{ backgroundColor: '#F8FAFC', borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, color: '#1E293B', fontSize: 14, borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 16 }}
                     autoFocus
                     value={inputText}
                     onChangeText={setInputText}
-                    placeholder={modalConfig.type === 'ADD_COLUMN' ? 'e.g. To Do, In Progress...' : 'Card title...'}
-                    placeholderTextColor="#94A3B8"
+                    placeholder={modalConfig.type === 'ADD_COLUMN' ? 'e.g. Venue, Catering, Decor...' : 'Task name...'}
+                    placeholderTextColor="#CBD5E1"
                     onSubmitEditing={handleModalSubmit}
                 />
-                <View style={tw`flex-row gap-3`}>
-                    {/* FIXED: Cancel now calls closeModal() to fully reset lock + state */}
+                <View style={{ flexDirection: 'row', gap: 10 }}>
                     <TouchableOpacity
                         onPress={closeModal}
-                        style={tw`flex-1 bg-slate-100 py-3.5 rounded-2xl items-center`}
+                        style={{ flex: 1, backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
                     >
-                        <CustomText style={tw`text-slate-500 font-semibold`}>Cancel</CustomText>
+                        <CustomText style={{ color: '#475569', fontWeight: '700', fontSize: 14 }}>Cancel</CustomText>
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={handleModalSubmit}
                         disabled={submittingModal}
-                        style={tw`flex-1 bg-teal-700 py-3.5 rounded-2xl items-center`}
+                        style={{ flex: 1, backgroundColor: '#00686F', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
                     >
                         {submittingModal
                             ? <ActivityIndicator color="#FFF" size="small" />
-                            : <CustomText style={tw`text-white font-bold`}>
-                                {modalConfig.type === 'ADD_COLUMN' ? 'Create List' : 'Add Card'}
+                            : <CustomText style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>
+                                {modalConfig.type === 'ADD_COLUMN' ? 'Create List' : 'Add Task'}
                             </CustomText>
                         }
                     </TouchableOpacity>
                 </View>
             </CustomModal>
 
-            {/* ── Delete List Confirm ──────────────────────────────────────── */}
+            {/* ── Delete List Confirm ────────────────────────────────────────── */}
             <CustomModal visible={deleteConfirmVisible}>
-                <View style={tw`items-center`}>
-                    <View style={tw`w-14 h-14 rounded-full bg-red-50 items-center justify-center mb-4`}>
-                        <Ionicons name="trash-outline" size={26} color="#EF4444" />
+                <View style={{ alignItems: 'center' }}>
+                    <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                        <Ionicons name="trash-outline" size={24} color="#EF4444" />
                     </View>
-                    <CustomText style={tw`text-slate-800 text-lg font-extrabold mb-2`}>Delete this list?</CustomText>
-                    <CustomText style={tw`text-slate-500 text-sm text-center mb-6`}>
-                        All cards in this list will be permanently removed.
+                    <CustomText style={{ color: '#0F172A', fontSize: 17, fontWeight: '800', marginBottom: 6 }}>Delete this list?</CustomText>
+                    <CustomText style={{ color: '#64748B', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 19 }}>
+                        All tasks in this list will be permanently removed.
                     </CustomText>
-                    <View style={tw`flex-row gap-3 w-full`}>
+                    <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
                         <TouchableOpacity
                             onPress={() => setDeleteConfirmVisible(false)}
-                            style={tw`flex-1 bg-slate-100 py-3.5 rounded-2xl items-center`}
+                            style={{ flex: 1, backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
                         >
-                            <CustomText style={tw`text-slate-500 font-semibold`}>Cancel</CustomText>
+                            <CustomText style={{ color: '#475569', fontWeight: '700', fontSize: 14 }}>Cancel</CustomText>
                         </TouchableOpacity>
                         <TouchableOpacity
                             onPress={confirmDeleteList}
                             disabled={deletingList}
-                            style={tw`flex-1 bg-red-500 py-3.5 rounded-2xl items-center`}
+                            style={{ flex: 1, backgroundColor: '#EF4444', paddingVertical: 14, borderRadius: 16, alignItems: 'center' }}
                         >
                             {deletingList
                                 ? <ActivityIndicator color="#FFF" size="small" />
-                                : <CustomText style={tw`text-white font-bold`}>Delete List</CustomText>
+                                : <CustomText style={{ color: '#FFF', fontWeight: '700', fontSize: 14 }}>Delete</CustomText>
                             }
                         </TouchableOpacity>
                     </View>
                 </View>
             </CustomModal>
 
-            {/* ── Task Detail Modal ────────────────────────────────────────── */}
+            {/* ── Task Detail Modal ──────────────────────────────────────────── */}
             <Modal visible={detailModalVisible} animationType="slide">
-                <SafeAreaView style={tw`flex-1 bg-slate-50`}>
-                    {/* Detail Header */}
-                    <View style={tw`flex-row items-center justify-between px-4 py-3 bg-white border-b border-slate-100`}>
-                        <TouchableOpacity
-                            onPress={() => setDetailModalVisible(false)}
-                            style={tw`w-9 h-9 rounded-full bg-slate-100 items-center justify-center`}
-                        >
-                            <Ionicons name="close" size={20} color="#64748B" />
-                        </TouchableOpacity>
+                <SafeAreaView style={{ flex: 1, backgroundColor: '#F4F6F9' }}>
 
-                        <CustomText style={tw`text-slate-800 text-base font-extrabold`}>Task Details</CustomText>
+                    {/* Header */}
+                    <View style={{ backgroundColor: '#00686F', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 18 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <TouchableOpacity
+                                onPress={() => setDetailModalVisible(false)}
+                                style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                <Ionicons name="close" size={19} color="#FFF" />
+                            </TouchableOpacity>
 
-                        <TouchableOpacity
-                            onPress={saveTaskDetails}
-                            disabled={savingTask}
-                            style={tw`bg-teal-700 px-4 py-2 rounded-full min-w-16 items-center justify-center`}
-                        >
-                            {savingTask
-                                ? <ActivityIndicator color="#FFF" size="small" />
-                                : <CustomText style={tw`text-white text-sm font-bold`}>Update</CustomText>
-                            }
-                        </TouchableOpacity>
+                            <View style={{ flex: 1, marginHorizontal: 12 }}>
+                                <CustomText style={{ color: '#FFF', fontSize: 16, fontWeight: '800' }} numberOfLines={1}>
+                                    {activeTask?.text || activeTask?.title || 'Task Details'}
+                                </CustomText>
+                                {activeTask?.priority && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: getPriorityColor(activeTask.priority), marginRight: 5 }} />
+                                        <CustomText style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '600' }}>
+                                            {getPriorityLabel(activeTask.priority)} Priority
+                                        </CustomText>
+                                    </View>
+                                )}
+                            </View>
+
+                            <TouchableOpacity
+                                onPress={saveTaskDetails}
+                                disabled={savingTask}
+                                style={{ backgroundColor: 'rgba(255,255,255,0.22)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 }}
+                            >
+                                {savingTask
+                                    ? <ActivityIndicator color="#FFF" size="small" />
+                                    : <CustomText style={{ color: '#FFF', fontSize: 13, fontWeight: '800' }}>Save</CustomText>
+                                }
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     <ScrollView
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{ paddingBottom: 40 }}
                         showsVerticalScrollIndicator={false}
-                        style={tw`flex-1`}
-                        contentContainerStyle={tw`px-4 py-5`}
                         keyboardShouldPersistTaps="handled"
                     >
-                        {/* Title */}
-                        <SectionLabel icon="text" label="TITLE" />
-                        <TextInput
-                            style={tw`bg-white rounded-2xl px-4 py-3.5 text-slate-800 font-bold text-base border border-slate-200 mb-5`}
-                            value={activeTask?.text}
-                            editable={isOwner}
-                            placeholder="Task title..."
-                            placeholderTextColor="#94A3B8"
-                            onChangeText={(t) => setActiveTask({ ...activeTask, text: t })}
-                        />
+                        {/* ── Card: Title & Priority ── */}
+                        <View style={{ backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 16, borderRadius: 18, padding: 16, shadowColor: '#64748B', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
+                            <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 8 }}>TITLE</CustomText>
+                            <TextInput
+                                style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', borderBottomWidth: 1.5, borderBottomColor: '#F1F5F9', paddingBottom: 10, marginBottom: 16 }}
+                                value={activeTask?.text}
+                                editable={isOwner}
+                                placeholder="Task title..."
+                                placeholderTextColor="#CBD5E1"
+                                onChangeText={(t) => setActiveTask({ ...activeTask, text: t })}
+                            />
 
-                        {/* Priority */}
-                        <SectionLabel icon="flag" label="PRIORITY" />
-                        <View style={tw`flex-row gap-2 mb-5`}>
-                            {['A', 'B', 'C'].map((p) => {
-                                const active = activeTask?.priority === p;
-                                const color = getPriorityColor(p);
-                                return (
-                                    <TouchableOpacity
-                                        key={p}
-                                        disabled={!isOwner}
-                                        onPress={() => setActiveTask({ ...activeTask, priority: p })}
-                                        style={[
-                                            tw`flex-1 py-3 rounded-2xl items-center border-2`,
-                                            active
-                                                ? { backgroundColor: color, borderColor: color }
-                                                : tw`bg-white border-slate-200`
-                                        ]}
-                                    >
-                                        <CustomText style={{ color: active ? '#FFF' : '#64748B', fontWeight: '700', fontSize: 13 }}>
-                                            {getPriorityLabel(p)}
-                                        </CustomText>
-                                    </TouchableOpacity>
-                                );
-                            })}
+                            <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 10 }}>PRIORITY</CustomText>
+                            <View style={{ flexDirection: 'row', gap: 8 }}>
+                                {['A', 'B', 'C'].map((p) => {
+                                    const active = activeTask?.priority === p;
+                                    const pm2 = PRIORITY_META[p];
+                                    return (
+                                        <TouchableOpacity
+                                            key={p}
+                                            disabled={!isOwner}
+                                            onPress={() => setActiveTask({ ...activeTask, priority: p })}
+                                            style={{
+                                                flex: 1,
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                paddingVertical: 10,
+                                                borderRadius: 12,
+                                                backgroundColor: active ? pm2.color : pm2.bg,
+                                                borderWidth: 1.5,
+                                                borderColor: active ? pm2.color : 'transparent',
+                                            }}
+                                        >
+                                            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: active ? '#FFF' : pm2.color, marginRight: 5 }} />
+                                            <CustomText style={{ color: active ? '#FFF' : pm2.color, fontSize: 12, fontWeight: '800' }}>
+                                                {pm2.label}
+                                            </CustomText>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
                         </View>
 
-                        {/* Description */}
-                        <SectionLabel icon="document-text" label="DESCRIPTION" />
-                        <TextInput
-                            style={[tw`bg-white rounded-2xl px-4 py-3.5 text-slate-600 border border-slate-200 mb-5 text-sm`, { height: 110, textAlignVertical: 'top' }]}
-                            multiline
-                            value={activeTask?.description}
-                            editable={isOwner}
-                            placeholder={isOwner ? 'Add a description...' : 'No description.'}
-                            placeholderTextColor="#94A3B8"
-                            onChangeText={(t) => setActiveTask({ ...activeTask, description: t })}
-                        />
+                        {/* ── Card: Description ── */}
+                        <View style={{ backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, borderRadius: 18, padding: 16, shadowColor: '#64748B', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
+                            <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 8 }}>DESCRIPTION</CustomText>
+                            <TextInput
+                                style={{ fontSize: 14, color: '#1E293B', lineHeight: 21, minHeight: 90, textAlignVertical: 'top' }}
+                                multiline
+                                value={activeTask?.description}
+                                editable={isOwner}
+                                placeholder={isOwner ? 'Add notes, links or context...' : 'No description.'}
+                                placeholderTextColor="#CBD5E1"
+                                onChangeText={(t) => setActiveTask({ ...activeTask, description: t })}
+                            />
+                        </View>
 
-                        {/* Checklist */}
-                        <View style={tw`flex-row items-center mb-3`}>
-                            <Ionicons name="list" size={16} color="#00686F" />
-                            <CustomText style={tw`text-xs font-black text-slate-400 tracking-widest ml-2`}>CHECKLIST</CustomText>
+                        {/* ── Card: Checklist ── */}
+                        <View style={{ backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: 'hidden', shadowColor: '#64748B', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
+                            {/* Header */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Ionicons name="checkbox-outline" size={15} color="#00686F" />
+                                    <CustomText style={{ color: '#0F172A', fontSize: 13, fontWeight: '800', marginLeft: 7 }}>Checklist</CustomText>
+                                </View>
+                                {activeTask?.subtasks?.length > 0 && (
+                                    <View style={{ backgroundColor: '#E8F5F5', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                        <CustomText style={{ color: '#00686F', fontSize: 11, fontWeight: '800' }}>
+                                            {activeTask.subtasks.filter(s => s.completed).length}/{activeTask.subtasks.length}
+                                        </CustomText>
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Sub-progress bar */}
                             {activeTask?.subtasks?.length > 0 && (
-                                <View style={tw`ml-2 bg-teal-50 px-2 py-0.5 rounded-full`}>
-                                    <CustomText style={tw`text-xs text-teal-700 font-bold`}>
-                                        {activeTask.subtasks.filter(s => s.completed).length}/{activeTask.subtasks.length}
+                                <View style={{ height: 3, backgroundColor: '#F1F5F9', overflow: 'hidden' }}>
+                                    <View style={{
+                                        height: '100%',
+                                        width: `${(activeTask.subtasks.filter(s => s.completed).length / activeTask.subtasks.length) * 100}%`,
+                                        backgroundColor: '#00686F'
+                                    }} />
+                                </View>
+                            )}
+
+                            {/* Subtask rows */}
+                            {activeTask?.subtasks?.map((sub, i) => (
+                                <View key={sub.id} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}>
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            const updated = activeTask.subtasks.map(s =>
+                                                s.id === sub.id ? { ...s, completed: !s.completed } : s
+                                            );
+                                            setActiveTask({ ...activeTask, subtasks: updated });
+                                        }}
+                                        style={{ marginRight: 12 }}
+                                    >
+                                        <View style={{
+                                            width: 20, height: 20, borderRadius: 10,
+                                            borderWidth: sub.completed ? 0 : 2,
+                                            borderColor: '#00686F',
+                                            backgroundColor: sub.completed ? '#10B981' : 'transparent',
+                                            alignItems: 'center', justifyContent: 'center'
+                                        }}>
+                                            {sub.completed && <Ionicons name="checkmark" size={11} color="#FFF" />}
+                                        </View>
+                                    </TouchableOpacity>
+                                    <CustomText style={{ flex: 1, fontSize: 14, fontWeight: '500', color: sub.completed ? '#94A3B8' : '#334155', textDecorationLine: sub.completed ? 'line-through' : 'none' }}>
+                                        {sub.text}
                                     </CustomText>
+                                    {isOwner && (
+                                        <TouchableOpacity onPress={() => deleteSubtask(sub.id)} style={{ padding: 4, marginLeft: 8 }}>
+                                            <Ionicons name="close" size={15} color="#CBD5E1" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ))}
+
+                            {/* Add subtask input */}
+                            {isOwner && (
+                                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 }}>
+                                    <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#E2E8F0', borderStyle: 'dashed', marginRight: 12 }} />
+                                    <TextInput
+                                        style={{ flex: 1, fontSize: 14, color: '#1E293B', paddingVertical: 4 }}
+                                        placeholder="Add item..."
+                                        placeholderTextColor="#CBD5E1"
+                                        value={subtaskText}
+                                        onChangeText={setSubtaskText}
+                                        onSubmitEditing={addSubtask}
+                                        returnKeyType="done"
+                                    />
+                                    {subtaskText.length > 0 && (
+                                        <TouchableOpacity onPress={addSubtask} style={{ marginLeft: 8 }}>
+                                            <View style={{ backgroundColor: '#00686F', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5 }}>
+                                                <CustomText style={{ color: '#FFF', fontSize: 11, fontWeight: '800' }}>Add</CustomText>
+                                            </View>
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             )}
                         </View>
 
-                        {/* Subtask progress */}
-                        {activeTask?.subtasks?.length > 0 && (
-                            <View style={tw`h-1.5 bg-slate-200 rounded-full mb-3 overflow-hidden`}>
-                                <View style={[
-                                    tw`h-full bg-teal-500 rounded-full`,
-                                    { width: `${(activeTask.subtasks.filter(s => s.completed).length / activeTask.subtasks.length) * 100}%` }
-                                ]} />
-                            </View>
-                        )}
-
-                        {activeTask?.subtasks?.map((sub) => (
-                            <View key={sub.id} style={tw`flex-row items-center bg-white rounded-2xl px-4 py-3 mb-2 border border-slate-200`}>
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        const updated = activeTask.subtasks.map(s =>
-                                            s.id === sub.id ? { ...s, completed: !s.completed } : s
-                                        );
-                                        setActiveTask({ ...activeTask, subtasks: updated });
-                                    }}
-                                    style={tw`mr-3`}
-                                >
-                                    <Ionicons
-                                        name={sub.completed ? 'checkbox' : 'square-outline'}
-                                        size={22}
-                                        color={sub.completed ? '#10B981' : '#CBD5E1'}
-                                    />
-                                </TouchableOpacity>
-                                <CustomText style={[tw`flex-1 text-sm text-slate-700 font-medium`, sub.completed && tw`line-through text-slate-400`]}>
-                                    {sub.text}
-                                </CustomText>
-                                {isOwner && (
-                                    <TouchableOpacity onPress={() => deleteSubtask(sub.id)} style={tw`ml-2 p-1`}>
-                                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                                    </TouchableOpacity>
+                        {/* ── Card: Attachments ── */}
+                        <View style={{ backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: 'hidden', shadowColor: '#64748B', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}>
+                                <Ionicons name="attach" size={15} color="#00686F" />
+                                <CustomText style={{ color: '#0F172A', fontSize: 13, fontWeight: '800', marginLeft: 7 }}>Attachments</CustomText>
+                                {activeTask?.attachments?.length > 0 && (
+                                    <View style={{ marginLeft: 8, backgroundColor: '#E8F5F5', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
+                                        <CustomText style={{ color: '#00686F', fontSize: 11, fontWeight: '800' }}>{activeTask.attachments.length}</CustomText>
+                                    </View>
                                 )}
                             </View>
-                        ))}
 
-                        {isOwner && (
-                            <View style={tw`flex-row gap-2 mt-1 mb-6`}>
-                                <TextInput
-                                    style={tw`flex-1 bg-white rounded-2xl px-4 py-3 border border-slate-200 text-sm text-slate-700`}
-                                    placeholder="Add checklist item..."
-                                    placeholderTextColor="#94A3B8"
-                                    value={subtaskText}
-                                    onChangeText={setSubtaskText}
-                                    onSubmitEditing={addSubtask}
-                                />
+                            {activeTask?.attachments?.map((file) => (
                                 <TouchableOpacity
-                                    onPress={addSubtask}
-                                    style={tw`w-12 bg-teal-700 rounded-2xl items-center justify-center`}
-                                >
-                                    <Ionicons name="add" size={22} color="#FFF" />
-                                </TouchableOpacity>
-                            </View>
-                        )}
-
-                        {/* Attachments */}
-                        <SectionLabel icon="attach" label="ATTACHMENTS" />
-
-                        {activeTask?.attachments?.map((file) => (
-                            <View key={file.id} style={tw`flex-row items-center bg-white rounded-2xl px-4 py-3 mb-2 border border-slate-200`}>
-                                <TouchableOpacity
-                                    style={tw`flex-row items-center flex-1`}
+                                    key={file.id}
+                                    style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}
                                     onPress={() => Linking.openURL(file.url)}
+                                    activeOpacity={0.7}
                                 >
-                                    <View style={tw`w-8 h-8 rounded-xl bg-teal-50 items-center justify-center mr-3`}>
-                                        <Ionicons name="document-outline" size={16} color="#00686F" />
+                                    <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#F0F9FA', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                        <Ionicons name="document-outline" size={17} color="#00686F" />
                                     </View>
-                                    <CustomText style={tw`text-teal-700 text-sm font-semibold underline flex-1`} numberOfLines={1}>
+                                    <CustomText style={{ flex: 1, color: '#00686F', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' }} numberOfLines={1}>
                                         {file.name || 'View Document'}
                                     </CustomText>
+                                    {isOwner && (
+                                        <TouchableOpacity
+                                            onPress={() => setActiveTask({ ...activeTask, attachments: activeTask.attachments.filter(a => a.id !== file.id) })}
+                                            style={{ padding: 6, marginLeft: 4 }}
+                                        >
+                                            <Ionicons name="close-circle" size={18} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
                                 </TouchableOpacity>
-                                {isOwner && (
-                                    <TouchableOpacity
-                                        onPress={() => {
-                                            setActiveTask({
-                                                ...activeTask,
-                                                attachments: activeTask.attachments.filter(a => a.id !== file.id)
-                                            });
-                                        }}
-                                        style={tw`ml-2`}
-                                    >
-                                        <Ionicons name="close-circle" size={20} color="#EF4444" />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                        ))}
+                            ))}
 
-                        <TouchableOpacity
-                            onPress={handleFileUpload}
-                            disabled={uploading}
-                            style={tw`flex-row items-center justify-center py-4 rounded-2xl border-2 border-dashed border-teal-300 bg-teal-50 mt-2 mb-8`}
-                        >
-                            {uploading
-                                ? <ActivityIndicator color="#00686F" />
-                                : (
-                                    <>
-                                        <Ionicons name="cloud-upload-outline" size={20} color="#00686F" />
-                                        <CustomText style={tw`text-teal-700 font-bold text-sm ml-2`}>Upload from device</CustomText>
+                            <TouchableOpacity
+                                onPress={handleFileUpload}
+                                disabled={uploading}
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, margin: 12, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#B2DEDE', backgroundColor: '#F0F9FA' }}
+                            >
+                                {uploading
+                                    ? <ActivityIndicator color="#00686F" />
+                                    : <>
+                                        <Ionicons name="cloud-upload-outline" size={18} color="#00686F" />
+                                        <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700', marginLeft: 8 }}>Upload from device</CustomText>
                                     </>
-                                )
-                            }
-                        </TouchableOpacity>
+                                }
+                            </TouchableOpacity>
+                        </View>
+
                     </ScrollView>
                 </SafeAreaView>
             </Modal>
+
         </View>
     );
 }
-
-// ── Internal helper component (defined outside main to avoid re-renders) ──────
-const SectionLabel = ({ icon, label }) => (
-    <View style={tw`flex-row items-center mb-2`}>
-        <Ionicons name={icon} size={16} color="#00686F" />
-        <CustomText style={tw`text-xs font-black text-slate-400 tracking-widest ml-2`}>{label}</CustomText>
-    </View>
-);

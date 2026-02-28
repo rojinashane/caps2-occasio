@@ -121,7 +121,7 @@ export default function LandingScreen({ navigation }) {
             {/* Reduced size for logoWrapper */}
             <Animated.View style={[styles.logoWrapper, { transform: [{ rotate: spin }] }]}>
               <Image 
-                source={require('../assets/logo/logoo.png')} 
+                source={require('../assets/logoo.png')} 
                 style={styles.logoImage}
                 resizeMode="contain"
               />

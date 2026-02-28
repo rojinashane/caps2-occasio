@@ -33,6 +33,15 @@ import tw from 'twrnc';
 
 const { width } = Dimensions.get('window');
 
+// ── BRAND PALETTE ───────────────────────────────────────────
+const BRAND = {
+    primary:     '#00686F',   // Occasio teal
+    primaryDark: '#004E54',   // deeper teal for shadows/pressed
+    primaryBg:   '#E8F5F5',   // light teal wash
+    primaryMid:  '#E0F2F3',   // mid teal bg
+    primaryFaint:'#F0F9FA',   // faintest teal tint
+};
+
 // ── UTILITIES ──────────────────────────────────────────────
 const toDate = (val) => {
     if (!val) return new Date();
@@ -76,11 +85,11 @@ const EVENT_ICONS = {
 };
 
 const EVENT_COLORS = {
-    Wedding: '#E8626A',
-    'Birthday Party': '#F59E0B',
-    Corporate: '#3B82F6',
-    Charity: '#10B981',
-    Others: '#8B5CF6',
+    Wedding:        '#E8626A',
+    'Birthday Party':'#F59E0B',
+    Corporate:      '#3B82F6',
+    Charity:        '#059669',
+    Others:         '#8B5CF6',
 };
 
 // ── SCREEN ─────────────────────────────────────────────────
@@ -189,7 +198,7 @@ export default function DashboardScreen({ navigation }) {
         allEvents.forEach(event => {
             const start = parseDateToObj(event.startDate);
             const end   = event.isMultiDay && event.endDate ? parseDateToObj(event.endDate) : start;
-            const color = EVENT_COLORS[event.eventType] || '#00686F';
+            const color = EVENT_COLORS[event.eventType] || BRAND.primary;
             let curr = new Date(start);
             while (curr <= end) {
                 const key     = curr.toISOString().split('T')[0];
@@ -210,7 +219,7 @@ export default function DashboardScreen({ navigation }) {
     if (loading) {
         return (
             <View style={tw`flex-1 justify-center items-center bg-[#F0F4F8]`}>
-                <ActivityIndicator size="large" color="#00686F" />
+                <ActivityIndicator size="large" color={BRAND.primary} />
             </View>
         );
     }
@@ -234,7 +243,7 @@ export default function DashboardScreen({ navigation }) {
 
             {/* ── FIXED HEADER ───────────────────────────────── */}
             <View style={[
-                tw`px-5 pt-4 pb-3 flex-row items-center justify-between`,
+                tw`px-5 pt-3 pb-3 flex-row items-center justify-between`,
                 {
                     backgroundColor: '#F0F4F8',
                     borderBottomWidth: 1,
@@ -242,18 +251,22 @@ export default function DashboardScreen({ navigation }) {
                 },
             ]}>
                 <View style={tw`flex-1`}>
-                    <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12 }}>
-                        {todayStr}
+                    {/* Occasio brand name */}
+                    <CustomText fontFamily="extrabold" style={{ color: BRAND.primary, fontSize: 13, letterSpacing: 1.5 }}>
+                        OCCASIO
                     </CustomText>
                     <View style={tw`flex-row items-center mt-0.5`}>
-                        <CustomText fontFamily="extrabold" style={{ color: '#0F172A', fontSize: 22 }}>
+                        <CustomText fontFamily="extrabold" style={{ color: '#0F172A', fontSize: 21 }}>
                             {greeting},{' '}
                         </CustomText>
-                        <CustomText fontFamily="extrabold" style={{ color: '#00686F', fontSize: 22 }}>
+                        <CustomText fontFamily="extrabold" style={{ color: BRAND.primary, fontSize: 21 }}>
                             {firstName}
                         </CustomText>
-                        <CustomText style={{ fontSize: 20, marginLeft: 6 }}>{emoji}</CustomText>
+                        <CustomText style={{ fontSize: 19, marginLeft: 6 }}>{emoji}</CustomText>
                     </View>
+                    <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 11, marginTop: 1 }}>
+                        {todayStr}
+                    </CustomText>
                 </View>
 
                 {/* Notification bell */}
@@ -261,10 +274,10 @@ export default function DashboardScreen({ navigation }) {
                     onPress={() => setNotifVisible(true)}
                     style={[
                         tw`w-10 h-10 rounded-full justify-center items-center`,
-                        { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+                        { backgroundColor: BRAND.primaryMid, borderWidth: 1, borderColor: BRAND.primary + '30' },
                     ]}
                 >
-                    <Ionicons name="notifications-outline" size={20} color="#334155" />
+                    <Ionicons name="notifications-outline" size={20} color={BRAND.primary} />
                 </TouchableOpacity>
             </View>
 
@@ -287,27 +300,27 @@ export default function DashboardScreen({ navigation }) {
                             style={[
                                 tw`rounded-[26px] overflow-hidden`,
                                 {
-                                    shadowColor: '#00686F',
+                                    shadowColor: BRAND.primary,
                                     shadowOffset: { width: 0, height: 8 },
-                                    shadowOpacity: 0.13,
-                                    shadowRadius: 18,
+                                    shadowOpacity: 0.18,
+                                    shadowRadius: 20,
                                     elevation: 6,
                                 },
                             ]}
                         >
-                            <View style={{ backgroundColor: '#E8F5F5', borderRadius: 26 }}>
+                            <View style={{ backgroundColor: BRAND.primaryBg, borderRadius: 26 }}>
                                 <View style={{
-                                    height: 4,
-                                    backgroundColor: '#00686F',
+                                    height: 5,
+                                    backgroundColor: BRAND.primary,
                                     borderTopLeftRadius: 26,
                                     borderTopRightRadius: 26,
                                 }} />
 
                                 <View style={tw`p-5`}>
                                     <View style={tw`flex-row justify-between items-center mb-3`}>
-                                        <View style={[tw`flex-row items-center px-3 py-1 rounded-full`, { backgroundColor: '#00686F15' }]}>
-                                            <View style={[tw`w-1.5 h-1.5 rounded-full mr-1.5`, { backgroundColor: '#00686F' }]} />
-                                            <CustomText fontFamily="bold" style={{ color: '#00686F', fontSize: 10, letterSpacing: 1 }}>
+                                        <View style={[tw`flex-row items-center px-3 py-1 rounded-full`, { backgroundColor: BRAND.primary + '18' }]}>
+                                            <View style={[tw`w-1.5 h-1.5 rounded-full mr-1.5`, { backgroundColor: BRAND.primary }]} />
+                                            <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 10, letterSpacing: 1 }}>
                                                 NEXT EVENT
                                             </CustomText>
                                         </View>
@@ -317,12 +330,12 @@ export default function DashboardScreen({ navigation }) {
                                     <View style={tw`flex-row items-center mb-2`}>
                                         <View style={[
                                             tw`w-6 h-6 rounded-full justify-center items-center mr-2`,
-                                            { backgroundColor: (EVENT_COLORS[nextEvent.eventType] || '#00686F') + '22' },
+                                            { backgroundColor: (EVENT_COLORS[nextEvent.eventType] || BRAND.primary) + '22' },
                                         ]}>
                                             <Ionicons
                                                 name={EVENT_ICONS[nextEvent.eventType] || 'star'}
                                                 size={13}
-                                                color={EVENT_COLORS[nextEvent.eventType] || '#00686F'}
+                                                color={EVENT_COLORS[nextEvent.eventType] || BRAND.primary}
                                             />
                                         </View>
                                         <CustomText fontFamily="semibold" style={{ color: '#64748B', fontSize: 12 }}>
@@ -338,10 +351,10 @@ export default function DashboardScreen({ navigation }) {
                                         {typeof nextEvent.title === 'string' ? nextEvent.title : ''}
                                     </CustomText>
 
-                                    <View style={{ height: 1, backgroundColor: '#00686F1A', marginBottom: 12 }} />
+                                    <View style={{ height: 1, backgroundColor: BRAND.primary + '1A', marginBottom: 12 }} />
 
                                     <View style={tw`flex-row items-center mb-2`}>
-                                        <Ionicons name="calendar-outline" size={13} color="#00686F" />
+                                        <Ionicons name="calendar-outline" size={13} color={BRAND.primary} />
                                         <CustomText fontFamily="semibold" style={{ color: '#334155', fontSize: 13, marginLeft: 7 }}>
                                             {formatDate(nextEvent.startDate)}
                                             {nextEvent.startTime ? `  ·  ${nextEvent.startTime}` : ''}
@@ -350,7 +363,7 @@ export default function DashboardScreen({ navigation }) {
 
                                     {nextEvent.location && nextEvent.location !== 'To be decided' && (
                                         <View style={tw`flex-row items-center mb-4`}>
-                                            <Ionicons name="location-outline" size={13} color="#00686F" />
+                                            <Ionicons name="location-outline" size={13} color={BRAND.primary} />
                                             <CustomText
                                                 fontFamily="semibold"
                                                 style={{ color: '#334155', fontSize: 13, marginLeft: 7, flex: 1 }}
@@ -366,10 +379,10 @@ export default function DashboardScreen({ navigation }) {
                                         style={[
                                             tw`flex-row items-center justify-center py-3 rounded-[14px]`,
                                             {
-                                                backgroundColor: '#00686F',
-                                                shadowColor: '#00686F',
+                                                backgroundColor: BRAND.primary,
+                                                shadowColor: BRAND.primaryDark,
                                                 shadowOffset: { width: 0, height: 4 },
-                                                shadowOpacity: 0.25,
+                                                shadowOpacity: 0.3,
                                                 shadowRadius: 8,
                                                 elevation: 4,
                                             },
@@ -391,17 +404,17 @@ export default function DashboardScreen({ navigation }) {
                                 tw`rounded-[26px] p-6 items-center justify-center`,
                                 {
                                     borderWidth: 2,
-                                    borderColor: '#00686F',
+                                    borderColor: BRAND.primary,
                                     borderStyle: 'dashed',
-                                    backgroundColor: '#F0F9FA',
+                                    backgroundColor: BRAND.primaryFaint,
                                     minHeight: 140,
                                 },
                             ]}
                         >
-                            <View style={[tw`w-14 h-14 rounded-full justify-center items-center mb-3`, { backgroundColor: '#E0F2F3' }]}>
-                                <Ionicons name="add" size={28} color="#00686F" />
+                            <View style={[tw`w-14 h-14 rounded-full justify-center items-center mb-3`, { backgroundColor: BRAND.primaryMid }]}>
+                                <Ionicons name="add" size={28} color={BRAND.primary} />
                             </View>
-                            <CustomText fontFamily="bold" style={{ color: '#00686F', fontSize: 16 }}>
+                            <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 16 }}>
                                 Plan Your First Event
                             </CustomText>
                             <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 13, marginTop: 3 }}>
@@ -412,7 +425,7 @@ export default function DashboardScreen({ navigation }) {
                 </Animated.View>
 
                 {/* ── COMING UP PREVIEW ───────────────────────── */}
-                <Animated.View style={{ opacity: fadeAnim, marginBottom: 20 }}>
+                <Animated.View style={{ opacity: fadeAnim}}>
                     <View style={tw`flex-row justify-between items-center mb-3`}>
                         <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>
                             Coming Up
@@ -445,9 +458,9 @@ export default function DashboardScreen({ navigation }) {
                                 </CustomText>
                                 <TouchableOpacity
                                     onPress={() => navigation.navigate('AddEvent')}
-                                    style={[tw`mt-3 px-5 py-2 rounded-full`, { backgroundColor: '#E0F2F3' }]}
+                                    style={[tw`mt-3 px-5 py-2 rounded-full`, { backgroundColor: BRAND.primaryMid }]}
                                 >
-                                    <CustomText fontFamily="bold" style={{ color: '#00686F', fontSize: 12 }}>
+                                    <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 12 }}>
                                         + Add Event
                                     </CustomText>
                                 </TouchableOpacity>
@@ -456,8 +469,54 @@ export default function DashboardScreen({ navigation }) {
                     )}
                 </Animated.View>
 
+                {/* ── EXPLORE VENDORS ───────────────────────────── */}
+                <Animated.View style={{ opacity: fadeAnim, marginTop: 16 }}>
+                    <View style={tw`flex-row justify-between items-center mb-3`}>
+                        <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>
+                            Explore Vendors
+                        </CustomText>
+                        <TouchableOpacity onPress={() => navigation.navigate('VendorScreen')}>
+                            <CustomText fontFamily="semibold" style={{ color: BRAND.primary, fontSize: 13 }}>
+                                View All
+                            </CustomText>
+                        </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => navigation.navigate('VendorScreen')}
+                        style={[
+                            tw`bg-white rounded-[22px] flex-row items-center p-4`,
+                            {
+                                shadowColor: BRAND.primary,
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.09,
+                                shadowRadius: 12,
+                                elevation: 3,
+                            },
+                        ]}
+                    >
+                        <View style={[tw`w-14 h-14 rounded-2xl justify-center items-center mr-4`, { backgroundColor: BRAND.primaryMid }]}>
+                            <Ionicons name="storefront-outline" size={26} color={BRAND.primary} />
+                        </View>
+                        
+                        <View style={tw`flex-1`}>
+                            <CustomText fontFamily="bold" style={tw`text-[16px] text-slate-800`}>
+                                Vendor Directory
+                            </CustomText>
+                            <CustomText fontFamily="medium" style={tw`text-[12px] text-slate-500 mt-0.5`}>
+                                Find trusted vendors for your event needs
+                            </CustomText>
+                        </View>
+
+                        <View style={[tw`w-8 h-8 rounded-full justify-center items-center`, { backgroundColor: BRAND.primaryBg }]}>
+                            <Ionicons name="chevron-forward" size={16} color={BRAND.primary} />
+                        </View>
+                    </TouchableOpacity>
+                </Animated.View>
+
                 {/* ── CALENDAR ────────────────────────────────── */}
-                <Animated.View style={{ opacity: fadeAnim }}>
+                <Animated.View style={{ opacity: fadeAnim, marginTop: 16 }}>
                     <View style={tw`flex-row justify-between items-center mb-3`}>
                         <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>
                             Event Calendar
@@ -523,9 +582,12 @@ export default function DashboardScreen({ navigation }) {
                         },
                     ]}>
                         <View style={tw`flex-row justify-between items-center pb-6 border-b border-slate-100`}>
-                            <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800`}>Menu</CustomText>
-                            <TouchableOpacity onPress={() => toggleMenu(false)} style={tw`p-2 bg-slate-50 rounded-full`}>
-                                <Ionicons name="close" size={20} color="#334155" />
+                            <View>
+                                <CustomText fontFamily="extrabold" style={{ color: BRAND.primary, fontSize: 11, letterSpacing: 1.5 }}>OCCASIO</CustomText>
+                                <CustomText fontFamily="extrabold" style={tw`text-xl text-slate-800`}>Menu</CustomText>
+                            </View>
+                            <TouchableOpacity onPress={() => toggleMenu(false)} style={[tw`p-2 rounded-full`, { backgroundColor: BRAND.primaryFaint }]}>
+                                <Ionicons name="close" size={20} color={BRAND.primary} />
                             </TouchableOpacity>
                         </View>
                         <View style={tw`mt-6`}>
@@ -533,8 +595,8 @@ export default function DashboardScreen({ navigation }) {
                                 style={tw`flex-row items-center py-4`}
                                 onPress={() => { toggleMenu(false); navigation.navigate('Profile'); }}
                             >
-                                <View style={tw`w-12 h-12 rounded-2xl bg-[#F0F9FA] justify-center items-center mr-4`}>
-                                    <Ionicons name="person-outline" size={20} color="#00686F" />
+                                <View style={[tw`w-12 h-12 rounded-2xl justify-center items-center mr-4`, { backgroundColor: BRAND.primaryMid }]}>
+                                    <Ionicons name="person-outline" size={20} color={BRAND.primary} />
                                 </View>
                                 <CustomText fontFamily="semibold" style={tw`text-[16px] text-slate-700`}>
                                     Profile Settings
@@ -562,7 +624,7 @@ export default function DashboardScreen({ navigation }) {
 
 const CountdownBadge = ({ date }) => {
     const days = daysUntil(date);
-    let bg = '#E8F5F5', color = '#00686F', text = `${days}d away`;
+    let bg = BRAND.primaryBg, color = BRAND.primary, text = `${days}d away`;
     if (days === 0)      { bg = '#FEF3C7'; color = '#D97706'; text = 'Today! 🎉'; }
     else if (days === 1) { bg = '#EDE9FE'; color = '#7C3AED'; text = 'Tomorrow'; }
     else if (days <= 7)  { bg = '#DCFCE7'; color = '#16A34A'; text = `In ${days} days`; }
@@ -580,7 +642,7 @@ const UpcomingEventRow = ({ event, onPress, isLast }) => {
     const isShared = event.userId !== user?.uid;
     const accentColor = isShared
         ? '#8B5CF6'
-        : EVENT_COLORS[event.eventType] || '#00686F';
+        : EVENT_COLORS[event.eventType] || BRAND.primary;
 
     const days = daysUntil(event.startDate);
     const startStr  = formatDateShort(event.startDate);
@@ -677,17 +739,17 @@ const UpcomingEventRow = ({ event, onPress, isLast }) => {
 // ── CALENDAR THEME ──────────────────────────────────────────
 const calendarTheme = {
     calendarBackground:         '#ffffff',
-    todayTextColor:             '#00686F',
-    todayBackgroundColor:       '#E0F2F3',
+    todayTextColor:             BRAND.primary,
+    todayBackgroundColor:       BRAND.primaryMid,
     dayTextColor:               '#334155',
     monthTextColor:             '#0f172a',
-    arrowColor:                 '#00686F',
+    arrowColor:                 BRAND.primary,
     textDayFontFamily:          'Poppins-Medium',
     textMonthFontFamily:        'Poppins-Bold',
     textDayHeaderFontFamily:    'Poppins-SemiBold',
     textMonthFontWeight:        'bold',
     textDayHeaderFontWeight:    '600',
-    selectedDayBackgroundColor: '#00686F',
+    selectedDayBackgroundColor: BRAND.primary,
     selectedDayTextColor:       '#ffffff',
     'stylesheet.calendar.header': {
         header: {

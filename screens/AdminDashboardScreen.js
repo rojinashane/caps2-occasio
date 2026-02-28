@@ -24,12 +24,19 @@ import tw from 'twrnc';
 
 export default function AdminDashboardScreen({ navigation }) {
     const [venues, setVenues] = useState([]);
+    const [vendors, setVendors] = useState([]); 
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
+    const [vendorModalVisible, setVendorModalVisible] = useState(false); 
+    const [fabMenuVisible, setFabMenuVisible] = useState(false); 
+    const [activeTab, setActiveTab] = useState('venues'); 
     const [isEditing, setIsEditing] = useState(false);
     const [currentVenueId, setCurrentVenueId] = useState(null);
     
-    // Form State
+    // Filter State
+    const [selectedCategory, setSelectedCategory] = useState('All'); // New: Category filter state
+
+    // Venue Form State
     const [newName, setNewName] = useState('');
     const [newLocation, setNewLocation] = useState('');
     const [newCapacity, setNewCapacity] = useState('');
@@ -43,25 +50,57 @@ export default function AdminDashboardScreen({ navigation }) {
     const [selectedModel, setSelectedModel] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Cloudinary Config
+    // Vendor Form State
+    const [vendorName, setVendorName] = useState('');
+    const [vendorCategory, setVendorCategory] = useState('Unassigned');
+    const [vendorPhone, setVendorPhone] = useState('');
+    const [vendorFb, setVendorFb] = useState('');
+    const [vendorLocation, setVendorLocation] = useState('');
+
+    const categories = ['Unassigned', 'Attire & Accessories', 'Beauty', 'Music & Show', 'Photo & Video','Accessories', 'Flower & Decor', "Catering"];
+    const filterCategories = ['All', ...categories]; // For the filter UI
+
     const CLOUD_NAME = 'dgvbemrgw';
-    const UPLOAD_PRESET = 'venues'; // Ensure this preset allows "Unsigned" uploads in Cloudinary settings
+    const UPLOAD_PRESET = 'venues'; 
 
     useEffect(() => {
-        const q = query(collection(db, 'venues'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const qVenues = query(collection(db, 'venues'));
+        const unsubscribeVenues = onSnapshot(qVenues, (snapshot) => {
             const venueList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setVenues(venueList);
             setLoading(false);
         });
-        return () => unsubscribe();
+
+        const qVendors = query(collection(db, 'vendors'));
+        const unsubscribeVendors = onSnapshot(qVendors, (snapshot) => {
+            const vendorList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setVendors(vendorList);
+        });
+
+        return () => {
+            unsubscribeVenues();
+            unsubscribeVendors();
+        };
     }, []);
+
+    // Logic to filter vendors based on selection
+    const filteredVendors = selectedCategory === 'All' 
+        ? vendors 
+        : vendors.filter(v => v.category === selectedCategory);
 
     const resetForm = () => {
         setNewName(''); setNewLocation(''); setNewCapacity(''); setNewPrice('');
         setNewDescription(''); setImageLink(''); setSelectedImage(null);
         setPhone(''); setFbPage(''); setIgHandle(''); setSelectedModel(null);
         setIsEditing(false); setCurrentVenueId(null);
+    };
+
+    const resetVendorForm = () => {
+        setVendorName('');
+        setVendorCategory('Unassigned');
+        setVendorPhone('');
+        setVendorFb('');
+        setVendorLocation('');
     };
 
     const handleEditPress = (item) => {
@@ -117,12 +156,9 @@ export default function AdminDashboardScreen({ navigation }) {
         }
     };
 
-    // FIXED: Corrected logic for large files and GLB resource types
     const uploadFile = async (file, type = 'image') => {
         const isModel = type === 'auto';
         const data = new FormData();
-        
-        // LARGE FILE FIX: GLB files (raw) must use the specific 'raw' or 'auto' endpoint
         const resourceType = isModel ? 'raw' : 'image';
         const CLOUDINARY_ENDPOINT = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
 
@@ -134,7 +170,6 @@ export default function AdminDashboardScreen({ navigation }) {
         
         data.append('upload_preset', UPLOAD_PRESET);
 
-        // This tells Cloudinary to handle a large stream (essential for 3D scans)
         if (isModel) {
             data.append('chunk_size', '6000000'); 
         }
@@ -149,11 +184,7 @@ export default function AdminDashboardScreen({ navigation }) {
         });
 
         const result = await response.json();
-        
-        if (!result.secure_url) {
-            throw new Error(result.error?.message || "Upload failed");
-        }
-        
+        if (!result.secure_url) throw new Error(result.error?.message || "Upload failed");
         return result.secure_url;
     };
 
@@ -218,6 +249,33 @@ export default function AdminDashboardScreen({ navigation }) {
         }
     };
 
+    const handleSaveVendor = async () => {
+        if (!vendorName.trim() || !vendorPhone.trim() || !vendorLocation.trim()) {
+            Alert.alert("Required Fields", "Name, Phone, and Location are required.");
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            await addDoc(collection(db, 'vendors'), {
+                name: vendorName,
+                category: vendorCategory,
+                phone: vendorPhone,
+                facebook: vendorFb,
+                location: vendorLocation,
+                createdAt: serverTimestamp(),
+            });
+
+            setVendorModalVisible(false);
+            resetVendorForm();
+            Alert.alert("Success", "Vendor profile created!");
+        } catch (error) {
+            Alert.alert("Error", "Failed to save vendor.");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const renderVenueCard = ({ item }) => (
         <View style={[tw`bg-white rounded-[24px] mb-6 overflow-hidden`, { elevation: 3 }]}>
             <View style={tw`relative w-full h-48 bg-slate-200`}>
@@ -273,33 +331,138 @@ export default function AdminDashboardScreen({ navigation }) {
         </View>
     );
 
+    const renderVendorCard = ({ item }) => (
+        <View style={tw`bg-white rounded-2xl p-4 mb-4 border border-slate-100 shadow-sm`}>
+            <View style={tw`flex-row justify-between items-center`}>
+                <View>
+                    <CustomText style={tw`text-base font-bold text-slate-800`}>{item.name}</CustomText>
+                    <View style={tw`flex-row items-center mt-1`}>
+                        <View style={tw`bg-slate-100 px-2 py-0.5 rounded-md mr-2`}>
+                            <CustomText style={tw`text-[10px] text-slate-500 uppercase font-bold`}>{item.category}</CustomText>
+                        </View>
+                        <CustomText style={tw`text-xs text-slate-400`}>{item.location}</CustomText>
+                    </View>
+                </View>
+                <TouchableOpacity style={tw`bg-slate-50 p-2 rounded-full`}>
+                    <Ionicons name="call" size={18} color="#00686F" />
+                </TouchableOpacity>
+            </View>
+        </View>
+    );
+
     return (
         <SafeAreaView style={tw`flex-1 bg-[#F8FAFC]`}>
             <StatusBar barStyle="dark-content" />
-            <View style={tw`px-6 py-4 flex-row justify-between items-center`}>
+            <View style={tw`px-6 pt-4 flex-row justify-between items-center`}>
                 <View>
                     <CustomText style={tw`text-2xl font-bold text-slate-800`}>Admin Console</CustomText>
-                    <CustomText style={tw`text-[#94A3B8] text-sm`}>Manage Published Venues</CustomText>
+                    <CustomText style={tw`text-[#94A3B8] text-sm`}>Manage your platform data</CustomText>
                 </View>
                 <TouchableOpacity onPress={() => navigation.goBack()} style={tw`p-2 bg-white rounded-full shadow-sm`}>
                     <Ionicons name="close" size={24} color="#1E293B" />
                 </TouchableOpacity>
             </View>
 
+            <View style={tw`flex-row px-6 mt-6 mb-2`}>
+                <TouchableOpacity 
+                    onPress={() => setActiveTab('venues')}
+                    style={tw`mr-4 pb-2 border-b-2 ${activeTab === 'venues' ? 'border-[#00686F]' : 'border-transparent'}`}
+                >
+                    <CustomText style={tw`font-bold ${activeTab === 'venues' ? 'text-[#00686F]' : 'text-slate-400'}`}>Venues</CustomText>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                    onPress={() => setActiveTab('vendors')}
+                    style={tw`pb-2 border-b-2 ${activeTab === 'vendors' ? 'border-[#00686F]' : 'border-transparent'}`}
+                >
+                    <CustomText style={tw`font-bold ${activeTab === 'vendors' ? 'text-[#00686F]' : 'text-slate-400'}`}>Vendors</CustomText>
+                </TouchableOpacity>
+            </View>
+
+            {/* NEW: Vendor Category Filter Bar */}
+            {activeTab === 'vendors' && (
+                <View style={tw`mb-2`}>
+                    <ScrollView 
+                        horizontal 
+                        showsHorizontalScrollIndicator={false} 
+                        contentContainerStyle={tw`px-6 py-2`}
+                    >
+                        {filterCategories.map((cat) => (
+                            <TouchableOpacity 
+                                key={cat} 
+                                onPress={() => setSelectedCategory(cat)}
+                                style={tw`mr-2 px-4 py-2 rounded-full border ${selectedCategory === cat ? 'bg-[#00686F] border-[#00686F]' : 'bg-white border-slate-200'}`}
+                            >
+                                <CustomText style={tw`${selectedCategory === cat ? 'text-white' : 'text-slate-500'} text-xs font-bold`}>{cat}</CustomText>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+            )}
+
             {loading ? <ActivityIndicator size="large" color="#00686F" style={tw`mt-20`} /> : (
                 <FlatList
-                    data={venues}
+                    data={activeTab === 'venues' ? venues : filteredVendors} 
                     keyExtractor={item => item.id}
-                    renderItem={renderVenueCard}
-                    contentContainerStyle={tw`px-6 pb-24`}
+                    renderItem={activeTab === 'venues' ? renderVenueCard : renderVendorCard}
+                    contentContainerStyle={tw`px-6 pb-24 pt-2`}
                     showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                        <View style={tw`mt-20 items-center`}>
+                            <Ionicons name="search-outline" size={48} color="#CBD5E1" />
+                            <CustomText style={tw`text-slate-400 mt-2`}>No {activeTab} found</CustomText>
+                        </View>
+                    }
                 />
             )}
 
-            <Modal visible={modalVisible} animationType="slide" transparent>
-                <View style={tw`flex-1 bg-black/50 justify-end`}>
-                    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-                        <View style={tw`bg-white rounded-t-[32px] max-h-[90%]`}>
+            <Modal visible={fabMenuVisible} transparent animationType="fade">
+                <TouchableOpacity 
+                    style={tw`flex-1 bg-black/40 justify-end items-end p-6`} 
+                    activeOpacity={1} 
+                    onPress={() => setFabMenuVisible(false)}
+                >
+                    <View style={tw`items-end mb-4`}>
+                        <View style={tw`flex-row items-center mb-4`}>
+                            <View style={tw`bg-white px-3 py-1.5 rounded-lg mr-3 shadow-sm`}>
+                                <CustomText style={tw`text-slate-700 font-bold`}>Add New Vendor</CustomText>
+                            </View>
+                            <TouchableOpacity 
+                                style={tw`w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg`}
+                                onPress={() => { setFabMenuVisible(false); setVendorModalVisible(true); }}
+                            >
+                                <Ionicons name="people" size={24} color="#00686F" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={tw`flex-row items-center mb-4`}>
+                            <View style={tw`bg-white px-3 py-1.5 rounded-lg mr-3 shadow-sm`}>
+                                <CustomText style={tw`text-slate-700 font-bold`}>Add New Venue</CustomText>
+                            </View>
+                            <TouchableOpacity 
+                                style={tw`w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg`}
+                                onPress={() => { setFabMenuVisible(false); setIsEditing(false); setModalVisible(true); }}
+                            >
+                                <Ionicons name="business" size={24} color="#00686F" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity 
+                            style={tw`w-16 h-16 rounded-2xl bg-red-500 items-center justify-center shadow-lg`}
+                            onPress={() => setFabMenuVisible(false)}
+                        >
+                            <Ionicons name="close" size={32} color="#FFF" />
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            <Modal visible={modalVisible} animationType="fade" transparent>
+                <View style={tw`flex-1 bg-black/50 justify-center items-center px-6`}>
+                    <KeyboardAvoidingView 
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={tw`w-full`}
+                    >
+                        <View style={tw`bg-white rounded-[32px] w-full max-h-[85%] overflow-hidden shadow-2xl`}>
                             <ScrollView contentContainerStyle={tw`p-6 pb-12`}>
                                 <View style={tw`flex-row justify-between mb-6`}>
                                     <CustomText style={tw`text-xl font-bold`}>{isEditing ? "Edit Venue" : "New Venue"}</CustomText>
@@ -359,12 +522,61 @@ export default function AdminDashboardScreen({ navigation }) {
                 </View>
             </Modal>
 
-            <TouchableOpacity 
-                style={tw`absolute bottom-8 right-6 w-16 h-16 rounded-2xl bg-[#00686F] items-center justify-center shadow-lg`}
-                onPress={() => { setIsEditing(false); setModalVisible(true); }}
-            >
-                <Ionicons name="add" size={32} color="#FFF" />
-            </TouchableOpacity>
+            <Modal visible={vendorModalVisible} animationType="fade" transparent>
+                <View style={tw`flex-1 bg-black/50 justify-center items-center px-6`}>
+                    <KeyboardAvoidingView 
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={tw`w-full`}
+                    >
+                        <View style={tw`bg-white rounded-[32px] w-full overflow-hidden shadow-2xl`}>
+                            <View style={tw`p-6`}>
+                                <View style={tw`flex-row justify-between mb-6`}>
+                                    <CustomText style={tw`text-xl font-bold`}>New Vendor</CustomText>
+                                    <TouchableOpacity onPress={() => { setVendorModalVisible(false); resetVendorForm(); }}>
+                                        <Ionicons name="close-circle" size={28} color="#CBD5E1" />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <TextInput style={styles.input} placeholder="Vendor Name*" value={vendorName} onChangeText={setVendorName} />
+                                
+                                <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Category*</CustomText>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`mb-2`}>
+                                    {categories.map((cat) => (
+                                        <TouchableOpacity 
+                                            key={cat} 
+                                            onPress={() => setVendorCategory(cat)}
+                                            style={tw`mr-2 px-4 py-2 rounded-full border ${vendorCategory === cat ? 'bg-[#00686F] border-[#00686F]' : 'bg-white border-slate-200'}`}
+                                        >
+                                            <CustomText style={tw`${vendorCategory === cat ? 'text-white' : 'text-slate-500'} text-xs font-bold`}>{cat}</CustomText>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+
+                                <TextInput style={[styles.input, tw`mt-3`]} placeholder="Contact Number*" value={vendorPhone} onChangeText={setVendorPhone} keyboardType="phone-pad" />
+                                <TextInput style={[styles.input, tw`mt-3`]} placeholder="Facebook Page URL" value={vendorFb} onChangeText={setVendorFb} />
+                                <TextInput style={[styles.input, tw`mt-3`]} placeholder="Location*" value={vendorLocation} onChangeText={setVendorLocation} />
+
+                                <TouchableOpacity 
+                                    style={[tw`mt-8 h-14 rounded-2xl items-center justify-center`, { backgroundColor: '#00686F' }]} 
+                                    onPress={handleSaveVendor}
+                                    disabled={isSubmitting}
+                                >
+                                    {isSubmitting ? <ActivityIndicator color="#FFF" /> : <CustomText style={tw`text-white font-bold text-lg`}>Add Vendor</CustomText>}
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </KeyboardAvoidingView>
+                </View>
+            </Modal>
+
+            {!fabMenuVisible && (
+                <TouchableOpacity 
+                    style={tw`absolute bottom-8 right-6 w-16 h-16 rounded-2xl bg-[#00686F] items-center justify-center shadow-lg`}
+                    onPress={() => setFabMenuVisible(true)}
+                >
+                    <Ionicons name="add" size={32} color="#FFF" />
+                </TouchableOpacity>
+            )}
         </SafeAreaView>
     );
 }

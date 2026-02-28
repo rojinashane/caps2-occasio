@@ -4,261 +4,834 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Official Invitation | Occasio</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #00686F;
-            --primary-dark: #004D52;
-            --bg-subtle: #f8fafc;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --white: #ffffff;
-            --gold-accent: #b45309;
-            --border: #cbd5e1;
+            --ink:       #1a1208;
+            --gold:      #c9973a;
+            --gold-lt:   #e8c97a;
+            --gold-dk:   #9a6f1e;
+            --cream:     #fdf8ee;
+            --cream-dk:  #f5edda;
+            --mist:      #ede8de;
+            --text:      #2e2416;
+            --text-muted:#7a6a52;
+            --white:     #ffffff;
+            --teal:      #00686F;
+            --teal-dk:   #004D52;
+            --success:   #166534;
+            --error:     #991b1b;
         }
 
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: var(--bg-subtle);
-            background-image: radial-gradient(#e2e8f0 0.5px, transparent 0.5px);
-            background-size: 24px 24px;
-            display: flex; justify-content: center; align-items: center; 
-            min-height: 100vh; margin: 0; padding: 20px; color: var(--text-main);
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background-color: #12100c;
+            background-image:
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201,151,58,0.15), transparent),
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            color: var(--text);
         }
 
-        .card { 
-            background: var(--white); border-radius: 24px; 
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); 
-            width: 100%; max-width: 440px; overflow: hidden;
-            border: 1px solid #e2e8f0;
-            animation: fadeIn 1s ease;
+        /* ── LOADING ── */
+        #loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            color: var(--gold-lt);
+        }
+        .loading-seal {
+            width: 56px; height: 56px;
+            border: 2px solid var(--gold);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+        }
+        .loading-text {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.1rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            opacity: 0.7;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── ENVELOPE WRAPPER ── */
+        #invitation-wrapper {
+            display: none;
+            width: 100%;
+            max-width: 520px;
+            animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        @keyframes rise {
+            from { opacity: 0; transform: translateY(32px) scale(0.97); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
         }
 
-        .header-section { padding: 40px 20px 20px; text-align: center; background: linear-gradient(to bottom, #f0f9fa, #ffffff); }
-        .invitation-text { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--gold-accent); text-transform: uppercase; letter-spacing: 3px; margin-bottom: 10px; display: block; }
-        h1 { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 700; margin: 0; color: var(--primary-dark); line-height: 1.2; }
-        .content { padding: 0 32px 40px; }
-        .divider { height: 1px; background: #e2e8f0; width: 60px; margin: 25px auto; }
-        
-        .info-stack { gap: 16px; display: flex; flex-direction: column; }
-        .info-row { display: flex; align-items: flex-start; gap: 16px; }
-        .info-icon-box { width: 40px; height: 40px; border-radius: 10px; background: #f1f5f9; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1.2rem; }
-        .info-label { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .info-value { font-size: 0.95rem; font-weight: 600; color: var(--text-main); margin-top: 2px; display: block;}
-
-        /* --- FORM STYLING --- */
-        .rsvp-section { margin-top: 30px; padding-top: 30px; border-top: 1px solid #f1f5f9; }
-        
-        .input-group { margin-bottom: 20px; }
-        .form-label { display: block; font-size: 0.85rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px; }
-
-        input, select { 
-            width: 100%; 
-            height: 52px; /* Fixed height for consistency */
-            padding: 0 16px; 
-            border: 1px solid var(--border); 
-            border-radius: 12px; 
-            font-size: 1rem; 
-            font-family: 'Inter', sans-serif;
-            color: var(--text-main);
-            background-color: #fcfcfc;
-            box-sizing: border-box;
-            transition: all 0.2s ease;
-            outline: none;
-            appearance: none; /* Removes default browser arrows */
+        /* ── HEADER BADGE ── */
+        .occasio-badge {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .occasio-badge span {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.75rem;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            color: var(--gold);
+            opacity: 0.8;
         }
 
-        /* Custom Dropdown Arrow */
-        .select-wrapper { position: relative; }
-        .select-wrapper::after {
-            content: "";
+        /* ── CARD ── */
+        .card {
+            background: var(--cream);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            box-shadow:
+                0 0 0 1px rgba(201,151,58,0.3),
+                0 30px 80px rgba(0,0,0,0.6),
+                0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        /* top wax-seal strip */
+        .card::before {
+            content: '';
+            display: block;
+            height: 4px;
+            background: linear-gradient(90deg, var(--gold-dk), var(--gold-lt), var(--gold-dk));
+        }
+
+        /* ── HERO ── */
+        .hero {
+            padding: 48px 40px 36px;
+            text-align: center;
+            background: linear-gradient(160deg, #1f1a0f 0%, #2a2112 50%, #1a1510 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::after {
+            content: '';
             position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 12px;
-            height: 12px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-            background-size: contain;
-            background-repeat: no-repeat;
-            pointer-events: none;
+            inset: 0;
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='rgba(201,151,58,0.08)'/%3E%3C/svg%3E") repeat;
         }
 
-        input:focus, select:focus {
-            border-color: var(--primary);
-            background-color: #fff;
-            box-shadow: 0 0 0 4px rgba(0, 104, 111, 0.1);
-        }
+        .hero-inner { position: relative; z-index: 1; }
 
-        button { 
-            background: var(--primary); 
-            color: white; 
-            border: none; 
-            padding: 16px; 
-            width: 100%; 
-            border-radius: 12px; 
-            font-weight: 700; 
+        .eyebrow {
+            font-family: 'Cormorant Garamond', serif;
+            font-style: italic;
             font-size: 1rem;
-            cursor: pointer; 
-            transition: transform 0.1s, background 0.2s;
-            box-shadow: 0 4px 12px rgba(0, 104, 111, 0.15);
+            color: var(--gold);
+            letter-spacing: 2px;
+            margin-bottom: 14px;
+            display: block;
+            opacity: 0.9;
         }
 
-        button:hover { background: var(--primary-dark); }
-        button:active { transform: scale(0.98); }
-        button:disabled { background: #94a3b8; cursor: not-allowed; box-shadow: none; }
+        .event-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(2rem, 6vw, 2.8rem);
+            font-weight: 700;
+            color: var(--cream);
+            line-height: 1.15;
+            margin-bottom: 6px;
+        }
 
-        #status { margin-top: 15px; font-size: 0.9rem; text-align: center; font-weight: 600; min-height: 20px; }
+        .event-type-badge {
+            display: inline-block;
+            font-size: 0.7rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: var(--gold);
+            border: 1px solid rgba(201,151,58,0.35);
+            padding: 4px 14px;
+            border-radius: 999px;
+            margin-top: 12px;
+            opacity: 0.85;
+        }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        #event-loading { padding: 50px; text-align: center; color: var(--text-muted); }
+        .ornament {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            margin: 24px 0 0;
+            color: var(--gold);
+            opacity: 0.5;
+            font-size: 0.6rem;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+        }
+        .ornament::before,
+        .ornament::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(to right, transparent, rgba(201,151,58,0.4));
+        }
+        .ornament::after { background: linear-gradient(to left, transparent, rgba(201,151,58,0.4)); }
+
+        /* ── BODY ── */
+        .body { padding: 36px 40px 40px; background: var(--cream); }
+
+        /* ── INFO GRID ── */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2px;
+            background: var(--mist);
+            border: 1px solid var(--mist);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 32px;
+        }
+
+        .info-cell {
+            background: var(--cream);
+            padding: 16px 18px;
+        }
+        .info-cell.full { grid-column: 1 / -1; }
+
+        .info-cell-icon {
+            font-size: 1rem;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .info-cell-label {
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            display: block;
+        }
+        .info-cell-value {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--ink);
+            line-height: 1.3;
+        }
+
+        /* theme pill */
+        .theme-pill {
+            display: none;
+            margin-top: 4px;
+        }
+        .theme-pill span {
+            display: inline-block;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 500;
+            background: linear-gradient(135deg, var(--gold-dk), var(--gold));
+            color: white;
+            padding: 2px 10px;
+            border-radius: 999px;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── SECTION TITLE ── */
+        .section-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--ink);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--mist);
+        }
+
+        /* ── FORM ── */
+        .form-group { margin-bottom: 18px; }
+        .form-label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            height: 50px;
+            padding: 0 16px;
+            border: 1px solid var(--mist);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-family: 'DM Sans', sans-serif;
+            color: var(--ink);
+            background: var(--white);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input[type="text"]:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201,151,58,0.12);
+        }
+
+        /* ── ATTENDANCE TOGGLE ── */
+        .attendance-toggle {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .attend-option { display: none; }
+        .attend-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 18px 12px;
+            border: 2px solid var(--mist);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--white);
+            text-align: center;
+        }
+        .attend-label:hover { border-color: var(--gold); background: var(--cream-dk); }
+        .attend-emoji { font-size: 1.6rem; }
+        .attend-text {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            letter-spacing: 0.3px;
+        }
+
+        #opt-attending:checked + .attend-label {
+            border-color: var(--teal);
+            background: #f0f9f9;
+            box-shadow: 0 0 0 3px rgba(0,104,111,0.1);
+        }
+        #opt-attending:checked + .attend-label .attend-text { color: var(--teal); }
+
+        #opt-decline:checked + .attend-label {
+            border-color: #dc2626;
+            background: #fff5f5;
+            box-shadow: 0 0 0 3px rgba(220,38,38,0.08);
+        }
+        #opt-decline:checked + .attend-label .attend-text { color: #dc2626; }
+
+        /* ── SUBMIT BUTTON ── */
+        .submit-btn {
+            width: 100%;
+            height: 52px;
+            margin-top: 6px;
+            background: linear-gradient(135deg, var(--ink) 0%, #2e2416 100%);
+            color: var(--gold-lt);
+            border: 1px solid rgba(201,151,58,0.3);
+            border-radius: 6px;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+        .submit-btn::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(201,151,58,0.1), transparent);
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .submit-btn:hover::before { opacity: 1; }
+        .submit-btn:hover { box-shadow: 0 4px 20px rgba(201,151,58,0.2); }
+        .submit-btn:active { transform: scale(0.99); }
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ── STATUS ── */
+        #status-msg {
+            margin-top: 14px;
+            font-size: 0.85rem;
+            text-align: center;
+            font-weight: 500;
+            min-height: 20px;
+            transition: all 0.3s;
+        }
+
+        /* ── SUCCESS STATE ── */
+        #success-card {
+            display: none;
+            margin-top: 28px;
+            border-top: 1px solid var(--mist);
+            padding-top: 28px;
+            animation: rise 0.6s ease forwards;
+        }
+
+        .success-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .success-seal {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--teal), var(--teal-dk));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 14px rgba(0,104,111,0.3);
+        }
+        .success-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--ink);
+        }
+        .success-sub {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* ── DOWNLOAD CARD ── */
+        #download-section { display: none; }
+        .download-card {
+            background: linear-gradient(135deg, #1a1208, #2a1f0e);
+            border: 1px solid rgba(201,151,58,0.25);
+            border-radius: 8px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            text-decoration: none;
+            transition: all 0.2s;
+            margin-top: 4px;
+        }
+        .download-card:hover {
+            border-color: rgba(201,151,58,0.5);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+            transform: translateY(-1px);
+        }
+        .download-icon {
+            width: 44px; height: 44px;
+            border-radius: 8px;
+            background: rgba(201,151,58,0.15);
+            border: 1px solid rgba(201,151,58,0.25);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem;
+            flex-shrink: 0;
+        }
+        .download-info { flex: 1; min-width: 0; }
+        .download-label {
+            font-size: 0.65rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--gold);
+            opacity: 0.7;
+            font-weight: 600;
+        }
+        .download-filename {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--cream);
+            margin-top: 3px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .download-arrow {
+            font-size: 1.1rem;
+            color: var(--gold);
+            opacity: 0.7;
+            flex-shrink: 0;
+        }
+
+        /* ── DECLINE STATE ── */
+        #decline-card {
+            display: none;
+            margin-top: 28px;
+            border-top: 1px solid var(--mist);
+            padding-top: 28px;
+            text-align: center;
+            animation: rise 0.6s ease forwards;
+        }
+        .decline-emoji { font-size: 2.2rem; margin-bottom: 10px; }
+        .decline-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.2rem;
+            color: var(--ink);
+            margin-bottom: 6px;
+        }
+        .decline-sub { font-size: 0.82rem; color: var(--text-muted); }
+
+        /* ── FOOTER ── */
+        .card-footer {
+            padding: 14px 40px 20px;
+            background: var(--cream-dk);
+            border-top: 1px solid var(--mist);
+            text-align: center;
+        }
+        .footer-text {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+        }
+        .footer-brand {
+            font-family: 'Cormorant Garamond', serif;
+            font-weight: 700;
+            color: var(--gold-dk);
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 460px) {
+            .body { padding: 28px 24px 32px; }
+            .hero { padding: 36px 24px 28px; }
+            .card-footer { padding: 14px 24px 18px; }
+            .info-grid { grid-template-columns: 1fr; }
+            .info-cell.full { grid-column: 1; }
+        }
+
+        /* ── ERROR ── */
+        .error-note {
+            background: #fff5f5;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            color: var(--error);
+            font-weight: 500;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div id="event-loading">Loading formal invitation...</div>
-        <div id="event-content" style="display:none;">
-            <div class="header-section">
-                <span class="invitation-text">You are Invited to</span>
-                <h1 id="event-title">Event Name</h1>
-                <div class="divider"></div>
+
+    <!-- Loading -->
+    <div id="loading-screen">
+        <div class="loading-seal"></div>
+        <p class="loading-text">Preparing your invitation</p>
+    </div>
+
+    <!-- Main Invitation -->
+    <div id="invitation-wrapper">
+        <div class="occasio-badge"><span>Occasio &nbsp;·&nbsp; Event Management</span></div>
+
+        <div class="card">
+            <!-- Hero -->
+            <div class="hero">
+                <div class="hero-inner">
+                    <span class="eyebrow">You are cordially invited to</span>
+                    <h1 class="event-title" id="event-title">—</h1>
+                    <span class="event-type-badge" id="event-type" style="display:none;"></span>
+                    <div class="ornament">❧</div>
+                </div>
             </div>
-            <div class="content">
-                <div class="info-stack">
-                    <div class="info-row">
-                        <div class="info-icon-box">📅</div>
-                        <div class="info-detail">
-                            <span class="info-label">When</span>
-                            <span class="info-value" id="disp-date">--</span>
-                        </div>
+
+            <!-- Body -->
+            <div class="body">
+
+                <!-- Info grid -->
+                <div class="info-grid">
+                    <div class="info-cell">
+                        <span class="info-cell-icon">📅</span>
+                        <span class="info-cell-label">When</span>
+                        <span class="info-cell-value" id="disp-date">—</span>
                     </div>
-                    <div class="info-row">
-                        <div class="info-icon-box">⏰</div>
-                        <div class="info-detail">
-                            <span class="info-label">Time</span>
-                            <span class="info-value" id="disp-time">--</span>
-                        </div>
+                    <div class="info-cell">
+                        <span class="info-cell-icon">⏰</span>
+                        <span class="info-cell-label">Time</span>
+                        <span class="info-cell-value" id="disp-time">—</span>
                     </div>
-                    <div class="info-row">
-                        <div class="info-icon-box">📍</div>
-                        <div class="info-detail">
-                            <span class="info-label">Where</span>
-                            <span class="info-value" id="disp-loc">--</span>
-                        </div>
+                    <div class="info-cell full">
+                        <span class="info-cell-icon">📍</span>
+                        <span class="info-cell-label">Where</span>
+                        <span class="info-cell-value" id="disp-loc">—</span>
+                    </div>
+                    <div class="info-cell full" id="desc-cell" style="display:none;">
+                        <span class="info-cell-icon">📝</span>
+                        <span class="info-cell-label">About this Event</span>
+                        <span class="info-cell-value" id="disp-desc" style="font-size:0.9rem; font-family:'DM Sans',sans-serif; font-weight:400; color:#4a3d2a; line-height:1.6;"></span>
+                    </div>
+                    <div class="info-cell full" id="theme-cell" style="display:none;">
+                        <span class="info-cell-icon">✨</span>
+                        <span class="info-cell-label">Theme</span>
+                        <span class="info-cell-value" id="disp-theme">—</span>
                     </div>
                 </div>
 
-                <div class="rsvp-section">
-                    <div class="input-group">
-                        <label class="form-label" for="guestName">Guest Name</label>
-                        <input type="text" id="guestName" placeholder="Enter your full name" required>
+                <!-- RSVP Form -->
+                <div id="rsvp-form-section">
+                    <p class="section-title">Your RSVP</p>
+
+                    <div class="form-group">
+                        <label class="form-label" for="guestName">Your Full Name</label>
+                        <input type="text" id="guestName" placeholder="e.g. Maria Santos" autocomplete="name">
                     </div>
 
-                    <div class="input-group">
-                        <label class="form-label" for="statusSelect">Will you attend?</label>
-                        <div class="select-wrapper">
-                            <select id="statusSelect">
-                                <option value="Going">I will be Attending</option>
-                                <option value="Not Going">Decline Invite</option>
-                            </select>
+                    <div class="form-group">
+                        <label class="form-label">Will you be attending?</label>
+                        <div class="attendance-toggle">
+                            <input type="radio" name="attend" id="opt-attending" value="Going" class="attend-option" checked>
+                            <label class="attend-label" for="opt-attending">
+                                <span class="attend-emoji">🎉</span>
+                                <span class="attend-text">Joyfully Attending</span>
+                            </label>
+
+                            <input type="radio" name="attend" id="opt-decline" value="Not Going" class="attend-option">
+                            <label class="attend-label" for="opt-decline">
+                                <span class="attend-emoji">🙏</span>
+                                <span class="attend-text">Regretfully Decline</span>
+                            </label>
                         </div>
                     </div>
-                    
-                    <button id="submitBtn" onclick="submitRSVP()">Confirm RSVP</button>
-                    <div id="status"></div>
+
+                    <button class="submit-btn" id="submitBtn" onclick="submitRSVP()">
+                        Confirm My Response
+                    </button>
+                    <div id="status-msg"></div>
                 </div>
+
+                <!-- Success (Attending) -->
+                <div id="success-card">
+                    <div class="success-header">
+                        <div class="success-seal">✓</div>
+                        <div>
+                            <div class="success-title">We'll see you there!</div>
+                            <div class="success-sub" id="success-name-note">Your RSVP has been confirmed.</div>
+                        </div>
+                    </div>
+
+                    <div id="download-section">
+                        <p class="form-label" style="margin-bottom:10px;">Your Invitation</p>
+                        <a id="download-link" class="download-card" href="#" target="_blank" download>
+                            <div class="download-icon">📄</div>
+                            <div class="download-info">
+                                <div class="download-label">Download File</div>
+                                <div class="download-filename" id="download-filename">invitation.pdf</div>
+                            </div>
+                            <div class="download-arrow">↓</div>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Decline -->
+                <div id="decline-card">
+                    <div class="decline-emoji">🙏</div>
+                    <div class="decline-title">Thank you for letting us know.</div>
+                    <div class="decline-sub">We're sorry you won't be able to make it. Your response has been recorded.</div>
+                </div>
+
+            </div>
+
+            <!-- Footer -->
+            <div class="card-footer">
+                <p class="footer-text">Powered by <span class="footer-brand">Occasio</span> &nbsp;·&nbsp; Event Management Platform</p>
             </div>
         </div>
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc, serverTimestamp }
+                                          from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
-            apiKey: "AIzaSyBNhdyamoJ2IB6chxV8VQSuE_QOgbJz2DA",
-            authDomain: "occasio-866c3.firebaseapp.com",
-            projectId: "occasio-866c3",
-            storageBucket: "occasio-866c3.firebasestorage.app",
+            apiKey:            "AIzaSyBNhdyamoJ2IB6chxV8VQSuE_QOgbJz2DA",
+            authDomain:        "occasio-866c3.firebaseapp.com",
+            projectId:         "occasio-866c3",
+            storageBucket:     "occasio-866c3.firebasestorage.app",
             messagingSenderId: "982786283947",
-            appId: "1:982786283947:web:ff5a4db6acb119fac61aee"
+            appId:             "1:982786283947:web:ff5a4db6acb119fac61aee"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+        const app      = initializeApp(firebaseConfig);
+        const db       = getFirestore(app);
         const urlParams = new URLSearchParams(window.location.search);
-        const eventId = urlParams.get('id'); 
+        const eventId   = urlParams.get('id');
 
+        // Store invitation file globally so submitRSVP can access it
+        let invitationFileData = null;
+
+        // ── Load event ──────────────────────────────────────────────────────────
         async function loadEventDetails() {
-            if(!eventId) return;
+            if (!eventId) {
+                document.getElementById('loading-screen').innerHTML =
+                    '<p style="color:#c9973a;font-family:Cormorant Garamond,serif;font-size:1.1rem;opacity:0.7;">No invitation link found.</p>';
+                return;
+            }
             try {
                 const docSnap = await getDoc(doc(db, "events", eventId));
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    document.getElementById('event-title').innerText = data.title;
-                    
-                    const date = data.startDate?.seconds ? new Date(data.startDate.seconds * 1000) : new Date(data.startDate);
-                    document.getElementById('disp-date').innerText = isNaN(date.getTime()) ? 'TBD' : date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-                    
-                    let timeStr = "To be announced";
-                    if (data.startTime) {
-                        const t = data.startTime.seconds ? new Date(data.startTime.seconds * 1000) : new Date(data.startTime);
-                        timeStr = t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                    }
-                    document.getElementById('disp-time').innerText = timeStr;
-                    document.getElementById('disp-loc').innerText = data.location || 'Location TBD';
-                    
-                    document.getElementById('event-loading').style.display = 'none';
-                    document.getElementById('event-content').style.display = 'block';
+                if (!docSnap.exists()) throw new Error('not found');
+
+                const data = docSnap.data();
+
+                // Title
+                document.getElementById('event-title').innerText = data.title || 'Untitled Event';
+
+                // Event type badge
+                if (data.eventType) {
+                    const badge = document.getElementById('event-type');
+                    badge.innerText = data.eventType;
+                    badge.style.display = 'inline-block';
                 }
+
+                // Date
+                const date = data.startDate?.seconds
+                    ? new Date(data.startDate.seconds * 1000)
+                    : new Date(data.startDate);
+                document.getElementById('disp-date').innerText = isNaN(date.getTime())
+                    ? 'To be announced'
+                    : date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+                // End date (multi-day)
+                if (data.isMultiDay && data.endDate) {
+                    const end = data.endDate?.seconds
+                        ? new Date(data.endDate.seconds * 1000)
+                        : new Date(data.endDate);
+                    if (!isNaN(end.getTime())) {
+                        const cur = document.getElementById('disp-date').innerText;
+                        document.getElementById('disp-date').innerText =
+                            cur + ' – ' + end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                    }
+                }
+
+                // Time — stored as plain string by AddEvent/UpdateEvent
+                if (data.startTime) {
+                    const timeVal = data.startTime;
+                    if (typeof timeVal === 'string') {
+                        document.getElementById('disp-time').innerText = timeVal;
+                    } else {
+                        const t = timeVal.seconds ? new Date(timeVal.seconds * 1000) : new Date(timeVal);
+                        document.getElementById('disp-time').innerText = isNaN(t.getTime())
+                            ? 'To be announced'
+                            : t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                    }
+                } else {
+                    document.getElementById('disp-time').innerText = 'To be announced';
+                }
+
+                // Location
+                document.getElementById('disp-loc').innerText = data.location || 'To be decided';
+
+                // Description
+                if (data.description) {
+                    document.getElementById('disp-desc').innerText = data.description;
+                    document.getElementById('desc-cell').style.display = 'block';
+                }
+
+                // Theme
+                if (data.theme) {
+                    document.getElementById('disp-theme').innerText = data.theme;
+                    document.getElementById('theme-cell').style.display = 'block';
+                }
+
+                // Invitation file (stored by the planner)
+                if (data.invitationFile && data.invitationFile.url) {
+                    invitationFileData = data.invitationFile;
+                }
+
+                // Show card
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('invitation-wrapper').style.display = 'block';
+
             } catch (e) {
-                document.getElementById('event-loading').innerText = "Error loading invitation.";
+                document.getElementById('loading-screen').innerHTML =
+                    '<p style="color:#c9973a;font-family:Cormorant Garamond,serif;font-size:1.1rem;opacity:0.7;">This invitation could not be loaded.</p>';
             }
         }
+
         loadEventDetails();
 
+        // ── Submit RSVP ─────────────────────────────────────────────────────────
         window.submitRSVP = async () => {
-            const name = document.getElementById('guestName').value.trim();
-            const status = document.getElementById('statusSelect').value;
-            const statusDiv = document.getElementById('status');
-            const btn = document.getElementById('submitBtn');
+            const name   = document.getElementById('guestName').value.trim();
+            const status = document.querySelector('input[name="attend"]:checked')?.value || 'Going';
+            const btn    = document.getElementById('submitBtn');
+            const msg    = document.getElementById('status-msg');
 
-            if (!name) return alert("Please enter your name");
+            if (!name) {
+                msg.innerText = 'Please enter your full name.';
+                msg.style.color = '#991b1b';
+                return;
+            }
 
             btn.disabled = true;
-            btn.innerText = "Verifying...";
+            btn.innerText = 'Confirming…';
+            msg.innerText = '';
 
             try {
-                const guestId = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                const rsvpRef = doc(db, "events", eventId, "rsvps", guestId);
+                const guestId  = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                const rsvpRef  = doc(db, "events", eventId, "rsvps", guestId);
+                const existing = await getDoc(rsvpRef);
 
-                const docSnap = await getDoc(rsvpRef);
-                if (docSnap.exists()) {
-                    statusDiv.innerText = "Error: This name has already RSVPed!";
-                    statusDiv.style.color = "#dc2626";
-                    btn.disabled = false;
-                    btn.innerText = "Confirm RSVP";
+                if (existing.exists()) {
+                    msg.innerHTML = 'This name has already RSVP\'d. Please use a different name or contact the organizer.';
+                    msg.style.color = '#991b1b';
+                    btn.disabled  = false;
+                    btn.innerText = 'Confirm My Response';
                     return;
                 }
 
                 await setDoc(rsvpRef, {
                     guestName: name,
-                    status: status,
+                    status,
                     timestamp: serverTimestamp()
                 });
 
-                statusDiv.innerText = "Confirmed! We've saved your response.";
-                statusDiv.style.color = "var(--primary)";
-                btn.innerText = "RSVP Sent";
-                document.getElementById('guestName').disabled = true;
-                document.getElementById('statusSelect').disabled = true;
+                // Hide form
+                document.getElementById('rsvp-form-section').style.display = 'none';
+
+                if (status === 'Going') {
+                    // Show success
+                    const sc = document.getElementById('success-card');
+                    sc.style.display = 'block';
+                    document.getElementById('success-name-note').innerText =
+                        `Thank you, ${name}! Your attendance has been confirmed.`;
+
+                    // Show download if invitation file was uploaded by planner
+                    if (invitationFileData) {
+                        const dl = document.getElementById('download-section');
+                        dl.style.display = 'block';
+                        const link = document.getElementById('download-link');
+                        link.href = invitationFileData.url;
+                        link.setAttribute('download', invitationFileData.name || 'invitation');
+                        document.getElementById('download-filename').innerText = invitationFileData.name || 'invitation';
+                    }
+                } else {
+                    // Show decline
+                    document.getElementById('decline-card').style.display = 'block';
+                }
+
             } catch (e) {
-                statusDiv.innerText = "Error submitting. Please try again.";
-                statusDiv.style.color = "#dc2626";
-                btn.disabled = false;
-                btn.innerText = "Confirm RSVP";
+                msg.innerText = 'Something went wrong. Please try again.';
+                msg.style.color = '#991b1b';
+                btn.disabled  = false;
+                btn.innerText = 'Confirm My Response';
             }
-        }
+        };
     </script>
 </body>
 </html>
