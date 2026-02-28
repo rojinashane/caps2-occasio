@@ -4,40 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Official Invitation | Occasio</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,600;0,700;1,400;1,600&display=swap" rel="stylesheet">
     <style>
+        /* ── DESIGN TOKENS — mirrors the React Native app exactly ── */
         :root {
-            --ink:       #1a1208;
-            --gold:      #c9973a;
-            --gold-lt:   #e8c97a;
-            --gold-dk:   #9a6f1e;
-            --cream:     #fdf8ee;
-            --cream-dk:  #f5edda;
-            --mist:      #ede8de;
-            --text:      #2e2416;
-            --text-muted:#7a6a52;
-            --white:     #ffffff;
-            --teal:      #00686F;
-            --teal-dk:   #004D52;
-            --success:   #166534;
-            --error:     #991b1b;
+            --teal:        #00686F;
+            --teal-dk:     #004D52;
+            --teal-lt:     #E8F5F5;
+            --teal-border: #99D6D9;
+            --bg:          #F4F6F9;
+            --white:       #ffffff;
+            --ink:         #0F172A;
+            --body:        #334155;
+            --muted:       #94A3B8;
+            --border:      #E2E8F0;
+            --surface:     #F8FAFC;
+            --danger:      #EF4444;
+            --danger-lt:   #FFF1F1;
         }
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
-            font-family: 'DM Sans', sans-serif;
-            background-color: #12100c;
-            background-image:
-                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(201,151,58,0.15), transparent),
-                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='400' height='400' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            background-image: radial-gradient(circle, #CBD5E1 0.8px, transparent 0.8px);
+            background-size: 22px 22px;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 40px 20px;
-            color: var(--text);
+            color: var(--ink);
         }
 
         /* ── LOADING ── */
@@ -46,75 +45,81 @@
             flex-direction: column;
             align-items: center;
             gap: 16px;
-            color: var(--gold-lt);
         }
-        .loading-seal {
-            width: 56px; height: 56px;
-            border: 2px solid var(--gold);
+        .loading-spinner {
+            width: 52px; height: 52px;
+            border: 3px solid var(--teal-lt);
+            border-top-color: var(--teal);
             border-radius: 50%;
-            border-top-color: transparent;
-            animation: spin 1s linear infinite;
+            animation: spin 0.9s linear infinite;
         }
         .loading-text {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.1rem;
+            font-size: 0.75rem;
+            font-weight: 700;
             letter-spacing: 3px;
             text-transform: uppercase;
-            opacity: 0.7;
+            color: var(--muted);
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* ── ENVELOPE WRAPPER ── */
+        /* ── WRAPPER ── */
         #invitation-wrapper {
             display: none;
             width: 100%;
-            max-width: 520px;
-            animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            max-width: 480px;
+            animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
         @keyframes rise {
-            from { opacity: 0; transform: translateY(32px) scale(0.97); }
+            from { opacity: 0; transform: translateY(24px) scale(0.98); }
             to   { opacity: 1; transform: translateY(0) scale(1); }
         }
 
-        /* ── HEADER BADGE ── */
-        .occasio-badge {
-            text-align: center;
-            margin-bottom: 24px;
+        /* ── APP BRAND HEADER ── */
+        .app-brand {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
         }
-        .occasio-badge span {
+        .app-brand img {
+            height: 38px;
+            width: auto;
+            object-fit: contain;
+        }
+        .app-brand-text { display: flex; flex-direction: column; }
+        .app-brand-name {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 0.75rem;
-            letter-spacing: 6px;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--teal-dk);
+            line-height: 1;
+        }
+        .app-brand-tagline {
+            font-size: 0.58rem;
+            font-weight: 700;
+            letter-spacing: 2.5px;
             text-transform: uppercase;
-            color: var(--gold);
-            opacity: 0.8;
+            color: var(--muted);
+            margin-top: 4px;
         }
 
         /* ── CARD ── */
         .card {
-            background: var(--cream);
-            border-radius: 4px;
+            background: var(--white);
+            border-radius: 20px;
             overflow: hidden;
-            position: relative;
             box-shadow:
-                0 0 0 1px rgba(201,151,58,0.3),
-                0 30px 80px rgba(0,0,0,0.6),
-                0 4px 20px rgba(0,0,0,0.3);
+                0 0 0 1px var(--border),
+                0 20px 60px rgba(0,104,111,0.10),
+                0 4px 16px rgba(0,0,0,0.05);
         }
 
-        /* top wax-seal strip */
-        .card::before {
-            content: '';
-            display: block;
-            height: 4px;
-            background: linear-gradient(90deg, var(--gold-dk), var(--gold-lt), var(--gold-dk));
-        }
-
-        /* ── HERO ── */
+        /* ── HERO — matches the app's #00686F teal header ── */
         .hero {
-            padding: 48px 40px 36px;
-            text-align: center;
-            background: linear-gradient(160deg, #1f1a0f 0%, #2a2112 50%, #1a1510 100%);
+            background-color: var(--teal);
+            background-image: radial-gradient(ellipse 130% 80% at 50% -10%, rgba(0,133,142,0.55), transparent);
+            padding: 32px 28px 28px;
             position: relative;
             overflow: hidden;
         }
@@ -122,171 +127,169 @@
             content: '';
             position: absolute;
             inset: 0;
-            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60'%3E%3Ccircle cx='30' cy='30' r='1' fill='rgba(201,151,58,0.08)'/%3E%3C/svg%3E") repeat;
+            background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+            background-size: 18px 18px;
+            pointer-events: none;
+        }
+        .hero-inner {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
         }
 
-        .hero-inner { position: relative; z-index: 1; }
-
-        .eyebrow {
-            font-family: 'Cormorant Garamond', serif;
-            font-style: italic;
-            font-size: 1rem;
-            color: var(--gold);
-            letter-spacing: 2px;
-            margin-bottom: 14px;
-            display: block;
-            opacity: 0.9;
+        /* pill */
+        .eyebrow-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 999px;
+            padding: 5px 14px;
+            margin-bottom: 16px;
+        }
+        .eyebrow-pill svg {
+            width: 13px; height: 13px;
+            opacity: 0.88;
+            flex-shrink: 0;
+        }
+        .eyebrow-pill span {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.88);
         }
 
         .event-title {
             font-family: 'Cormorant Garamond', serif;
-            font-size: clamp(2rem, 6vw, 2.8rem);
+            font-size: clamp(1.8rem, 6vw, 2.5rem);
             font-weight: 700;
-            color: var(--cream);
+            color: #fff;
             line-height: 1.15;
-            margin-bottom: 6px;
+            margin-bottom: 14px;
         }
 
+        /* event type chip */
         .event-type-badge {
-            display: inline-block;
-            font-size: 0.7rem;
-            letter-spacing: 3px;
-            text-transform: uppercase;
-            color: var(--gold);
-            border: 1px solid rgba(201,151,58,0.35);
-            padding: 4px 14px;
-            border-radius: 999px;
-            margin-top: 12px;
-            opacity: 0.85;
-        }
-
-        .ornament {
-            display: flex;
+            display: none;
             align-items: center;
-            justify-content: center;
-            gap: 14px;
-            margin: 24px 0 0;
-            color: var(--gold);
-            opacity: 0.5;
-            font-size: 0.6rem;
-            letter-spacing: 8px;
+            background: rgba(255,255,255,0.18);
+            border-radius: 999px;
+            padding: 4px 14px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 1px;
             text-transform: uppercase;
+            color: rgba(255,255,255,0.9);
         }
-        .ornament::before,
-        .ornament::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: linear-gradient(to right, transparent, rgba(201,151,58,0.4));
-        }
-        .ornament::after { background: linear-gradient(to left, transparent, rgba(201,151,58,0.4)); }
 
         /* ── BODY ── */
-        .body { padding: 36px 40px 40px; background: var(--cream); }
+        .body { padding: 28px 28px 32px; }
 
         /* ── INFO GRID ── */
         .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 2px;
-            background: var(--mist);
-            border: 1px solid var(--mist);
-            border-radius: 8px;
-            overflow: hidden;
-            margin-bottom: 32px;
+            gap: 8px;
+            margin-bottom: 28px;
         }
-
         .info-cell {
-            background: var(--cream);
-            padding: 16px 18px;
+            background: var(--surface);
+            border: 1.5px solid var(--border);
+            border-radius: 14px;
+            padding: 14px 14px 12px;
+            transition: border-color 0.2s;
         }
+        .info-cell:hover { border-color: var(--teal-border); }
         .info-cell.full { grid-column: 1 / -1; }
 
-        .info-cell-icon {
-            font-size: 1rem;
-            margin-bottom: 6px;
-            display: block;
+        .info-cell-icon-box {
+            width: 28px; height: 28px;
+            border-radius: 8px;
+            background: var(--teal-lt);
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 8px;
+        }
+        .info-cell-icon-box svg {
+            width: 14px; height: 14px;
+            color: var(--teal);
         }
         .info-cell-label {
-            font-size: 0.65rem;
-            font-weight: 600;
+            font-size: 0.6rem;
+            font-weight: 700;
             letter-spacing: 2px;
             text-transform: uppercase;
-            color: var(--text-muted);
+            color: var(--muted);
             margin-bottom: 4px;
             display: block;
         }
         .info-cell-value {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.05rem;
-            font-weight: 600;
+            font-size: 0.88rem;
+            font-weight: 700;
             color: var(--ink);
-            line-height: 1.3;
+            line-height: 1.4;
         }
 
-        /* theme pill */
-        .theme-pill {
-            display: none;
-            margin-top: 4px;
-        }
-        .theme-pill span {
-            display: inline-block;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.7rem;
-            font-weight: 500;
-            background: linear-gradient(135deg, var(--gold-dk), var(--gold));
-            color: white;
-            padding: 2px 10px;
-            border-radius: 999px;
-            letter-spacing: 0.5px;
-        }
-
-        /* ── SECTION TITLE ── */
-        .section-title {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.3rem;
-            font-weight: 600;
-            color: var(--ink);
-            margin-bottom: 20px;
+        /* ── SECTION HEADER ── */
+        .section-header {
             display: flex;
             align-items: center;
             gap: 10px;
+            margin-bottom: 18px;
         }
-        .section-title::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: var(--mist);
+        .section-header-icon {
+            width: 30px; height: 30px;
+            border-radius: 9px;
+            background: var(--teal-lt);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .section-header-icon svg {
+            width: 15px; height: 15px;
+            color: var(--teal);
+        }
+        .section-header-title {
+            font-size: 0.85rem;
+            font-weight: 800;
+            color: var(--ink);
+        }
+        .section-header-line {
+            flex: 1; height: 1px;
+            background: var(--border);
         }
 
         /* ── FORM ── */
-        .form-group { margin-bottom: 18px; }
+        .form-group { margin-bottom: 16px; }
         .form-label {
             display: block;
-            font-size: 0.75rem;
-            font-weight: 600;
-            letter-spacing: 1px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
-            color: var(--text-muted);
+            color: var(--muted);
             margin-bottom: 8px;
         }
 
         input[type="text"] {
             width: 100%;
-            height: 50px;
-            padding: 0 16px;
-            border: 1px solid var(--mist);
-            border-radius: 6px;
+            height: 48px;
+            padding: 0 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
             font-size: 0.95rem;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Inter', sans-serif;
             color: var(--ink);
-            background: var(--white);
+            background: var(--surface);
             outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
         }
         input[type="text"]:focus {
-            border-color: var(--gold);
-            box-shadow: 0 0 0 3px rgba(201,151,58,0.12);
+            border-color: var(--teal);
+            background: var(--white);
+            box-shadow: 0 0 0 4px rgba(0,104,111,0.08);
         }
 
         /* ── ATTENDANCE TOGGLE ── */
@@ -301,229 +304,272 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            padding: 18px 12px;
-            border: 2px solid var(--mist);
-            border-radius: 8px;
+            gap: 10px;
+            padding: 16px 10px;
+            border: 1.5px solid var(--border);
+            border-radius: 14px;
             cursor: pointer;
             transition: all 0.2s;
-            background: var(--white);
-            text-align: center;
+            background: var(--surface);
         }
-        .attend-label:hover { border-color: var(--gold); background: var(--cream-dk); }
-        .attend-emoji { font-size: 1.6rem; }
+        .attend-label:hover {
+            border-color: var(--teal-border);
+            background: var(--teal-lt);
+        }
+        .attend-icon-wrap {
+            width: 38px; height: 38px;
+            border-radius: 11px;
+            background: var(--border);
+            display: flex; align-items: center; justify-content: center;
+            transition: background 0.2s;
+        }
+        .attend-icon-wrap svg {
+            width: 18px; height: 18px;
+            color: var(--muted);
+            transition: color 0.2s;
+        }
         .attend-text {
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            letter-spacing: 0.3px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--muted);
+            text-align: center;
+            transition: color 0.2s;
         }
-
         #opt-attending:checked + .attend-label {
             border-color: var(--teal);
-            background: #f0f9f9;
-            box-shadow: 0 0 0 3px rgba(0,104,111,0.1);
+            background: var(--teal-lt);
+            box-shadow: 0 0 0 3px rgba(0,104,111,0.10);
+        }
+        #opt-attending:checked + .attend-label .attend-icon-wrap {
+            background: var(--teal);
+        }
+        #opt-attending:checked + .attend-label .attend-icon-wrap svg {
+            color: #fff;
         }
         #opt-attending:checked + .attend-label .attend-text { color: var(--teal); }
 
         #opt-decline:checked + .attend-label {
-            border-color: #dc2626;
-            background: #fff5f5;
-            box-shadow: 0 0 0 3px rgba(220,38,38,0.08);
+            border-color: var(--danger);
+            background: var(--danger-lt);
+            box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
         }
-        #opt-decline:checked + .attend-label .attend-text { color: #dc2626; }
+        #opt-decline:checked + .attend-label .attend-icon-wrap {
+            background: var(--danger);
+        }
+        #opt-decline:checked + .attend-label .attend-icon-wrap svg {
+            color: #fff;
+        }
+        #opt-decline:checked + .attend-label .attend-text { color: var(--danger); }
 
         /* ── SUBMIT BUTTON ── */
         .submit-btn {
             width: 100%;
             height: 52px;
-            margin-top: 6px;
-            background: linear-gradient(135deg, var(--ink) 0%, #2e2416 100%);
-            color: var(--gold-lt);
-            border: 1px solid rgba(201,151,58,0.3);
-            border-radius: 6px;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 0.85rem;
-            font-weight: 600;
-            letter-spacing: 2px;
+            margin-top: 8px;
+            background: var(--teal);
+            color: #fff;
+            border: none;
+            border-radius: 14px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             cursor: pointer;
-            transition: all 0.2s;
-            position: relative;
-            overflow: hidden;
+            transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 4px 14px rgba(0,104,111,0.25);
         }
-        .submit-btn::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(201,151,58,0.1), transparent);
-            opacity: 0;
-            transition: opacity 0.2s;
+        .submit-btn:hover {
+            background: var(--teal-dk);
+            box-shadow: 0 6px 20px rgba(0,104,111,0.35);
         }
-        .submit-btn:hover::before { opacity: 1; }
-        .submit-btn:hover { box-shadow: 0 4px 20px rgba(201,151,58,0.2); }
         .submit-btn:active { transform: scale(0.99); }
         .submit-btn:disabled {
-            opacity: 0.5;
+            background: var(--muted);
             cursor: not-allowed;
+            box-shadow: none;
             transform: none;
         }
 
-        /* ── STATUS ── */
+        /* ── STATUS MESSAGE ── */
         #status-msg {
-            margin-top: 14px;
-            font-size: 0.85rem;
+            margin-top: 12px;
+            font-size: 0.82rem;
+            font-weight: 600;
             text-align: center;
-            font-weight: 500;
             min-height: 20px;
-            transition: all 0.3s;
         }
 
-        /* ── SUCCESS STATE ── */
+        /* ── SUCCESS CARD ── */
         #success-card {
             display: none;
-            margin-top: 28px;
-            border-top: 1px solid var(--mist);
-            padding-top: 28px;
-            animation: rise 0.6s ease forwards;
+            margin-top: 24px;
+            border-top: 1px solid var(--border);
+            padding-top: 24px;
+            animation: rise 0.5s ease forwards;
         }
-
         .success-header {
             display: flex;
             align-items: center;
             gap: 14px;
-            margin-bottom: 18px;
+            margin-bottom: 20px;
         }
         .success-seal {
             width: 48px; height: 48px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--teal), var(--teal-dk));
+            border-radius: 14px;
+            background: var(--teal);
             display: flex; align-items: center; justify-content: center;
-            font-size: 1.4rem;
             flex-shrink: 0;
             box-shadow: 0 4px 14px rgba(0,104,111,0.3);
         }
+        .success-seal svg {
+            width: 22px; height: 22px;
+            color: #fff;
+        }
         .success-title {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.25rem;
-            font-weight: 700;
+            font-size: 1rem;
+            font-weight: 800;
             color: var(--ink);
         }
         .success-sub {
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            margin-top: 2px;
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-top: 3px;
+            font-weight: 500;
         }
 
         /* ── DOWNLOAD CARD ── */
         #download-section { display: none; }
         .download-card {
-            background: linear-gradient(135deg, #1a1208, #2a1f0e);
-            border: 1px solid rgba(201,151,58,0.25);
-            border-radius: 8px;
-            padding: 20px;
+            background: var(--teal-lt);
+            border: 1.5px solid var(--teal-border);
+            border-radius: 14px;
+            padding: 14px 16px;
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 14px;
             text-decoration: none;
             transition: all 0.2s;
-            margin-top: 4px;
+            margin-top: 6px;
         }
         .download-card:hover {
-            border-color: rgba(201,151,58,0.5);
-            box-shadow: 0 6px 24px rgba(0,0,0,0.3);
+            background: #d0ecee;
+            border-color: var(--teal);
+            box-shadow: 0 4px 16px rgba(0,104,111,0.15);
             transform: translateY(-1px);
         }
         .download-icon {
-            width: 44px; height: 44px;
-            border-radius: 8px;
-            background: rgba(201,151,58,0.15);
-            border: 1px solid rgba(201,151,58,0.25);
+            width: 40px; height: 40px;
+            border-radius: 12px;
+            background: var(--white);
+            border: 1.5px solid var(--teal-border);
             display: flex; align-items: center; justify-content: center;
-            font-size: 1.3rem;
             flex-shrink: 0;
+        }
+        .download-icon svg {
+            width: 18px; height: 18px;
+            color: var(--teal);
         }
         .download-info { flex: 1; min-width: 0; }
         .download-label {
-            font-size: 0.65rem;
+            font-size: 0.58rem;
+            font-weight: 700;
             letter-spacing: 2px;
             text-transform: uppercase;
-            color: var(--gold);
-            opacity: 0.7;
-            font-weight: 600;
+            color: var(--teal);
+            opacity: 0.85;
         }
         .download-filename {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--cream);
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--ink);
             margin-top: 3px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
         .download-arrow {
-            font-size: 1.1rem;
-            color: var(--gold);
-            opacity: 0.7;
+            width: 30px; height: 30px;
+            border-radius: 8px;
+            background: var(--teal);
+            display: flex; align-items: center; justify-content: center;
             flex-shrink: 0;
         }
+        .download-arrow svg {
+            width: 14px; height: 14px;
+            color: #fff;
+        }
 
-        /* ── DECLINE STATE ── */
+        /* ── DECLINE CARD ── */
         #decline-card {
             display: none;
-            margin-top: 28px;
-            border-top: 1px solid var(--mist);
-            padding-top: 28px;
+            margin-top: 24px;
+            border-top: 1px solid var(--border);
+            padding-top: 24px;
             text-align: center;
-            animation: rise 0.6s ease forwards;
+            animation: rise 0.5s ease forwards;
         }
-        .decline-emoji { font-size: 2.2rem; margin-bottom: 10px; }
+        .decline-icon-box {
+            width: 56px; height: 56px;
+            border-radius: 16px;
+            background: #FFF1F1;
+            border: 1.5px solid #FECACA;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 14px;
+        }
+        .decline-icon-box svg {
+            width: 24px; height: 24px;
+            color: var(--danger);
+        }
         .decline-title {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 1.2rem;
+            font-size: 1rem;
+            font-weight: 800;
             color: var(--ink);
             margin-bottom: 6px;
         }
-        .decline-sub { font-size: 0.82rem; color: var(--text-muted); }
+        .decline-sub {
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-weight: 500;
+            line-height: 1.6;
+        }
 
         /* ── FOOTER ── */
         .card-footer {
-            padding: 14px 40px 20px;
-            background: var(--cream-dk);
-            border-top: 1px solid var(--mist);
-            text-align: center;
+            padding: 14px 28px 18px;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .footer-logo {
+            height: 20px;
+            width: auto;
+            object-fit: contain;
+            opacity: 0.45;
         }
         .footer-text {
-            font-size: 0.7rem;
-            color: var(--text-muted);
-            letter-spacing: 1px;
-        }
-        .footer-brand {
-            font-family: 'Cormorant Garamond', serif;
+            font-size: 0.62rem;
             font-weight: 700;
-            color: var(--gold-dk);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        .footer-dot {
+            width: 3px; height: 3px;
+            border-radius: 50%;
+            background: var(--border);
         }
 
         /* ── RESPONSIVE ── */
-        @media (max-width: 460px) {
-            .body { padding: 28px 24px 32px; }
-            .hero { padding: 36px 24px 28px; }
-            .card-footer { padding: 14px 24px 18px; }
+        @media (max-width: 440px) {
+            .body { padding: 22px 20px 28px; }
+            .hero { padding: 26px 20px 24px; }
+            .card-footer { padding: 12px 20px 16px; }
             .info-grid { grid-template-columns: 1fr; }
             .info-cell.full { grid-column: 1; }
-        }
-
-        /* ── ERROR ── */
-        .error-note {
-            background: #fff5f5;
-            border: 1px solid #fecaca;
-            border-radius: 6px;
-            padding: 10px 14px;
-            font-size: 0.82rem;
-            color: var(--error);
-            font-weight: 500;
-            text-align: center;
         }
     </style>
 </head>
@@ -531,22 +577,34 @@
 
     <!-- Loading -->
     <div id="loading-screen">
-        <div class="loading-seal"></div>
+        <div class="loading-spinner"></div>
         <p class="loading-text">Preparing your invitation</p>
     </div>
 
     <!-- Main Invitation -->
     <div id="invitation-wrapper">
-        <div class="occasio-badge"><span>Occasio &nbsp;·&nbsp; Event Management</span></div>
+
+        <!-- App brand header with logo -->
+        <div class="app-brand">
+            <img src="../assets/logoo.png" alt="Occasio" onerror="this.style.display='none'">
+            <div class="app-brand-text">
+                <span class="app-brand-name">Occasio</span>
+                <span class="app-brand-tagline">Event Planner</span>
+            </div>
+        </div>
 
         <div class="card">
+
             <!-- Hero -->
             <div class="hero">
                 <div class="hero-inner">
-                    <span class="eyebrow">You are cordially invited to</span>
+                    <div class="eyebrow-pill">
+                        <!-- Mail icon -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2,4 12,13 22,4"/></svg>
+                        <span>You are cordially invited to</span>
+                    </div>
                     <h1 class="event-title" id="event-title">—</h1>
-                    <span class="event-type-badge" id="event-type" style="display:none;"></span>
-                    <div class="ornament">❧</div>
+                    <div class="event-type-badge" id="event-type"></div>
                 </div>
             </div>
 
@@ -556,27 +614,42 @@
                 <!-- Info grid -->
                 <div class="info-grid">
                     <div class="info-cell">
-                        <span class="info-cell-icon">📅</span>
+                        <div class="info-cell-icon-box">
+                            <!-- Calendar icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        </div>
                         <span class="info-cell-label">When</span>
                         <span class="info-cell-value" id="disp-date">—</span>
                     </div>
                     <div class="info-cell">
-                        <span class="info-cell-icon">⏰</span>
+                        <div class="info-cell-icon-box">
+                            <!-- Clock icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                        </div>
                         <span class="info-cell-label">Time</span>
                         <span class="info-cell-value" id="disp-time">—</span>
                     </div>
                     <div class="info-cell full">
-                        <span class="info-cell-icon">📍</span>
+                        <div class="info-cell-icon-box">
+                            <!-- Map pin icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+                        </div>
                         <span class="info-cell-label">Where</span>
                         <span class="info-cell-value" id="disp-loc">—</span>
                     </div>
                     <div class="info-cell full" id="desc-cell" style="display:none;">
-                        <span class="info-cell-icon">📝</span>
+                        <div class="info-cell-icon-box">
+                            <!-- File text icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+                        </div>
                         <span class="info-cell-label">About this Event</span>
-                        <span class="info-cell-value" id="disp-desc" style="font-size:0.9rem; font-family:'DM Sans',sans-serif; font-weight:400; color:#4a3d2a; line-height:1.6;"></span>
+                        <span class="info-cell-value" id="disp-desc" style="font-weight:500; color:var(--body); line-height:1.6;"></span>
                     </div>
                     <div class="info-cell full" id="theme-cell" style="display:none;">
-                        <span class="info-cell-icon">✨</span>
+                        <div class="info-cell-icon-box">
+                            <!-- Sparkles / star icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26 12,2"/></svg>
+                        </div>
                         <span class="info-cell-label">Theme</span>
                         <span class="info-cell-value" id="disp-theme">—</span>
                     </div>
@@ -584,7 +657,14 @@
 
                 <!-- RSVP Form -->
                 <div id="rsvp-form-section">
-                    <p class="section-title">Your RSVP</p>
+                    <div class="section-header">
+                        <div class="section-header-icon">
+                            <!-- Ticket icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v2z"/><line x1="9" y1="9" x2="9" y2="15"/></svg>
+                        </div>
+                        <span class="section-header-title">Your RSVP</span>
+                        <div class="section-header-line"></div>
+                    </div>
 
                     <div class="form-group">
                         <label class="form-label" for="guestName">Your Full Name</label>
@@ -596,13 +676,19 @@
                         <div class="attendance-toggle">
                             <input type="radio" name="attend" id="opt-attending" value="Going" class="attend-option" checked>
                             <label class="attend-label" for="opt-attending">
-                                <span class="attend-emoji">🎉</span>
+                                <div class="attend-icon-wrap">
+                                    <!-- Check / party / attending icon -->
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"/></svg>
+                                </div>
                                 <span class="attend-text">Joyfully Attending</span>
                             </label>
 
                             <input type="radio" name="attend" id="opt-decline" value="Not Going" class="attend-option">
                             <label class="attend-label" for="opt-decline">
-                                <span class="attend-emoji">🙏</span>
+                                <div class="attend-icon-wrap">
+                                    <!-- X / decline icon -->
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                </div>
                                 <span class="attend-text">Regretfully Decline</span>
                             </label>
                         </div>
@@ -617,7 +703,10 @@
                 <!-- Success (Attending) -->
                 <div id="success-card">
                     <div class="success-header">
-                        <div class="success-seal">✓</div>
+                        <div class="success-seal">
+                            <!-- Checkmark icon -->
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20,6 9,17 4,12"/></svg>
+                        </div>
                         <div>
                             <div class="success-title">We'll see you there!</div>
                             <div class="success-sub" id="success-name-note">Your RSVP has been confirmed.</div>
@@ -625,30 +714,42 @@
                     </div>
 
                     <div id="download-section">
-                        <p class="form-label" style="margin-bottom:10px;">Your Invitation</p>
+                        <p class="form-label" style="margin-bottom:10px;">Your Invitation File</p>
                         <a id="download-link" class="download-card" href="#" target="_blank" download>
-                            <div class="download-icon">📄</div>
+                            <div class="download-icon">
+                                <!-- File icon -->
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+                            </div>
                             <div class="download-info">
                                 <div class="download-label">Download File</div>
                                 <div class="download-filename" id="download-filename">invitation.pdf</div>
                             </div>
-                            <div class="download-arrow">↓</div>
+                            <div class="download-arrow">
+                                <!-- Arrow down icon -->
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19,12 12,19 5,12"/></svg>
+                            </div>
                         </a>
                     </div>
                 </div>
 
                 <!-- Decline -->
                 <div id="decline-card">
-                    <div class="decline-emoji">🙏</div>
+                    <div class="decline-icon-box">
+                        <!-- Hands / sad / decline icon -->
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                    </div>
                     <div class="decline-title">Thank you for letting us know.</div>
-                    <div class="decline-sub">We're sorry you won't be able to make it. Your response has been recorded.</div>
+                    <div class="decline-sub">We're sorry you won't be able to make it.<br>Your response has been recorded.</div>
                 </div>
 
             </div>
 
-            <!-- Footer -->
+            <!-- Footer with logo -->
             <div class="card-footer">
-                <p class="footer-text">Powered by <span class="footer-brand">Occasio</span> &nbsp;·&nbsp; Event Management Platform</p>
+                <img src="../assets/logoo.png" alt="" class="footer-logo" onerror="this.style.display='none'">
+                <span class="footer-text">Occasio</span>
+                <div class="footer-dot"></div>
+                <span class="footer-text">Event Planner</span>
             </div>
         </div>
     </div>
@@ -679,7 +780,7 @@
         async function loadEventDetails() {
             if (!eventId) {
                 document.getElementById('loading-screen').innerHTML =
-                    '<p style="color:#c9973a;font-family:Cormorant Garamond,serif;font-size:1.1rem;opacity:0.7;">No invitation link found.</p>';
+                    '<p style="color:#94A3B8;font-size:0.85rem;font-weight:600;letter-spacing:1px;">No invitation link found.</p>';
                 return;
             }
             try {
@@ -695,7 +796,7 @@
                 if (data.eventType) {
                     const badge = document.getElementById('event-type');
                     badge.innerText = data.eventType;
-                    badge.style.display = 'inline-block';
+                    badge.style.display = 'inline-flex';
                 }
 
                 // Date
@@ -759,7 +860,7 @@
 
             } catch (e) {
                 document.getElementById('loading-screen').innerHTML =
-                    '<p style="color:#c9973a;font-family:Cormorant Garamond,serif;font-size:1.1rem;opacity:0.7;">This invitation could not be loaded.</p>';
+                    '<p style="color:#94A3B8;font-size:0.85rem;font-weight:600;letter-spacing:1px;">This invitation could not be loaded.</p>';
             }
         }
 
@@ -774,7 +875,7 @@
 
             if (!name) {
                 msg.innerText = 'Please enter your full name.';
-                msg.style.color = '#991b1b';
+                msg.style.color = '#EF4444';
                 return;
             }
 
@@ -789,7 +890,7 @@
 
                 if (existing.exists()) {
                     msg.innerHTML = 'This name has already RSVP\'d. Please use a different name or contact the organizer.';
-                    msg.style.color = '#991b1b';
+                    msg.style.color = '#EF4444';
                     btn.disabled  = false;
                     btn.innerText = 'Confirm My Response';
                     return;
@@ -827,7 +928,7 @@
 
             } catch (e) {
                 msg.innerText = 'Something went wrong. Please try again.';
-                msg.style.color = '#991b1b';
+                msg.style.color = '#EF4444';
                 btn.disabled  = false;
                 btn.innerText = 'Confirm My Response';
             }

@@ -10,6 +10,8 @@ import {
   Easing,
   ScrollView,
   ActivityIndicator,
+  StyleSheet,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomText from '../components/CustomText';
@@ -22,31 +24,81 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-// Move InputField OUTSIDE the main component
-const InputField = ({ label, icon, ...props }) => (
-  <View style={{ marginBottom: 12 }}>
-    <CustomText style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>
-      {label}
-    </CustomText>
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 11,
-        borderWidth: 1.5,
-        borderColor: '#D1D5DB',
-      }}
-    >
-      <Ionicons name={icon} size={20} color="#00686F" />
+const { height } = Dimensions.get('window');
+
+// ── InputField — OUTSIDE main component (unchanged logic) ──────────────────
+const InputField = ({ label, icon, isFocused, onFocus, onBlur, ...props }) => (
+  <View style={inputStyles.wrapper}>
+    <CustomText style={inputStyles.label}>{label}</CustomText>
+    <View style={[inputStyles.container, isFocused && inputStyles.containerFocused]}>
+      <View style={inputStyles.iconBox}>
+        <Ionicons name={icon} size={16} color={isFocused ? '#00686F' : '#94A3B8'} />
+      </View>
       <TextInput
-        style={{ flex: 1, marginLeft: 10, fontSize: 15, color: '#111827' }}
-        placeholderTextColor="#9CA3AF"
+        style={inputStyles.input}
+        placeholderTextColor="#CBD5E1"
+        onFocus={onFocus}
+        onBlur={onBlur}
         {...props}
       />
     </View>
+  </View>
+);
+
+const inputStyles = StyleSheet.create({
+  wrapper: { marginBottom: 12 },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 7,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+  },
+  containerFocused: {
+    borderColor: '#00686F',
+    backgroundColor: '#FAFFFE',
+    shadowColor: '#00686F',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  iconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: '#0F172A',
+    fontWeight: '500',
+  },
+});
+
+// ── Step indicator dot ──────────────────────────────────────────────────────
+const StepDot = ({ active, completed }) => (
+  <View style={[
+    styles.stepDot,
+    active && styles.stepDotActive,
+    completed && styles.stepDotCompleted,
+  ]}>
+    {completed && <Ionicons name="checkmark" size={10} color="#fff" />}
   </View>
 );
 
@@ -54,6 +106,7 @@ export default function SignupScreen({ navigation }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
+  // --- ALL STATE UNCHANGED ---
   const [step, setStep] = useState(1);
   const [firstname, setFirstname] = useState('');
   const [middlename, setMiddlename] = useState('');
@@ -64,6 +117,9 @@ export default function SignupScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  // Focus state for improved input styling
+  const [focused, setFocused] = useState(null);
+
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -72,6 +128,7 @@ export default function SignupScreen({ navigation }) {
     }).start();
   }, []);
 
+  // --- ALL ANIMATION LOGIC UNCHANGED ---
   const animateStep = (direction) => {
     Animated.sequence([
       Animated.timing(slideAnim, {
@@ -87,6 +144,7 @@ export default function SignupScreen({ navigation }) {
     ]).start();
   };
 
+  // --- ALL HANDLERS UNCHANGED ---
   const handleNext = () => {
     if (!firstname.trim() || !lastname.trim() || !username.trim()) {
       Alert.alert('Missing Fields', 'Please fill in all required fields.');
@@ -101,18 +159,15 @@ export default function SignupScreen({ navigation }) {
       Alert.alert('Missing Fields', 'Please enter email and password.');
       return;
     }
-
     if (password.length < 6) {
       Alert.alert('Weak Password', 'Password should be at least 6 characters.');
       return;
     }
-
     if (loading) return;
     setLoading(true);
 
     try {
       const cleanEmail = email.trim().toLowerCase();
-
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
       const user = userCredential.user;
 
@@ -138,13 +193,11 @@ export default function SignupScreen({ navigation }) {
     } catch (err) {
       console.error('Signup failed:', err);
       let errorMessage = 'An error occurred. Please try again.';
-
       if (err.code === 'auth/email-already-in-use') {
         errorMessage = 'This email is already registered.';
       } else if (err.code === 'auth/invalid-email') {
         errorMessage = 'Invalid email format.';
       }
-
       Alert.alert('Signup Error', errorMessage);
     } finally {
       setLoading(false);
@@ -152,14 +205,18 @@ export default function SignupScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#EFF0EE' }} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      {/* Decorative orbs */}
+      <View style={styles.orbTopRight} />
+      <View style={styles.orbBottomLeft} />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 20, paddingVertical: 24, justifyContent: 'center' }}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -169,201 +226,201 @@ export default function SignupScreen({ navigation }) {
               transform: [{ translateX: slideAnim }],
             }}
           >
-            {/* Header with Step Indicator */}
-            <View style={{ marginBottom: 24, alignItems: 'center' }}>
-              <CustomText style={{ fontSize: 28, fontWeight: 'bold', color: '#00686F', marginBottom: 4 }}>
-                Create Account
+            {/* ── Header ── */}
+            <View style={styles.header}>
+              <CustomText style={styles.title}>Create Account</CustomText>
+              <CustomText style={styles.subtitle}>
+                Join Occasio and plan unforgettable events
               </CustomText>
-              <CustomText style={{ fontSize: 14, color: '#6B7280', marginBottom: 12 }}>
-                Step {step} of 2
-              </CustomText>
-              {/* Progress Bar */}
-              <View style={{ width: '100%', height: 4, backgroundColor: '#D1D5DB', borderRadius: 2, overflow: 'hidden' }}>
-                <View
-                  style={{
-                    width: step === 1 ? '50%' : '100%',
-                    height: '100%',
-                    backgroundColor: '#00686F',
-                  }}
-                />
+
+              {/* Step indicator */}
+              <View style={styles.stepRow}>
+                <StepDot active={step === 1} completed={step > 1} />
+                <View style={[styles.stepLine, step > 1 && styles.stepLineActive]} />
+                <StepDot active={step === 2} completed={false} />
+              </View>
+
+              <View style={styles.stepLabels}>
+                <CustomText style={[styles.stepLabel, step === 1 && styles.stepLabelActive]}>
+                  Personal Info
+                </CustomText>
+                <CustomText style={[styles.stepLabel, step === 2 && styles.stepLabelActive]}>
+                  Account Setup
+                </CustomText>
               </View>
             </View>
 
-            {/* Step 1: Personal Info */}
-            {step === 1 && (
-              <>
-                <InputField
-                  label="First Name *"
-                  icon="person-outline"
-                  placeholder="John"
-                  value={firstname}
-                  onChangeText={setFirstname}
-                  returnKeyType="next"
-                />
+            {/* ── Card ── */}
+            <View style={styles.card}>
+              <View style={styles.cardAccentBar} />
+              <View style={styles.cardInner}>
 
-                <InputField
-                  label="Middle Name"
-                  icon="person-outline"
-                  placeholder="Optional"
-                  value={middlename}
-                  onChangeText={setMiddlename}
-                  returnKeyType="next"
-                />
-
-                <InputField
-                  label="Last Name *"
-                  icon="person-outline"
-                  placeholder="Doe"
-                  value={lastname}
-                  onChangeText={setLastname}
-                  returnKeyType="next"
-                />
-
-                <InputField
-                  label="Username *"
-                  icon="at-outline"
-                  placeholder="johndoe"
-                  value={username}
-                  onChangeText={setUsername}
-                  autoCapitalize="none"
-                  returnKeyType="done"
-                  onSubmitEditing={handleNext}
-                />
-
-                <TouchableOpacity
-                  onPress={handleNext}
-                  style={{
-                    backgroundColor: '#00686F',
-                    borderRadius: 12,
-                    paddingVertical: 14,
-                    marginTop: 8,
-                    shadowColor: '#00686F',
-                    shadowOffset: { width: 0, height: 3 },
-                    shadowOpacity: 0.25,
-                    shadowRadius: 6,
-                    elevation: 4,
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <CustomText style={{ color: '#EFF0EE', textAlign: 'center', fontSize: 16, fontWeight: 'bold' }}>
-                    Next
-                  </CustomText>
-                </TouchableOpacity>
-              </>
-            )}
-
-            {/* Step 2: Account Info */}
-            {step === 2 && (
-              <>
-                <InputField
-                  label="Email *"
-                  icon="mail-outline"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="next"
-                />
-
-                <View style={{ marginBottom: 20 }}>
-                  <CustomText style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>
-                    Password *
-                  </CustomText>
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: 12,
-                      paddingHorizontal: 14,
-                      paddingVertical: 11,
-                      borderWidth: 1.5,
-                      borderColor: '#D1D5DB',
-                    }}
-                  >
-                    <Ionicons name="lock-closed-outline" size={20} color="#00686F" />
-                    <TextInput
-                      style={{ flex: 1, marginLeft: 10, fontSize: 15, color: '#111827' }}
-                      placeholder="6+ characters"
-                      placeholderTextColor="#9CA3AF"
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry={!showPassword}
+                {/* ── Step 1 ── */}
+                {step === 1 && (
+                  <>
+                    <InputField
+                      label="First Name *"
+                      icon="person-outline"
+                      placeholder="John"
+                      value={firstname}
+                      onChangeText={setFirstname}
+                      returnKeyType="next"
+                      isFocused={focused === 'firstname'}
+                      onFocus={() => setFocused('firstname')}
+                      onBlur={() => setFocused(null)}
+                    />
+                    <InputField
+                      label="Middle Name"
+                      icon="person-outline"
+                      placeholder="Optional"
+                      value={middlename}
+                      onChangeText={setMiddlename}
+                      returnKeyType="next"
+                      isFocused={focused === 'middlename'}
+                      onFocus={() => setFocused('middlename')}
+                      onBlur={() => setFocused(null)}
+                    />
+                    <InputField
+                      label="Last Name *"
+                      icon="person-outline"
+                      placeholder="Doe"
+                      value={lastname}
+                      onChangeText={setLastname}
+                      returnKeyType="next"
+                      isFocused={focused === 'lastname'}
+                      onFocus={() => setFocused('lastname')}
+                      onBlur={() => setFocused(null)}
+                    />
+                    <InputField
+                      label="Username *"
+                      icon="at-outline"
+                      placeholder="johndoe"
+                      value={username}
+                      onChangeText={setUsername}
                       autoCapitalize="none"
                       returnKeyType="done"
-                      onSubmitEditing={handleSignup}
+                      onSubmitEditing={handleNext}
+                      isFocused={focused === 'username'}
+                      onFocus={() => setFocused('username')}
+                      onBlur={() => setFocused(null)}
                     />
-                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                      <Ionicons
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={20}
-                        color="#6B7280"
-                      />
+
+                    <TouchableOpacity
+                      onPress={handleNext}
+                      style={styles.primaryBtn}
+                      activeOpacity={0.88}
+                    >
+                      <View style={styles.primaryBtnInner}>
+                        <CustomText style={styles.primaryBtnText}>Continue</CustomText>
+                        <View style={styles.btnArrow}>
+                          <Ionicons name="arrow-forward" size={16} color="#00686F" />
+                        </View>
+                      </View>
                     </TouchableOpacity>
-                  </View>
-                </View>
+                  </>
+                )}
 
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      animateStep('back');
-                      setStep(1);
-                    }}
-                    style={{
-                      flex: 1,
-                      backgroundColor: '#FFFFFF',
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      borderWidth: 1.5,
-                      borderColor: '#00686F',
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <CustomText style={{ color: '#00686F', textAlign: 'center', fontSize: 16, fontWeight: 'bold' }}>
-                      Back
-                    </CustomText>
-                  </TouchableOpacity>
+                {/* ── Step 2 ── */}
+                {step === 2 && (
+                  <>
+                    <InputField
+                      label="Email *"
+                      icon="mail-outline"
+                      placeholder="your@email.com"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      returnKeyType="next"
+                      isFocused={focused === 'email'}
+                      onFocus={() => setFocused('email')}
+                      onBlur={() => setFocused(null)}
+                    />
 
-                  <TouchableOpacity
-                    onPress={handleSignup}
-                    disabled={loading}
-                    style={{
-                      flex: 1,
-                      backgroundColor: '#00686F',
-                      borderRadius: 12,
-                      paddingVertical: 14,
-                      shadowColor: '#00686F',
-                      shadowOffset: { width: 0, height: 3 },
-                      shadowOpacity: 0.25,
-                      shadowRadius: 6,
-                      elevation: 4,
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#EFF0EE" size="small" />
-                    ) : (
-                      <CustomText style={{ color: '#EFF0EE', textAlign: 'center', fontSize: 16, fontWeight: 'bold' }}>
-                        Sign Up
-                      </CustomText>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+                    {/* Password field (custom to keep toggle button) */}
+                    <View style={{ marginBottom: 20 }}>
+                      <CustomText style={inputStyles.label}>Password *</CustomText>
+                      <View style={[
+                        inputStyles.container,
+                        focused === 'password' && inputStyles.containerFocused
+                      ]}>
+                        <View style={inputStyles.iconBox}>
+                          <Ionicons 
+                            name="lock-closed-outline" 
+                            size={16} 
+                            color={focused === 'password' ? '#00686F' : '#94A3B8'} 
+                          />
+                        </View>
+                        <TextInput
+                          style={inputStyles.input}
+                          placeholder="6+ characters"
+                          placeholderTextColor="#CBD5E1"
+                          value={password}
+                          onChangeText={setPassword}
+                          secureTextEntry={!showPassword}
+                          autoCapitalize="none"
+                          returnKeyType="done"
+                          onSubmitEditing={handleSignup}
+                          onFocus={() => setFocused('password')}
+                          onBlur={() => setFocused(null)}
+                        />
+                        <TouchableOpacity 
+                          onPress={() => setShowPassword(!showPassword)}
+                          style={{ padding: 4 }}
+                        >
+                          <Ionicons
+                            name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                            size={18}
+                            color="#94A3B8"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
 
-            {/* Login Link */}
+                    <View style={styles.stepBtnRow}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          animateStep('back');
+                          setStep(1);
+                        }}
+                        style={styles.backBtn}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="arrow-back" size={16} color="#00686F" />
+                        <CustomText style={styles.backBtnText}>Back</CustomText>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={handleSignup}
+                        disabled={loading}
+                        style={[styles.primaryBtn, styles.flex1, loading && { opacity: 0.7 }]}
+                        activeOpacity={0.88}
+                      >
+                        <View style={styles.primaryBtnInner}>
+                          {loading ? (
+                            <ActivityIndicator color="#EFF0EE" size="small" />
+                          ) : (
+                            <>
+                              <CustomText style={styles.primaryBtnText}>Create Account</CustomText>
+                            </>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+            </View>
+
+            {/* ── Login link ── */}
             <TouchableOpacity
               onPress={() => navigation.navigate('Login')}
-              style={{ paddingVertical: 16, marginTop: 8 }}
+              style={styles.loginLink}
             >
-              <CustomText style={{ textAlign: 'center', fontSize: 14, color: '#6B7280' }}>
-                Already have an account?{' '}
-                <CustomText style={{ color: '#00686F', fontWeight: 'bold' }}>
-                  Sign In
-                </CustomText>
+              <CustomText style={styles.loginLinkText}>
+                Already have an account?{'  '}
+                <CustomText style={styles.loginLinkHighlight}>Sign In</CustomText>
               </CustomText>
             </TouchableOpacity>
           </Animated.View>
@@ -372,3 +429,204 @@ export default function SignupScreen({ navigation }) {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#F0F4F4',
+  },
+
+  // Orbs
+  orbTopRight: {
+    position: 'absolute',
+    width: 260,
+    height: 260,
+    borderRadius: 999,
+    backgroundColor: '#00686F',
+    opacity: 0.15,
+    top: -70,
+    right: -70,
+  },
+  orbBottomLeft: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 999,
+    backgroundColor: '#00868E',
+    opacity: 0.12,
+    bottom: 80,
+    left: -50,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 22,
+    paddingTop: 28,
+    paddingBottom: 32,
+    justifyContent: 'center',
+  },
+
+  // Header
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+    marginBottom: 22,
+    textAlign: 'center',
+  },
+
+  // Step indicator
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 120,
+    marginBottom: 8,
+  },
+  stepDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepDotActive: {
+    backgroundColor: '#00686F',
+    borderColor: '#00686F',
+  },
+  stepDotCompleted: {
+    backgroundColor: '#00686F',
+    borderColor: '#00686F',
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 4,
+  },
+  stepLineActive: {
+    backgroundColor: '#00686F',
+  },
+  stepLabels: {
+    flexDirection: 'row',
+    width: 180,
+    justifyContent: 'space-between',
+  },
+  stepLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  stepLabelActive: {
+    color: '#00686F',
+  },
+
+  // Card
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 26,
+    overflow: 'hidden',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.1,
+    shadowRadius: 30,
+    elevation: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,104,111,0.08)',
+    marginBottom: 16,
+  },
+  cardAccentBar: {
+    height: 4,
+    backgroundColor: '#00686F',
+  },
+  cardInner: {
+    padding: 24,
+  },
+
+  // Buttons
+  primaryBtn: {
+    backgroundColor: '#00686F',
+    borderRadius: 13,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 6,
+    shadowColor: '#00686F',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  primaryBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  btnArrow: {
+    width: 26,
+    height: 26,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  flex1: {
+    flex: 1,
+  },
+  backBtn: {
+    height: 52,
+    paddingHorizontal: 16,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: '#00686F',
+    backgroundColor: 'rgba(0,104,111,0.04)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  backBtnText: {
+    color: '#00686F',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+
+  // Login link
+  loginLink: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  loginLinkText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  loginLinkHighlight: {
+    color: '#00686F',
+    fontWeight: '800',
+  },
+});
