@@ -10,6 +10,7 @@ import {
     Dimensions,
     TouchableWithoutFeedback,
     Alert,
+    Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -89,7 +90,7 @@ const EVENT_COLORS = {
     'Birthday Party':'#F59E0B',
     Corporate:      '#3B82F6',
     Charity:        '#059669',
-    Others:         '#8B5CF6',
+    Others:         '#00686F',
 };
 
 // ── SCREEN ─────────────────────────────────────────────────
@@ -101,6 +102,8 @@ export default function DashboardScreen({ navigation }) {
     const [emoji, setEmoji]         = useState('');
     const [notifVisible, setNotifVisible] = useState(false);
     const [menuVisible, setMenuVisible]   = useState(false);
+    const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+    const [loggingOut, setLoggingOut] = useState(false);
 
     const fadeAnim   = useRef(new Animated.Value(0)).current;
     const slideAnim  = useRef(new Animated.Value(width)).current;
@@ -166,15 +169,21 @@ export default function DashboardScreen({ navigation }) {
 
     const handleLogout = () => {
         toggleMenu(false);
-        Alert.alert('Logout', 'Are you sure you want to logout?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Logout', style: 'destructive', onPress: async () => {
-                    try { await signOut(auth); navigation.replace('Landing'); }
-                    catch { Alert.alert('Error', 'Failed to logout.'); }
-                },
-            },
-        ]);
+        // Small delay so the drawer finishes closing before modal appears
+        setTimeout(() => setLogoutModalVisible(true), 280);
+    };
+
+    const confirmLogout = async () => {
+        setLoggingOut(true);
+        try {
+            await signOut(auth);
+            navigation.replace('Landing');
+        } catch {
+            Alert.alert('Error', 'Failed to logout.');
+        } finally {
+            setLoggingOut(false);
+            setLogoutModalVisible(false);
+        }
     };
 
     // ── derived data ──
@@ -269,16 +278,29 @@ export default function DashboardScreen({ navigation }) {
                     </CustomText>
                 </View>
 
-                {/* Notification bell */}
-                <TouchableOpacity
-                    onPress={() => setNotifVisible(true)}
-                    style={[
-                        tw`w-10 h-10 rounded-full justify-center items-center`,
-                        { backgroundColor: BRAND.primaryMid, borderWidth: 1, borderColor: BRAND.primary + '30' },
-                    ]}
-                >
-                    <Ionicons name="notifications-outline" size={20} color={BRAND.primary} />
-                </TouchableOpacity>
+                <View style={tw`flex-row items-center gap-2`}>
+                    {/* Notification bell */}
+                    <TouchableOpacity
+                        onPress={() => setNotifVisible(true)}
+                        style={[
+                            tw`w-10 h-10 rounded-full justify-center items-center`,
+                            { backgroundColor: BRAND.primaryMid, borderWidth: 1, borderColor: BRAND.primary + '30' },
+                        ]}
+                    >
+                        <Ionicons name="notifications-outline" size={20} color={BRAND.primary} />
+                    </TouchableOpacity>
+
+                    {/* Menu button — opens the drawer where Log Out lives */}
+                    <TouchableOpacity
+                        onPress={() => toggleMenu(true)}
+                        style={[
+                            tw`w-10 h-10 rounded-full justify-center items-center`,
+                            { backgroundColor: BRAND.primaryMid, borderWidth: 1, borderColor: BRAND.primary + '30' },
+                        ]}
+                    >
+                        <Ionicons name="menu-outline" size={22} color={BRAND.primary} />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* ── SCROLLABLE CONTENT ─────────────────────────── */}
@@ -564,6 +586,140 @@ export default function DashboardScreen({ navigation }) {
 
             <NotificationModal visible={notifVisible} onClose={() => setNotifVisible(false)} />
 
+            {/* ── LOGOUT CONFIRMATION MODAL ─────────────────── */}
+            <Modal
+                visible={logoutModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => !loggingOut && setLogoutModalVisible(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => !loggingOut && setLogoutModalVisible(false)}>
+                    <View style={{
+                        flex: 1,
+                        backgroundColor: 'rgba(15,23,42,0.6)',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        paddingHorizontal: 28,
+                    }}>
+                        <TouchableWithoutFeedback>
+                            <View style={{
+                                width: '100%',
+                                backgroundColor: '#FFF',
+                                borderRadius: 28,
+                                overflow: 'hidden',
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 24 },
+                                shadowOpacity: 0.18,
+                                shadowRadius: 40,
+                                elevation: 24,
+                            }}>
+
+                                {/* Top accent bar — split teal | red */}
+                                <View style={{ flexDirection: 'row', height: 5 }}>
+                                    <View style={{ flex: 1, backgroundColor: BRAND.primary }} />
+                                    <View style={{ flex: 1, backgroundColor: '#EF4444' }} />
+                                </View>
+
+                                <View style={{ paddingHorizontal: 28, paddingTop: 30, paddingBottom: 26, alignItems: 'center' }}>
+
+                                    {/* Icon circle */}
+                                    <View style={{
+                                        width: 76,
+                                        height: 76,
+                                        borderRadius: 24,
+                                        backgroundColor: '#FEF2F2',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginBottom: 22,
+                                        borderWidth: 1.5,
+                                        borderColor: '#FECACA',
+                                    }}>
+                                        <Ionicons name="log-out-outline" size={36} color="#EF4444" />
+                                    </View>
+
+                                    {/* Title */}
+                                    <CustomText fontFamily="extrabold" style={{
+                                        fontSize: 23,
+                                        color: '#0F172A',
+                                        letterSpacing: -0.5,
+                                        marginBottom: 10,
+                                    }}>
+                                        Leaving so soon?
+                                    </CustomText>
+
+                                    {/* Body */}
+                                    <CustomText fontFamily="medium" style={{
+                                        fontSize: 14,
+                                        color: '#64748B',
+                                        textAlign: 'center',
+                                        lineHeight: 22,
+                                        marginBottom: 30,
+                                        paddingHorizontal: 4,
+                                    }}>
+                                        You'll need to sign in again to access your events and workspace.
+                                    </CustomText>
+
+                                    {/* Confirm button */}
+                                    <TouchableOpacity
+                                        onPress={confirmLogout}
+                                        disabled={loggingOut}
+                                        activeOpacity={0.85}
+                                        style={{
+                                            width: '100%',
+                                            height: 54,
+                                            borderRadius: 17,
+                                            backgroundColor: '#EF4444',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            marginBottom: 11,
+                                            shadowColor: '#EF4444',
+                                            shadowOffset: { width: 0, height: 8 },
+                                            shadowOpacity: 0.32,
+                                            shadowRadius: 14,
+                                            elevation: 8,
+                                            opacity: loggingOut ? 0.75 : 1,
+                                        }}
+                                    >
+                                        {loggingOut ? (
+                                            <ActivityIndicator color="#FFF" size="small" />
+                                        ) : (
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                                <Ionicons name="log-out-outline" size={19} color="#FFF" />
+                                                <CustomText fontFamily="extrabold" style={{ color: '#FFF', fontSize: 15, letterSpacing: 0.2 }}>
+                                                    Yes, Log Out
+                                                </CustomText>
+                                            </View>
+                                        )}
+                                    </TouchableOpacity>
+
+                                    {/* Cancel button */}
+                                    <TouchableOpacity
+                                        onPress={() => setLogoutModalVisible(false)}
+                                        disabled={loggingOut}
+                                        activeOpacity={0.8}
+                                        style={{
+                                            width: '100%',
+                                            height: 54,
+                                            borderRadius: 17,
+                                            backgroundColor: BRAND.primaryBg,
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            borderWidth: 1.5,
+                                            borderColor: BRAND.primary + '35',
+                                        }}
+                                    >
+                                        <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 15 }}>
+                                            Stay Signed In
+                                        </CustomText>
+                                    </TouchableOpacity>
+
+                                </View>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
             {/* ── SIDE DRAWER ─────────────────────────────────── */}
             {menuVisible && (
                 <View style={tw`absolute inset-0 z-50`} pointerEvents="box-none">
@@ -579,6 +735,7 @@ export default function DashboardScreen({ navigation }) {
                             shadowOffset: { width: -10, height: 0 },
                             shadowOpacity: 0.1,
                             shadowRadius: 20,
+                            marginRight: 20,
                         },
                     ]}>
                         <View style={tw`flex-row justify-between items-center pb-6 border-b border-slate-100`}>

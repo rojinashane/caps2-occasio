@@ -7,6 +7,7 @@ import {
     Animated,
     TextInput,
     RefreshControl,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomText from '../components/CustomText';
@@ -19,6 +20,8 @@ import {
     onSnapshot,
     or,
     where,
+    doc,
+    deleteDoc,
 } from 'firebase/firestore';
 import tw from 'twrnc';
 
@@ -158,9 +161,9 @@ export default function MyEventsScreen({ navigation }) {
                 <View style={tw`flex-row`}>
                     <StatCard label="Total" value={stats.total} icon="layers-outline" color="#00686F" />
                     <View style={tw`w-3`} />
-                    <StatCard label="Upcoming" value={stats.upcoming} icon="time-outline" color="#8B5CF6" />
+                    <StatCard label="Upcoming" value={stats.upcoming} icon="time-outline" color="#F59E0B" />
                     <View style={tw`w-3`} />
-                    <StatCard label="Shared" value={stats.shared} icon="people-outline" color="#F59E0B" />
+                    <StatCard label="Shared" value={stats.shared} icon="people-outline" color="#8B5CF6" />
                 </View>
             </Animated.View>
 
@@ -243,7 +246,31 @@ export default function MyEventsScreen({ navigation }) {
                             {`${filteredEvents.length} event${filteredEvents.length !== 1 ? 's' : ''} found`}
                         </CustomText>
                         {filteredEvents.map(item => (
-                            <EventCard key={item.id} item={item} navigation={navigation} />
+                            <EventCard
+                                key={item.id}
+                                item={item}
+                                navigation={navigation}
+                                onDelete={async () => {
+                                    Alert.alert(
+                                        'Delete Event',
+                                        `Are you sure you want to delete "${item.title}"? This cannot be undone.`,
+                                        [
+                                            { text: 'Cancel', style: 'cancel' },
+                                            {
+                                                text: 'Delete',
+                                                style: 'destructive',
+                                                onPress: async () => {
+                                                    try {
+                                                        await deleteDoc(doc(db, 'events', item.id));
+                                                    } catch (e) {
+                                                        Alert.alert('Error', 'Could not delete the event. Please try again.');
+                                                    }
+                                                },
+                                            },
+                                        ]
+                                    );
+                                }}
+                            />
                         ))}
                     </>
                 ) : (
@@ -283,7 +310,7 @@ const StatCard = ({ label, value, icon, color }) => (
     </View>
 );
 
-const EventCard = ({ item, navigation }) => {
+const EventCard = ({ item, navigation, onDelete }) => {
     const todayMs = new Date().setHours(0, 0, 0, 0);
     const user = auth.currentUser;
 
@@ -358,8 +385,20 @@ const EventCard = ({ item, navigation }) => {
                                 {typeLabel}
                             </CustomText>
                         </View>
-                        <View style={tw`w-7 h-7 rounded-full bg-slate-50 justify-center items-center`}>
-                            <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+                        <View style={tw`flex-row items-center gap-2`}>
+                            {/* Delete button — only for event owner */}
+                            {!isShared && (
+                                <TouchableOpacity
+                                    onPress={onDelete}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                    style={tw`w-7 h-7 rounded-full bg-red-50 justify-center items-center`}
+                                >
+                                    <Ionicons name="trash-outline" size={13} color="#EF4444" />
+                                </TouchableOpacity>
+                            )}
+                            <View style={tw`w-7 h-7 rounded-full bg-slate-50 justify-center items-center`}>
+                                <Ionicons name="chevron-forward" size={14} color="#94A3B8" />
+                            </View>
                         </View>
                     </View>
                 </View>

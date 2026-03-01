@@ -130,6 +130,19 @@ export default function EventDetailsScreen({ route, navigation }) {
     const sectionOffsets = useRef({});
 
     const isOwner = useMemo(() => eventData?.userId === auth.currentUser?.uid, [eventData]);
+
+    // True when the event's start date is strictly in the past (past midnight of that day)
+    const isPastEvent = useMemo(() => {
+        if (!eventData?.startDate) return false;
+        const d = eventData.startDate?.seconds
+            ? new Date(eventData.startDate.seconds * 1000)
+            : new Date(eventData.startDate);
+        if (isNaN(d.getTime())) return false;
+        // Compare against start of today so an event happening today is NOT considered past
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return d < today;
+    }, [eventData]);
     const [ownerName, setOwnerName] = useState('Owner');
     const [overviewCollapsed, setOverviewCollapsed] = useState(true);
     const overviewAnim = useRef(new Animated.Value(0)).current;
@@ -195,6 +208,17 @@ export default function EventDetailsScreen({ route, navigation }) {
     );
 
     // ── Notifications ──────────────────────────────────────────────────────────
+    // Resolves a userId to their stored email address
+    const getOwnerEmail = async (userId) => {
+        try {
+            const snap = await getDocs(query(collection(db, 'users'), where('uid', '==', userId), limit(1)));
+            if (!snap.empty) return snap.docs[0].data().email?.toLowerCase() || null;
+        } catch (err) {
+            console.error('getOwnerEmail error:', err);
+        }
+        return null;
+    };
+
     const sendUniversalNotification = async (type, detail) => {
         const user = auth.currentUser;
         if (!user || !eventData) return;
@@ -389,11 +413,17 @@ export default function EventDetailsScreen({ route, navigation }) {
 
     const addSubtask = () => {
         if (!subtaskText.trim()) return;
+        const newText = subtaskText.trim();
         setActiveTask({
             ...activeTask,
-            subtasks: [...(activeTask.subtasks || []), { id: Date.now().toString(), text: subtaskText, completed: false }]
+            subtasks: [...(activeTask.subtasks || []), { id: Date.now().toString(), text: newText, completed: false }]
         });
         setSubtaskText('');
+        // Notify all participants that a checklist item was added
+        sendUniversalNotification(
+            'checklist_added',
+            `added checklist item "${newText}" to "${activeTask?.text || activeTask?.title || 'a card'}"`
+        ).catch(console.error);
     };
 
     const handleFileUpload = async () => {
@@ -710,6 +740,15 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 </View>
                             </View>
                         )}
+                        {/* Past event notice banner */}
+                        {isPastEvent && (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(239,68,68,0.18)', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, marginTop: overallProgress !== null ? 10 : 0 }}>
+                                <Ionicons name="lock-closed" size={13} color="rgba(255,180,180,0.95)" />
+                                <CustomText style={{ color: 'rgba(255,200,200,0.95)', fontSize: 12, fontWeight: '700', marginLeft: 7, flex: 1 }}>
+                                    This event has passed — the workspace is read-only
+                                </CustomText>
+                            </View>
+                        )}
                     </View>
 
                     {/* ── Tab Bar — sticks to bottom of header ── */}
@@ -745,7 +784,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                             </TouchableOpacity>
 
                             {/* + New List tab */}
-                            {isOwner && (
+                            {isOwner && !isPastEvent && (
                                 <TouchableOpacity
                                     onPress={() => {
                                         setModalConfig({ type: 'ADD_COLUMN', title: 'New list name' });
@@ -858,7 +897,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 </View>
                             </View>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                {isOwner && !overviewCollapsed && (
+                                {isOwner && !overviewCollapsed && !isPastEvent && (
                                     <TouchableOpacity
                                         onPress={() => navigation.navigate('UpdateEvent', { eventId, eventData })}
                                         style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F4F6F9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 }}
@@ -932,7 +971,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                     </View>
 
                                     {/* Invitation file — upload (owner) or show attached file */}
-                                    {isOwner && (
+                                    {isOwner && !isPastEvent && (
                                         <View style={{ marginTop: 10 }}>
                                             {invitationFile ? (
                                                 <View style={{ backgroundColor: '#FFF', borderRadius: 12, padding: 10, borderWidth: 1.5, borderColor: '#99D6D9' }}>
@@ -1035,7 +1074,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                         <TextInput
                                             style={{ flex: 1, fontSize: 14, fontWeight: '800', color: isAllDone ? '#10B981' : '#1E293B', letterSpacing: 0.3, textTransform: 'uppercase', padding: 0 }}
                                             value={col.title}
-                                            editable={isOwner}
+                                            editable={isOwner && !isPastEvent}
                                             onChangeText={(text) => updateColumnTitle(col.id, text)}
                                             placeholderTextColor="#94A3B8"
                                         />
@@ -1049,7 +1088,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                                 </CustomText>
                                             </View>
                                         )}
-                                        {isOwner && (
+                                        {isOwner && !isPastEvent && (
                                             <TouchableOpacity
                                                 onPress={() => triggerDeleteList(col.id)}
                                                 style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center' }}
@@ -1083,7 +1122,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                     return (
                                         <Swipeable
                                             key={task.id}
-                                            enabled={isOwner}
+                                            enabled={isOwner && !isPastEvent}
                                             renderRightActions={() => (
                                                 <TouchableOpacity
                                                     style={{ backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', width: 70, marginBottom: 0 }}
@@ -1188,7 +1227,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 })}
 
                                 {/* Add task row */}
-                                {isOwner && (
+                                {isOwner && !isPastEvent && (
                                     <TouchableOpacity
                                         onPress={() => {
                                             setModalConfig({ type: 'ADD_TASK', columnId: col.id, title: 'Add a card' });
@@ -1582,10 +1621,16 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 <View key={sub.id} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' }}>
                                     <TouchableOpacity
                                         onPress={() => {
+                                            const isNowDone = !sub.completed;
                                             const updated = activeTask.subtasks.map(s =>
-                                                s.id === sub.id ? { ...s, completed: !s.completed } : s
+                                                s.id === sub.id ? { ...s, completed: isNowDone } : s
                                             );
                                             setActiveTask({ ...activeTask, subtasks: updated });
+                                            // Notify all participants of checklist item completion
+                                            sendUniversalNotification(
+                                                'checklist_done',
+                                                `marked checklist item "${sub.text}" as ${isNowDone ? 'completed' : 'uncompleted'} in "${activeTask?.text || activeTask?.title || 'a card'}"`
+                                            ).catch(console.error);
                                         }}
                                         style={{ marginRight: 12 }}
                                     >
@@ -1602,7 +1647,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                     <CustomText style={{ flex: 1, fontSize: 14, fontWeight: '500', color: sub.completed ? '#94A3B8' : '#334155', textDecorationLine: sub.completed ? 'line-through' : 'none' }}>
                                         {sub.text}
                                     </CustomText>
-                                    {isOwner && (
+                                    {isOwner && !isPastEvent && (
                                         <TouchableOpacity onPress={() => deleteSubtask(sub.id)} style={{ padding: 4, marginLeft: 8 }}>
                                             <Ionicons name="close" size={15} color="#CBD5E1" />
                                         </TouchableOpacity>
@@ -1611,7 +1656,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                             ))}
 
                             {/* Add subtask input */}
-                            {isOwner && (
+                            {isOwner && !isPastEvent && (
                                 <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10 }}>
                                     <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: '#E2E8F0', borderStyle: 'dashed', marginRight: 12 }} />
                                     <TextInput
@@ -1659,7 +1704,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                     <CustomText style={{ flex: 1, color: '#00686F', fontSize: 13, fontWeight: '600', textDecorationLine: 'underline' }} numberOfLines={1}>
                                         {file.name || 'View Document'}
                                     </CustomText>
-                                    {isOwner && (
+                                    {isOwner && !isPastEvent && (
                                         <TouchableOpacity
                                             onPress={() => setActiveTask({ ...activeTask, attachments: activeTask.attachments.filter(a => a.id !== file.id) })}
                                             style={{ padding: 6, marginLeft: 4 }}
@@ -1670,19 +1715,21 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 </TouchableOpacity>
                             ))}
 
-                            <TouchableOpacity
-                                onPress={handleFileUpload}
-                                disabled={uploading}
-                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, margin: 12, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#B2DEDE', backgroundColor: '#F0F9FA' }}
-                            >
-                                {uploading
-                                    ? <ActivityIndicator color="#00686F" />
-                                    : <>
-                                        <Ionicons name="cloud-upload-outline" size={18} color="#00686F" />
-                                        <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700', marginLeft: 8 }}>Upload from device</CustomText>
-                                    </>
-                                }
-                            </TouchableOpacity>
+                            {!isPastEvent && (
+                                <TouchableOpacity
+                                    onPress={handleFileUpload}
+                                    disabled={uploading}
+                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, margin: 12, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#B2DEDE', backgroundColor: '#F0F9FA' }}
+                                >
+                                    {uploading
+                                        ? <ActivityIndicator color="#00686F" />
+                                        : <>
+                                            <Ionicons name="cloud-upload-outline" size={18} color="#00686F" />
+                                            <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700', marginLeft: 8 }}>Upload from device</CustomText>
+                                          </>
+                                    }
+                                </TouchableOpacity>
+                            )}
                         </View>
 
                     </ScrollView>

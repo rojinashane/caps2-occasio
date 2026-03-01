@@ -124,44 +124,97 @@ export default function NotificationModal({ visible, onClose }) {
                         </View>
                     ) : (
                         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={tw`pb-10`}>
-                            {notifications.map((notif) => (
-                                <View
-                                    key={notif.id}
-                                    style={tw`bg-white p-4 rounded-[24px] mb-4 border border-slate-100 shadow-sm flex-row`}
-                                >
-                                    <View style={tw`w-12 h-12 rounded-full bg-[#E0F2F3] justify-center items-center mr-4`}>
-                                        <Ionicons name="people" size={20} color="#00686F" />
-                                    </View>
+                            {notifications.map((notif) => {
+                                const isChecklistDone  = notif.type === 'checklist_done';
+                                const isChecklistAdded = notif.type === 'checklist_added';
+                                const isChecklist      = isChecklistDone || isChecklistAdded;
 
-                                    <View style={tw`flex-1`}>
-                                        <CustomText fontFamily="bold" style={tw`text-[11px] text-[#00686F] mb-1 uppercase tracking-widest`}>
-                                            Collaboration Request
-                                        </CustomText>
-                                        <CustomText fontFamily="medium" style={tw`text-[14px] text-slate-600 leading-5 mb-4`}>
-                                            <CustomText fontFamily="bold" style={tw`text-slate-800`}>
-                                                {notif.senderName || 'Someone'}
-                                            </CustomText> invited you to work on <CustomText fontFamily="bold" style={tw`text-slate-800`}>
-                                                {notif.eventTitle || 'an event'}
-                                            </CustomText>.
-                                        </CustomText>
+                                return (
+                                    <View
+                                        key={notif.id}
+                                        style={tw`bg-white p-4 rounded-[24px] mb-4 border border-slate-100 shadow-sm flex-row`}
+                                    >
+                                        {/* Icon */}
+                                        <View style={[
+                                            tw`w-12 h-12 rounded-full justify-center items-center mr-4`,
+                                            { backgroundColor: isChecklist ? '#E8F5F5' : '#E0F2F3' }
+                                        ]}>
+                                            <Ionicons
+                                                name={
+                                                    isChecklistDone  ? 'checkmark-circle' :
+                                                    isChecklistAdded ? 'add-circle'       :
+                                                    'people'
+                                                }
+                                                size={20}
+                                                color="#00686F"
+                                            />
+                                        </View>
 
-                                        <View style={tw`flex-row justify-end`}>
-                                            <TouchableOpacity
-                                                style={tw`py-2.5 px-6 rounded-xl bg-slate-100 mr-3`}
-                                                onPress={() => handleDecline(notif.id)}
-                                            >
-                                                <CustomText fontFamily="bold" style={tw`text-slate-500 text-[13px]`}>Decline</CustomText>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={tw`py-2.5 px-6 rounded-xl bg-[#00686F]`}
-                                                onPress={() => handleAccept(notif)}
-                                            >
-                                                <CustomText fontFamily="bold" style={tw`text-white text-[13px]`}>Accept</CustomText>
-                                            </TouchableOpacity>
+                                        <View style={tw`flex-1`}>
+                                            {/* Badge */}
+                                            <CustomText fontFamily="bold" style={tw`text-[11px] text-[#00686F] mb-1 uppercase tracking-widest`}>
+                                                {isChecklistDone  ? 'Checklist Update' :
+                                                 isChecklistAdded ? 'Checklist Added'  :
+                                                 'Collaboration Request'}
+                                            </CustomText>
+
+                                            {/* Body */}
+                                            <CustomText fontFamily="medium" style={tw`text-[14px] text-slate-600 leading-5 mb-4`}>
+                                                {isChecklist ? (
+                                                    notif.body || (
+                                                        <>
+                                                            <CustomText fontFamily="bold" style={tw`text-slate-800`}>
+                                                                {notif.senderName || 'Someone'}
+                                                            </CustomText>
+                                                            {' '}{isChecklistDone ? 'completed a checklist item in ' : 'added a checklist item to '}
+                                                            <CustomText fontFamily="bold" style={tw`text-slate-800`}>
+                                                                {notif.eventTitle || 'a workspace'}
+                                                            </CustomText>.
+                                                        </>
+                                                    )
+                                                ) : (
+                                                    <>
+                                                        <CustomText fontFamily="bold" style={tw`text-slate-800`}>
+                                                            {notif.senderName || 'Someone'}
+                                                        </CustomText> invited you to work on <CustomText fontFamily="bold" style={tw`text-slate-800`}>
+                                                            {notif.eventTitle || 'an event'}
+                                                        </CustomText>.
+                                                    </>
+                                                )}
+                                            </CustomText>
+
+                                            {/* Actions */}
+                                            <View style={tw`flex-row justify-end`}>
+                                                {isChecklist ? (
+                                                    // Checklist notifications — Dismiss only
+                                                    <TouchableOpacity
+                                                        style={tw`py-2.5 px-6 rounded-xl bg-slate-100`}
+                                                        onPress={() => handleDecline(notif.id)}
+                                                    >
+                                                        <CustomText fontFamily="bold" style={tw`text-slate-500 text-[13px]`}>Dismiss</CustomText>
+                                                    </TouchableOpacity>
+                                                ) : (
+                                                    // Collaboration — Decline + Accept
+                                                    <>
+                                                        <TouchableOpacity
+                                                            style={tw`py-2.5 px-6 rounded-xl bg-slate-100 mr-3`}
+                                                            onPress={() => handleDecline(notif.id)}
+                                                        >
+                                                            <CustomText fontFamily="bold" style={tw`text-slate-500 text-[13px]`}>Decline</CustomText>
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            style={tw`py-2.5 px-6 rounded-xl bg-[#00686F]`}
+                                                            onPress={() => handleAccept(notif)}
+                                                        >
+                                                            <CustomText fontFamily="bold" style={tw`text-white text-[13px]`}>Accept</CustomText>
+                                                        </TouchableOpacity>
+                                                    </>
+                                                )}
+                                            </View>
                                         </View>
                                     </View>
-                                </View>
-                            ))}
+                                );
+                            })}
                         </ScrollView>
                     )}
                 </View>
