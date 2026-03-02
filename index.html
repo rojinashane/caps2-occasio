@@ -754,185 +754,211 @@
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, doc, getDoc, setDoc, serverTimestamp }
-                                          from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+   <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        const firebaseConfig = {
-            apiKey:            "AIzaSyBNhdyamoJ2IB6chxV8VQSuE_QOgbJz2DA",
-            authDomain:        "occasio-866c3.firebaseapp.com",
-            projectId:         "occasio-866c3",
-            storageBucket:     "occasio-866c3.firebasestorage.app",
-            messagingSenderId: "982786283947",
-            appId:             "1:982786283947:web:ff5a4db6acb119fac61aee"
-        };
+const firebaseConfig = {
+    apiKey: "AIzaSyBNhdyamoJ2IB6chxV8VQSuE_QOgbJz2DA",
+    authDomain: "occasio-866c3.firebaseapp.com",
+    projectId: "occasio-866c3",
+    storageBucket: "occasio-866c3.firebasestorage.app",
+    messagingSenderId: "982786283947",
+    appId: "1:982786283947:web:ff5a4db6acb119fac61aee"
+};
 
-        const app      = initializeApp(firebaseConfig);
-        const db       = getFirestore(app);
-        const urlParams = new URLSearchParams(window.location.search);
-        const eventId   = urlParams.get('id');
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-        // Store invitation file globally so submitRSVP can access it
-        let invitationFileData = null;
+const urlParams = new URLSearchParams(window.location.search);
+const eventId = urlParams.get('id');
 
-        // ── Load event ──────────────────────────────────────────────────────────
-        async function loadEventDetails() {
-            if (!eventId) {
-                document.getElementById('loading-screen').innerHTML =
-                    '<p style="color:#94A3B8;font-size:0.85rem;font-weight:600;letter-spacing:1px;">No invitation link found.</p>';
-                return;
-            }
-            try {
-                const docSnap = await getDoc(doc(db, "events", eventId));
-                if (!docSnap.exists()) throw new Error('not found');
+let invitationFileData = null;
 
-                const data = docSnap.data();
+/* ─────────────────────────────────────────────
+   DEVICE ID GENERATOR (ANTI-SPAM)
+───────────────────────────────────────────── */
+function getDeviceId() {
+    let deviceId = localStorage.getItem("occasio_device_id");
 
-                // Title
-                document.getElementById('event-title').innerText = data.title || 'Untitled Event';
+    if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem("occasio_device_id", deviceId);
+    }
 
-                // Event type badge
-                if (data.eventType) {
-                    const badge = document.getElementById('event-type');
-                    badge.innerText = data.eventType;
-                    badge.style.display = 'inline-flex';
-                }
+    return deviceId;
+}
 
-                // Date
-                const date = data.startDate?.seconds
-                    ? new Date(data.startDate.seconds * 1000)
-                    : new Date(data.startDate);
-                document.getElementById('disp-date').innerText = isNaN(date.getTime())
-                    ? 'To be announced'
-                    : date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+/* ─────────────────────────────────────────────
+   LOAD EVENT DETAILS
+───────────────────────────────────────────── */
+async function loadEventDetails() {
+    if (!eventId) {
+        document.getElementById('loading-screen').innerHTML =
+            '<p style="color:#94A3B8;font-size:0.85rem;font-weight:600;">No invitation link found.</p>';
+        return;
+    }
 
-                // End date (multi-day)
-                if (data.isMultiDay && data.endDate) {
-                    const end = data.endDate?.seconds
-                        ? new Date(data.endDate.seconds * 1000)
-                        : new Date(data.endDate);
-                    if (!isNaN(end.getTime())) {
-                        const cur = document.getElementById('disp-date').innerText;
-                        document.getElementById('disp-date').innerText =
-                            cur + ' – ' + end.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-                    }
-                }
+    try {
+        const docSnap = await getDoc(doc(db, "events", eventId));
+        if (!docSnap.exists()) throw new Error("Not found");
 
-                // Time — stored as plain string by AddEvent/UpdateEvent
-                if (data.startTime) {
-                    const timeVal = data.startTime;
-                    if (typeof timeVal === 'string') {
-                        document.getElementById('disp-time').innerText = timeVal;
-                    } else {
-                        const t = timeVal.seconds ? new Date(timeVal.seconds * 1000) : new Date(timeVal);
-                        document.getElementById('disp-time').innerText = isNaN(t.getTime())
-                            ? 'To be announced'
-                            : t.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-                    }
-                } else {
-                    document.getElementById('disp-time').innerText = 'To be announced';
-                }
+        const data = docSnap.data();
 
-                // Location
-                document.getElementById('disp-loc').innerText = data.location || 'To be decided';
+        document.getElementById('event-title').innerText = data.title || "Untitled Event";
 
-                // Description
-                if (data.description) {
-                    document.getElementById('disp-desc').innerText = data.description;
-                    document.getElementById('desc-cell').style.display = 'block';
-                }
-
-                // Theme
-                if (data.theme) {
-                    document.getElementById('disp-theme').innerText = data.theme;
-                    document.getElementById('theme-cell').style.display = 'block';
-                }
-
-                // Invitation file (stored by the planner)
-                if (data.invitationFile && data.invitationFile.url) {
-                    invitationFileData = data.invitationFile;
-                }
-
-                // Show card
-                document.getElementById('loading-screen').style.display = 'none';
-                document.getElementById('invitation-wrapper').style.display = 'block';
-
-            } catch (e) {
-                document.getElementById('loading-screen').innerHTML =
-                    '<p style="color:#94A3B8;font-size:0.85rem;font-weight:600;letter-spacing:1px;">This invitation could not be loaded.</p>';
-            }
+        if (data.eventType) {
+            const badge = document.getElementById('event-type');
+            badge.innerText = data.eventType;
+            badge.style.display = 'inline-flex';
         }
 
-        loadEventDetails();
+        const date = data.startDate?.seconds
+            ? new Date(data.startDate.seconds * 1000)
+            : new Date(data.startDate);
 
-        // ── Submit RSVP ─────────────────────────────────────────────────────────
-        window.submitRSVP = async () => {
-            const name   = document.getElementById('guestName').value.trim();
-            const status = document.querySelector('input[name="attend"]:checked')?.value || 'Going';
-            const btn    = document.getElementById('submitBtn');
-            const msg    = document.getElementById('status-msg');
-
-            if (!name) {
-                msg.innerText = 'Please enter your full name.';
-                msg.style.color = '#EF4444';
-                return;
-            }
-
-            btn.disabled = true;
-            btn.innerText = 'Confirming…';
-            msg.innerText = '';
-
-            try {
-                const guestId  = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                const rsvpRef  = doc(db, "events", eventId, "rsvps", guestId);
-                const existing = await getDoc(rsvpRef);
-
-                if (existing.exists()) {
-                    msg.innerHTML = 'This name has already RSVP\'d. Please use a different name or contact the organizer.';
-                    msg.style.color = '#EF4444';
-                    btn.disabled  = false;
-                    btn.innerText = 'Confirm My Response';
-                    return;
-                }
-
-                await setDoc(rsvpRef, {
-                    guestName: name,
-                    status,
-                    timestamp: serverTimestamp()
+        document.getElementById('disp-date').innerText =
+            isNaN(date.getTime())
+                ? "To be announced"
+                : date.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric'
                 });
 
-                // Hide form
-                document.getElementById('rsvp-form-section').style.display = 'none';
+        if (data.startTime) {
+            document.getElementById('disp-time').innerText = data.startTime;
+        } else {
+            document.getElementById('disp-time').innerText = "To be announced";
+        }
 
-                if (status === 'Going') {
-                    // Show success
-                    const sc = document.getElementById('success-card');
-                    sc.style.display = 'block';
-                    document.getElementById('success-name-note').innerText =
-                        `Thank you, ${name}! Your attendance has been confirmed.`;
+        document.getElementById('disp-loc').innerText =
+            data.location || "To be decided";
 
-                    // Show download if invitation file was uploaded by planner
-                    if (invitationFileData) {
-                        const dl = document.getElementById('download-section');
-                        dl.style.display = 'block';
-                        const link = document.getElementById('download-link');
-                        link.href = invitationFileData.url;
-                        link.setAttribute('download', invitationFileData.name || 'invitation');
-                        document.getElementById('download-filename').innerText = invitationFileData.name || 'invitation';
-                    }
-                } else {
-                    // Show decline
-                    document.getElementById('decline-card').style.display = 'block';
-                }
+        if (data.description) {
+            document.getElementById('disp-desc').innerText = data.description;
+            document.getElementById('desc-cell').style.display = 'block';
+        }
 
-            } catch (e) {
-                msg.innerText = 'Something went wrong. Please try again.';
-                msg.style.color = '#EF4444';
-                btn.disabled  = false;
-                btn.innerText = 'Confirm My Response';
+        if (data.theme) {
+            document.getElementById('disp-theme').innerText = data.theme;
+            document.getElementById('theme-cell').style.display = 'block';
+        }
+
+        if (data.invitationFile && data.invitationFile.url) {
+            invitationFileData = data.invitationFile;
+        }
+
+        document.getElementById('loading-screen').style.display = 'none';
+        document.getElementById('invitation-wrapper').style.display = 'block';
+
+    } catch (error) {
+        document.getElementById('loading-screen').innerHTML =
+            '<p style="color:#94A3B8;font-size:0.85rem;font-weight:600;">This invitation could not be loaded.</p>';
+    }
+}
+
+loadEventDetails();
+
+/* ─────────────────────────────────────────────
+   SUBMIT RSVP
+───────────────────────────────────────────── */
+window.submitRSVP = async () => {
+
+    const name   = document.getElementById('guestName').value.trim();
+    const status = document.querySelector('input[name="attend"]:checked')?.value || 'Going';
+    const btn    = document.getElementById('submitBtn');
+    const msg    = document.getElementById('status-msg');
+
+    if (!name) {
+        msg.innerText = "Please enter your full name.";
+        msg.style.color = "#EF4444";
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerText = "Confirming…";
+    msg.innerText = "";
+
+    try {
+        const guestId = name
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '');
+
+        const rsvpRef = doc(db, "events", eventId, "rsvps", guestId);
+        const existing = await getDoc(rsvpRef);
+
+        // ❌ Block duplicate name
+        if (existing.exists()) {
+            msg.innerHTML = "This name has already RSVP'd. Please contact the organizer.";
+            msg.style.color = "#EF4444";
+            btn.disabled = false;
+            btn.innerText = "Confirm My Response";
+            return;
+        }
+
+        // ✅ DEVICE CHECK (ANTI-SPAM)
+        const deviceId = getDeviceId();
+        const deviceRef = doc(db, "events", eventId, "devices", deviceId);
+        const deviceSnap = await getDoc(deviceRef);
+
+        if (deviceSnap.exists()) {
+            msg.innerHTML = "This device has already submitted an RSVP for this event.";
+            msg.style.color = "#EF4444";
+            btn.disabled = false;
+            btn.innerText = "Confirm My Response";
+            return;
+        }
+
+        // ✅ Save RSVP
+        await setDoc(rsvpRef, {
+            guestName: name,
+            status: status,
+            deviceId: deviceId,
+            timestamp: serverTimestamp()
+        });
+
+        // ✅ Mark device as used
+        await setDoc(deviceRef, {
+            used: true,
+            timestamp: serverTimestamp()
+        });
+
+        document.getElementById('rsvp-form-section').style.display = 'none';
+
+        if (status === "Going") {
+
+            const successCard = document.getElementById('success-card');
+            successCard.style.display = 'block';
+
+            document.getElementById('success-name-note').innerText =
+                `Thank you, ${name}! Your attendance has been confirmed.`;
+
+            if (invitationFileData) {
+                const dl = document.getElementById('download-section');
+                dl.style.display = 'block';
+
+                const link = document.getElementById('download-link');
+                link.href = invitationFileData.url;
+                link.setAttribute('download', invitationFileData.name || "invitation");
+                document.getElementById('download-filename').innerText =
+                    invitationFileData.name || "invitation";
             }
-        };
-    </script>
+
+        } else {
+            document.getElementById('decline-card').style.display = 'block';
+        }
+
+    } catch (error) {
+        msg.innerText = "Something went wrong. Please try again.";
+        msg.style.color = "#EF4444";
+        btn.disabled = false;
+        btn.innerText = "Confirm My Response";
+    }
+};
+</script>
 </body>
 </html>
