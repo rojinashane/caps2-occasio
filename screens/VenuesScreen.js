@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     FlatList,
@@ -7,52 +7,41 @@ import {
     Image,
     StatusBar,
     Linking,
-    Platform
+    Platform,
+    ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { db } from '../firebase'; // Ensure your firebase config path is correct
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import CustomText from '../components/CustomText';
 import tw from 'twrnc';
 
-const MOCK_VENUES = [
-    {
-        id: '1',
-        name: "Lilia's Fortune Hall",
-        location: 'Ricacho Subdivision, Sorsogon City',
-        coordinates: { latitude: 12.973938, longitude: 124.005313 },
-        capacity: '500 Pax',
-        price: '₱50,000 / day',
-        image: 'https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&q=80&w=800',
-        hasAR: true,
-        description: "A grand hall perfect for weddings and large corporate events with state-of-the-art facilities and elegant lighting."
-    },
-    {
-        id: '2',
-        name: "Hilda's Love Function Hall",
-        location: 'Quezon Street, Sorsogon City',
-        coordinates: { latitude: 12.9691, longitude: 124.0044 },
-        capacity: '200 Pax',
-        price: '₱35,000 / day',
-        image: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&q=80&w=800',
-        hasAR: true,
-        description: "An elegant space designed for intimate gatherings and celebrations of love, offering a romantic ambiance."
-    },
-    {
-        id: '3',
-        name: 'The Clover Leaf Place',
-        location: 'El Retiro, Sorsogon City',
-        coordinates: { latitude: 12.9622, longitude: 123.9961 },
-        capacity: '50 Pax',
-        price: '₱15,000 / day',
-        image: 'https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800',
-        hasAR: false,
-        description: "A cozy and modern venue ideal for seminars, workshops, and small private parties."
-    }
-];
-
 export default function VenuesScreen({ navigation }) {
     const [searchQuery, setSearchQuery] = useState('');
-    const [venues, setVenues] = useState(MOCK_VENUES);
+    const [venues, setVenues] = useState([]);
+    const [allVenues, setAllVenues] = useState([]); // Store master list for searching
+    const [loading, setLoading] = useState(true);
+
+    // 1. REAL-TIME FIREBASE LISTENER
+    useEffect(() => {
+        const q = query(collection(db, 'venues'), orderBy('createdAt', 'desc'));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const venueList = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setVenues(venueList);
+            setAllVenues(venueList);
+            setLoading(false);
+        }, (error) => {
+            console.error("Firestore Error: ", error);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
 
     const openInGoogleMaps = (item) => {
         if (!item.coordinates) return;
@@ -68,9 +57,9 @@ export default function VenuesScreen({ navigation }) {
     const handleSearch = (text) => {
         setSearchQuery(text);
         if (text.trim() === '') {
-            setVenues(MOCK_VENUES);
+            setVenues(allVenues);
         } else {
-            const filtered = MOCK_VENUES.filter(venue =>
+            const filtered = allVenues.filter(venue =>
                 venue.name.toLowerCase().includes(text.toLowerCase()) ||
                 venue.location.toLowerCase().includes(text.toLowerCase())
             );
@@ -110,7 +99,10 @@ export default function VenuesScreen({ navigation }) {
                         </TouchableOpacity>
                     </View>
                     <View style={tw`bg-[#F0F9FA] px-3 py-2 rounded-xl`}>
-                        <CustomText fontFamily="bold" style={tw`text-[13px] text-[#00686F]`}>{item.price.split(' ')[0]}</CustomText>
+                        {/* Correctly handles "₱50,000 / day" format from DB */}
+                        <CustomText fontFamily="bold" style={tw`text-[13px] text-[#00686F]`}>
+                            {item.price ? item.price.split(' ')[0] : '₱0'}
+                        </CustomText>
                         <CustomText fontFamily="medium" style={tw`text-[10px] text-slate-500 text-center`}>per day</CustomText>
                     </View>
                 </View>
@@ -122,7 +114,6 @@ export default function VenuesScreen({ navigation }) {
                     </View>
                 </View>
 
-                {/* FIXED BUTTON ROW: Removed 'gap-3' and complex flex ratios. Now perfectly split 50/50 with margin-right */}
                 <View style={tw`flex-row`}>
                     <TouchableOpacity
                         style={tw`flex-1 py-3.5 mr-3 rounded-2xl bg-slate-50 border border-slate-200 items-center justify-center`}
@@ -134,7 +125,15 @@ export default function VenuesScreen({ navigation }) {
                     {item.hasAR ? (
                         <TouchableOpacity
                             style={tw`flex-1 flex-row py-3.5 rounded-2xl bg-[#00686F] items-center justify-center shadow-sm`}
-                            onPress={() => navigation.navigate('ARVenue', { venueId: item.id, venueName: item.name })}
+                            // 2. PASSING ALL DATABASE FIELDS TO AR SCREEN
+                            onPress={() => navigation.navigate('ARVenue', { 
+                                venueId: item.id, 
+                                venueName: item.name,
+                                modelUrl: item.modelUrl,
+                                price: item.price,
+                                capacity: item.capacity,
+                                location: item.location
+                            })}
                         >
                             <Ionicons name="walk" size={18} color="#FFF" />
                             <CustomText fontFamily="bold" style={tw`text-white text-[14px] ml-2`}>Walk in AR</CustomText>
@@ -184,22 +183,28 @@ export default function VenuesScreen({ navigation }) {
             </View>
 
             {/* List of Venues */}
-            <FlatList
-                data={venues}
-                keyExtractor={item => item.id}
-                renderItem={renderVenueCard}
-                contentContainerStyle={tw`px-6 pb-10 pt-2`}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                    <View style={tw`items-center justify-center pt-20`}>
-                        <View style={tw`w-20 h-20 rounded-full bg-slate-100 items-center justify-center mb-4`}>
-                            <Ionicons name="search-outline" size={32} color="#94A3B8" />
+            {loading ? (
+                <View style={tw`flex-1 justify-center items-center`}>
+                    <ActivityIndicator size="large" color="#00686F" />
+                </View>
+            ) : (
+                <FlatList
+                    data={venues}
+                    keyExtractor={item => item.id}
+                    renderItem={renderVenueCard}
+                    contentContainerStyle={tw`px-6 pb-10 pt-2`}
+                    showsVerticalScrollIndicator={false}
+                    ListEmptyComponent={
+                        <View style={tw`items-center justify-center pt-20`}>
+                            <View style={tw`w-20 h-20 rounded-full bg-slate-100 items-center justify-center mb-4`}>
+                                <Ionicons name="search-outline" size={32} color="#94A3B8" />
+                            </View>
+                            <CustomText fontFamily="bold" style={tw`text-slate-500 text-lg`}>No venues found</CustomText>
+                            <CustomText fontFamily="medium" style={tw`text-slate-400 text-sm mt-1`}>Try adding a venue from the Admin Panel.</CustomText>
                         </View>
-                        <CustomText fontFamily="bold" style={tw`text-slate-500 text-lg`}>No venues found</CustomText>
-                        <CustomText fontFamily="medium" style={tw`text-slate-400 text-sm mt-1`}>Try adjusting your search terms.</CustomText>
-                    </View>
-                }
-            />
+                    }
+                />
+            )}
         </SafeAreaView>
     );
 }

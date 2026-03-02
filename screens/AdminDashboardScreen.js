@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { db, auth } from '../firebase'; 
+import { db, auth } from '../firebase';
 import { collection, onSnapshot, query, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,15 +24,15 @@ import tw from 'twrnc';
 
 export default function AdminDashboardScreen({ navigation }) {
     const [venues, setVenues] = useState([]);
-    const [vendors, setVendors] = useState([]); 
+    const [vendors, setVendors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modalVisible, setModalVisible] = useState(false);
-    const [vendorModalVisible, setVendorModalVisible] = useState(false); 
-    const [fabMenuVisible, setFabMenuVisible] = useState(false); 
-    const [activeTab, setActiveTab] = useState('venues'); 
+    const [vendorModalVisible, setVendorModalVisible] = useState(false);
+    const [fabMenuVisible, setFabMenuVisible] = useState(false);
+    const [activeTab, setActiveTab] = useState('venues');
     const [isEditing, setIsEditing] = useState(false);
     const [currentVenueId, setCurrentVenueId] = useState(null);
-    
+
     // Filter State
     const [selectedCategory, setSelectedCategory] = useState('All'); // New: Category filter state
 
@@ -42,8 +42,8 @@ export default function AdminDashboardScreen({ navigation }) {
     const [newCapacity, setNewCapacity] = useState('');
     const [newPrice, setNewPrice] = useState('');
     const [newDescription, setNewDescription] = useState('');
-    const [imageLink, setImageLink] = useState(''); 
-    const [selectedImage, setSelectedImage] = useState(null); 
+    const [imageLink, setImageLink] = useState('');
+    const [selectedImage, setSelectedImage] = useState(null);
     const [phone, setPhone] = useState('');
     const [fbPage, setFbPage] = useState('');
     const [igHandle, setIgHandle] = useState('');
@@ -57,11 +57,11 @@ export default function AdminDashboardScreen({ navigation }) {
     const [vendorFb, setVendorFb] = useState('');
     const [vendorLocation, setVendorLocation] = useState('');
 
-    const categories = ['Unassigned', 'Attire & Accessories', 'Beauty', 'Music & Show', 'Photo & Video','Accessories', 'Flower & Decor', "Catering"];
+    const categories = ['Unassigned', 'Attire & Accessories', 'Beauty', 'Music & Show', 'Photo & Video', 'Accessories', 'Flower & Decor', "Catering"];
     const filterCategories = ['All', ...categories]; // For the filter UI
 
     const CLOUD_NAME = 'dgvbemrgw';
-    const UPLOAD_PRESET = 'venues'; 
+    const UPLOAD_PRESET = 'venues';
 
     useEffect(() => {
         const qVenues = query(collection(db, 'venues'));
@@ -84,8 +84,8 @@ export default function AdminDashboardScreen({ navigation }) {
     }, []);
 
     // Logic to filter vendors based on selection
-    const filteredVendors = selectedCategory === 'All' 
-        ? vendors 
+    const filteredVendors = selectedCategory === 'All'
+        ? vendors
         : vendors.filter(v => v.category === selectedCategory);
 
     const resetForm = () => {
@@ -121,11 +121,13 @@ export default function AdminDashboardScreen({ navigation }) {
     const handleDelete = (venueId) => {
         Alert.alert("Delete Venue", "Are you sure you want to remove this venue permanently?", [
             { text: "Cancel", style: "cancel" },
-            { text: "Delete", style: "destructive", onPress: async () => {
-                try {
-                    await deleteDoc(doc(db, 'venues', venueId));
-                } catch (e) { Alert.alert("Error", "Could not delete venue."); }
-            }}
+            {
+                text: "Delete", style: "destructive", onPress: async () => {
+                    try {
+                        await deleteDoc(doc(db, 'venues', venueId));
+                    } catch (e) { Alert.alert("Error", "Could not delete venue."); }
+                }
+            }
         ]);
     };
 
@@ -138,7 +140,7 @@ export default function AdminDashboardScreen({ navigation }) {
         });
         if (!result.canceled) {
             setSelectedImage(result.assets[0]);
-            setImageLink(''); 
+            setImageLink('');
         }
     };
 
@@ -162,20 +164,20 @@ export default function AdminDashboardScreen({ navigation }) {
         const resourceType = isModel ? 'raw' : 'image';
         const CLOUDINARY_ENDPOINT = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
 
-        data.append('file', { 
-            uri: file.uri, 
-            type: isModel ? 'application/octet-stream' : 'image/jpeg', 
-            name: file.name || (isModel ? 'model.glb' : 'upload.jpg') 
+        data.append('file', {
+            uri: file.uri,
+            type: isModel ? 'application/octet-stream' : 'image/jpeg',
+            name: file.name || (isModel ? 'model.glb' : 'upload.jpg')
         });
-        
+
         data.append('upload_preset', UPLOAD_PRESET);
 
         if (isModel) {
-            data.append('chunk_size', '6000000'); 
+            data.append('chunk_size', '6000000');
         }
 
-        const response = await fetch(CLOUDINARY_ENDPOINT, { 
-            method: 'POST', 
+        const response = await fetch(CLOUDINARY_ENDPOINT, {
+            method: 'POST',
             body: data,
             headers: {
                 'Accept': 'application/json',
@@ -196,9 +198,9 @@ export default function AdminDashboardScreen({ navigation }) {
 
         setIsSubmitting(true);
         try {
-            let finalImageUrl = imageLink; 
+            let finalImageUrl = imageLink;
             if (selectedImage) finalImageUrl = await uploadFile(selectedImage, 'image');
-            
+
             let modelUrl = null;
             if (selectedModel) modelUrl = await uploadFile(selectedModel, 'auto');
 
@@ -208,10 +210,10 @@ export default function AdminDashboardScreen({ navigation }) {
                 capacity: newCapacity ? `${newCapacity} Pax` : "N/A",
                 price: newPrice ? `₱${newPrice} / day` : "Price on Request",
                 description: newDescription,
-                contact: { 
-                    phone: phone || '', 
-                    facebook: fbPage || '', 
-                    instagram: igHandle || '' 
+                contact: {
+                    phone: phone || '',
+                    facebook: fbPage || '',
+                    instagram: igHandle || ''
                 },
                 image: finalImageUrl,
                 updatedAt: serverTimestamp(),
@@ -280,7 +282,7 @@ export default function AdminDashboardScreen({ navigation }) {
         <View style={[tw`bg-white rounded-[24px] mb-6 overflow-hidden`, { elevation: 3 }]}>
             <View style={tw`relative w-full h-48 bg-slate-200`}>
                 <Image source={{ uri: item.image }} style={tw`w-full h-full absolute`} resizeMode="cover" />
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => handleDelete(item.id)}
                     style={tw`absolute top-4 left-4 bg-red-500 w-10 h-10 rounded-full items-center justify-center shadow-md`}
                 >
@@ -321,7 +323,14 @@ export default function AdminDashboardScreen({ navigation }) {
 
                     <TouchableOpacity
                         style={tw`flex-1 flex-row py-3.5 rounded-2xl bg-[#00686F] items-center justify-center`}
-                        onPress={() => navigation.navigate('ARVenue', { venueId: item.id, venueName: item.name })}
+                        onPress={() => navigation.navigate('ARVenue', {
+                            venueId: item.id,
+                            venueName: item.name,
+                            modelUrl: item.modelUrl, // Critical: pass the real Cloudinary URL
+                            price: item.price,
+                            capacity: item.capacity,
+                            location: item.location
+                        })}
                     >
                         <Ionicons name="walk" size={18} color="#FFF" />
                         <CustomText style={tw`text-white font-bold text-[14px] ml-2`}>Test AR</CustomText>
@@ -364,13 +373,13 @@ export default function AdminDashboardScreen({ navigation }) {
             </View>
 
             <View style={tw`flex-row px-6 mt-6 mb-2`}>
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setActiveTab('venues')}
                     style={tw`mr-4 pb-2 border-b-2 ${activeTab === 'venues' ? 'border-[#00686F]' : 'border-transparent'}`}
                 >
                     <CustomText style={tw`font-bold ${activeTab === 'venues' ? 'text-[#00686F]' : 'text-slate-400'}`}>Venues</CustomText>
                 </TouchableOpacity>
-                <TouchableOpacity 
+                <TouchableOpacity
                     onPress={() => setActiveTab('vendors')}
                     style={tw`pb-2 border-b-2 ${activeTab === 'vendors' ? 'border-[#00686F]' : 'border-transparent'}`}
                 >
@@ -381,14 +390,14 @@ export default function AdminDashboardScreen({ navigation }) {
             {/* NEW: Vendor Category Filter Bar */}
             {activeTab === 'vendors' && (
                 <View style={tw`mb-2`}>
-                    <ScrollView 
-                        horizontal 
-                        showsHorizontalScrollIndicator={false} 
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
                         contentContainerStyle={tw`px-6 py-2`}
                     >
                         {filterCategories.map((cat) => (
-                            <TouchableOpacity 
-                                key={cat} 
+                            <TouchableOpacity
+                                key={cat}
                                 onPress={() => setSelectedCategory(cat)}
                                 style={tw`mr-2 px-4 py-2 rounded-full border ${selectedCategory === cat ? 'bg-[#00686F] border-[#00686F]' : 'bg-white border-slate-200'}`}
                             >
@@ -401,7 +410,7 @@ export default function AdminDashboardScreen({ navigation }) {
 
             {loading ? <ActivityIndicator size="large" color="#00686F" style={tw`mt-20`} /> : (
                 <FlatList
-                    data={activeTab === 'venues' ? venues : filteredVendors} 
+                    data={activeTab === 'venues' ? venues : filteredVendors}
                     keyExtractor={item => item.id}
                     renderItem={activeTab === 'venues' ? renderVenueCard : renderVendorCard}
                     contentContainerStyle={tw`px-6 pb-24 pt-2`}
@@ -416,9 +425,9 @@ export default function AdminDashboardScreen({ navigation }) {
             )}
 
             <Modal visible={fabMenuVisible} transparent animationType="fade">
-                <TouchableOpacity 
-                    style={tw`flex-1 bg-black/40 justify-end items-end p-6`} 
-                    activeOpacity={1} 
+                <TouchableOpacity
+                    style={tw`flex-1 bg-black/40 justify-end items-end p-6`}
+                    activeOpacity={1}
                     onPress={() => setFabMenuVisible(false)}
                 >
                     <View style={tw`items-end mb-4`}>
@@ -426,7 +435,7 @@ export default function AdminDashboardScreen({ navigation }) {
                             <View style={tw`bg-white px-3 py-1.5 rounded-lg mr-3 shadow-sm`}>
                                 <CustomText style={tw`text-slate-700 font-bold`}>Add New Vendor</CustomText>
                             </View>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={tw`w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg`}
                                 onPress={() => { setFabMenuVisible(false); setVendorModalVisible(true); }}
                             >
@@ -438,7 +447,7 @@ export default function AdminDashboardScreen({ navigation }) {
                             <View style={tw`bg-white px-3 py-1.5 rounded-lg mr-3 shadow-sm`}>
                                 <CustomText style={tw`text-slate-700 font-bold`}>Add New Venue</CustomText>
                             </View>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={tw`w-12 h-12 bg-white rounded-full items-center justify-center shadow-lg`}
                                 onPress={() => { setFabMenuVisible(false); setIsEditing(false); setModalVisible(true); }}
                             >
@@ -446,7 +455,7 @@ export default function AdminDashboardScreen({ navigation }) {
                             </TouchableOpacity>
                         </View>
 
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             style={tw`w-16 h-16 rounded-2xl bg-red-500 items-center justify-center shadow-lg`}
                             onPress={() => setFabMenuVisible(false)}
                         >
@@ -458,7 +467,7 @@ export default function AdminDashboardScreen({ navigation }) {
 
             <Modal visible={modalVisible} animationType="fade" transparent>
                 <View style={tw`flex-1 bg-black/50 justify-center items-center px-6`}>
-                    <KeyboardAvoidingView 
+                    <KeyboardAvoidingView
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         style={tw`w-full`}
                     >
@@ -473,18 +482,18 @@ export default function AdminDashboardScreen({ navigation }) {
 
                                 <TextInput style={styles.input} placeholder="Venue Name" value={newName} onChangeText={setNewName} />
                                 <TextInput style={[styles.input, tw`mt-3`]} placeholder="Location" value={newLocation} onChangeText={setNewLocation} />
-                                
+
                                 <View style={tw`flex-row justify-between mt-3`}>
                                     <TextInput style={[styles.input, { width: '48%' }]} placeholder="Capacity (Pax)" value={newCapacity} onChangeText={setNewCapacity} keyboardType="numeric" />
                                     <TextInput style={[styles.input, { width: '48%' }]} placeholder="Price (Numeric)" value={newPrice} onChangeText={setNewPrice} keyboardType="numeric" />
                                 </View>
 
-                                <TextInput 
-                                    style={[styles.input, tw`mt-3 h-24`, { textAlignVertical: 'top' }]} 
-                                    placeholder="Description" 
-                                    multiline 
-                                    value={newDescription} 
-                                    onChangeText={setNewDescription} 
+                                <TextInput
+                                    style={[styles.input, tw`mt-3 h-24`, { textAlignVertical: 'top' }]}
+                                    placeholder="Description"
+                                    multiline
+                                    value={newDescription}
+                                    onChangeText={setNewDescription}
                                 />
 
                                 <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Contact Details</CustomText>
@@ -496,7 +505,7 @@ export default function AdminDashboardScreen({ navigation }) {
 
                                 <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Media & 3D Assets</CustomText>
                                 <TextInput style={styles.input} placeholder="Image URL (Optional)" value={imageLink} onChangeText={setImageLink} />
-                                
+
                                 <View style={tw`flex-row mt-2`}>
                                     <TouchableOpacity style={tw`flex-1 mr-2 p-4 border-dashed border border-slate-300 rounded-xl items-center`} onPress={pickImage}>
                                         <Ionicons name="image-outline" size={20} color={selectedImage ? "#00686F" : "#64748B"} />
@@ -509,8 +518,8 @@ export default function AdminDashboardScreen({ navigation }) {
                                     </TouchableOpacity>
                                 </View>
 
-                                <TouchableOpacity 
-                                    style={[tw`mt-8 h-14 rounded-2xl items-center justify-center`, { backgroundColor: '#00686F' }]} 
+                                <TouchableOpacity
+                                    style={[tw`mt-8 h-14 rounded-2xl items-center justify-center`, { backgroundColor: '#00686F' }]}
                                     onPress={handleSaveVenue}
                                     disabled={isSubmitting}
                                 >
@@ -524,7 +533,7 @@ export default function AdminDashboardScreen({ navigation }) {
 
             <Modal visible={vendorModalVisible} animationType="fade" transparent>
                 <View style={tw`flex-1 bg-black/50 justify-center items-center px-6`}>
-                    <KeyboardAvoidingView 
+                    <KeyboardAvoidingView
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         style={tw`w-full`}
                     >
@@ -538,12 +547,12 @@ export default function AdminDashboardScreen({ navigation }) {
                                 </View>
 
                                 <TextInput style={styles.input} placeholder="Vendor Name*" value={vendorName} onChangeText={setVendorName} />
-                                
+
                                 <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Category*</CustomText>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={tw`mb-2`}>
                                     {categories.map((cat) => (
-                                        <TouchableOpacity 
-                                            key={cat} 
+                                        <TouchableOpacity
+                                            key={cat}
                                             onPress={() => setVendorCategory(cat)}
                                             style={tw`mr-2 px-4 py-2 rounded-full border ${vendorCategory === cat ? 'bg-[#00686F] border-[#00686F]' : 'bg-white border-slate-200'}`}
                                         >
@@ -556,8 +565,8 @@ export default function AdminDashboardScreen({ navigation }) {
                                 <TextInput style={[styles.input, tw`mt-3`]} placeholder="Facebook Page URL" value={vendorFb} onChangeText={setVendorFb} />
                                 <TextInput style={[styles.input, tw`mt-3`]} placeholder="Location*" value={vendorLocation} onChangeText={setVendorLocation} />
 
-                                <TouchableOpacity 
-                                    style={[tw`mt-8 h-14 rounded-2xl items-center justify-center`, { backgroundColor: '#00686F' }]} 
+                                <TouchableOpacity
+                                    style={[tw`mt-8 h-14 rounded-2xl items-center justify-center`, { backgroundColor: '#00686F' }]}
                                     onPress={handleSaveVendor}
                                     disabled={isSubmitting}
                                 >
@@ -570,7 +579,7 @@ export default function AdminDashboardScreen({ navigation }) {
             </Modal>
 
             {!fabMenuVisible && (
-                <TouchableOpacity 
+                <TouchableOpacity
                     style={tw`absolute bottom-8 right-6 w-16 h-16 rounded-2xl bg-[#00686F] items-center justify-center shadow-lg`}
                     onPress={() => setFabMenuVisible(true)}
                 >
