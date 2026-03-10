@@ -56,7 +56,7 @@ export default function BottomNav({ navigation, activeRoute, userData }) {
             {/* Venues Tab */}
             <TouchableOpacity style={tw`items-center flex-1 mr-6`} onPress={() => navigation.navigate('Venues')}>
                 <Ionicons
-                    name={activeRoute === 'Venues' ? 'business' : 'business-outline'}
+                    name={activeRoute === 'Venues' ? 'cube' : 'cube-outline'}
                     size={24}
                     color={activeRoute === 'Venues' ? '#00686F' : '#94A3B8'}
                 />

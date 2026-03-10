@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
     View, ScrollView, TextInput, TouchableOpacity,
     Alert, ActivityIndicator, Platform, Switch,
-    KeyboardAvoidingView, Animated, Dimensions,
+    KeyboardAvoidingView, Animated, Dimensions, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomText from '../components/CustomText';
@@ -12,63 +12,76 @@ import {
     collection, addDoc, serverTimestamp,
     query, where, getDocs,
 } from 'firebase/firestore';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import tw from 'twrnc';
+import NotificationService from '../services/NotificationService'; // <-- Import the new service
+import VenuePicker from '../components/Venuepicker';
 
 const { width } = Dimensions.get('window');
 
 // ── EVENT TYPE CONFIG ───────────────────────────────────────
 const EVENT_TYPES = [
-    { key: 'Wedding',        icon: 'heart',              color: '#E8626A', bg: '#FFF0F0', desc: 'Celebrate love'        },
-    { key: 'Birthday Party', icon: 'gift-outline',       color: '#F59E0B', bg: '#FFFBEB', desc: 'Make a wish'           },
-    { key: 'Corporate',      icon: 'briefcase-outline',  color: '#3B82F6', bg: '#EFF6FF', desc: 'Business & networking' },
-    { key: 'Charity',        icon: 'ribbon-outline',     color: '#10B981', bg: '#ECFDF5', desc: 'Give & inspire'        },
-    { key: 'Others',         icon: 'star-outline',       color: '#8B5CF6', bg: '#F5F3FF', desc: 'Something special'     },
+    { key: 'Wedding', icon: 'heart', color: '#E8626A', bg: '#FFF0F0', desc: 'Celebrate love' },
+    { key: 'Birthday Party', icon: 'gift-outline', color: '#F59E0B', bg: '#FFFBEB', desc: 'Make a wish' },
+    { key: 'Corporate', icon: 'briefcase-outline', color: '#3B82F6', bg: '#EFF6FF', desc: 'Business & networking' },
+    { key: 'Charity', icon: 'ribbon-outline', color: '#10B981', bg: '#ECFDF5', desc: 'Give & inspire' },
+    { key: 'Others', icon: 'star-outline', color: '#f65cb3', bg: '#F5F3FF', desc: 'Something special' },
 ];
 
 // ── THEMES ──────────────────────────────────────────────────
 const THEMES = [
-    { id: 'fairy-tale',     name: 'Fairy Tale',     icon: 'sparkles-outline',        color: '#C084FC', tags: ['Birthday Party'] },
-    { id: 'golden-gala',    name: 'Golden Gala',    icon: 'trophy-outline',           color: '#D97706', tags: ['Wedding', 'Corporate'] },
-    { id: 'garden-bloom',   name: 'Garden Bloom',   icon: 'leaf-outline',             color: '#10B981', tags: ['Wedding'] },
-    { id: 'midnight-luxe',  name: 'Midnight Luxe',  icon: 'moon-outline',             color: '#6366F1', tags: [] },
-    { id: 'tropical-fest',  name: 'Tropical Fest',  icon: 'sunny-outline',            color: '#F97316', tags: ['Birthday Party'] },
-    { id: 'corporate-edge', name: 'Corporate Edge', icon: 'business-outline',         color: '#2563EB', tags: ['Corporate'] },
-    { id: 'rustic-charm',   name: 'Rustic Charm',   icon: 'bonfire-outline',          color: '#B45309', tags: ['Wedding'] },
-    { id: 'neon-fiesta',    name: 'Neon Fiesta',    icon: 'musical-notes-outline',    color: '#EC4899', tags: ['Birthday Party'] },
-    { id: 'ocean-breeze',   name: 'Ocean Breeze',   icon: 'water-outline',            color: '#0EA5E9', tags: [] },
-    { id: 'giving-heart',   name: 'Giving Heart',   icon: 'heart-circle-outline',     color: '#EF4444', tags: ['Charity'] },
+    { id: 'fairy-tale', name: 'Fairy Tale', icon: 'sparkles-outline', color: '#C084FC', tags: ['Birthday Party'] },
+    { id: 'golden-gala', name: 'Golden Gala', icon: 'trophy-outline', color: '#D97706', tags: ['Wedding', 'Corporate'] },
+    { id: 'garden-bloom', name: 'Garden Bloom', icon: 'leaf-outline', color: '#10B981', tags: ['Wedding'] },
+    { id: 'midnight-luxe', name: 'Midnight Luxe', icon: 'moon-outline', color: '#6366F1', tags: [] },
+    { id: 'tropical-fest', name: 'Tropical Fest', icon: 'sunny-outline', color: '#F97316', tags: ['Birthday Party'] },
+    { id: 'corporate-edge', name: 'Corporate Edge', icon: 'business-outline', color: '#2563EB', tags: ['Corporate'] },
+    { id: 'rustic-charm', name: 'Rustic Charm', icon: 'bonfire-outline', color: '#B45309', tags: ['Wedding'] },
+    { id: 'neon-fiesta', name: 'Neon Fiesta', icon: 'musical-notes-outline', color: '#EC4899', tags: ['Birthday Party'] },
+    { id: 'ocean-breeze', name: 'Ocean Breeze', icon: 'water-outline', color: '#0EA5E9', tags: [] },
+    { id: 'giving-heart', name: 'Giving Heart', icon: 'heart-circle-outline', color: '#EF4444', tags: ['Charity'] },
 ];
 
 // ── HELPERS ─────────────────────────────────────────────────
-const fmt     = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 // ── SCREEN ──────────────────────────────────────────────────
 export default function AddEventScreen({ navigation }) {
-    const [title, setTitle]                           = useState('');
-    const [eventType, setEventType]                   = useState(null);
-    const [otherType, setOtherType]                   = useState('');
-    const [startDate, setStartDate]                   = useState(new Date());
-    const [endDate, setEndDate]                       = useState(new Date());
-    const [startTime, setStartTime]                   = useState(new Date());
-    const [isMultiDay, setIsMultiDay]                 = useState(false);
-    const [location, setLocation]                     = useState('');
-    const [description, setDescription]               = useState('');
-    const [collaboratorEmail, setCollaboratorEmail]   = useState('');
-    const [selectedTheme, setSelectedTheme]           = useState(null);
-    const [customTheme, setCustomTheme]               = useState('');
-    const [loading, setLoading]                       = useState(false);
-    const [submitted, setSubmitted]                   = useState(false);
+    const [title, setTitle] = useState('');
+    const [eventType, setEventType] = useState(null);
+    const [otherType, setOtherType] = useState('');
+    const [startDate, setStartDate] = useState(new Date());
+    const [endDate, setEndDate] = useState(new Date());
+    const [startTime, setStartTime] = useState(new Date());
+    const [isMultiDay, setIsMultiDay] = useState(false);
+    const [location, setLocation] = useState('');
+    const [description, setDescription] = useState('');
+    const [collaboratorEmail, setCollaboratorEmail] = useState('');
+    const [selectedTheme, setSelectedTheme] = useState(null);
+    const [customTheme, setCustomTheme] = useState('');
+    const [venuePickerVisible, setVenuePickerVisible] = useState(false);
+    const [selectedVenueId, setSelectedVenueId] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [submitted, setSubmitted] = useState(false);
 
     const [showStartPicker, setShowStartPicker] = useState(false);
-    const [showEndPicker, setShowEndPicker]     = useState(false);
-    const [showTimePicker, setShowTimePicker]   = useState(false);
+    const [showEndPicker, setShowEndPicker] = useState(false);
+    const [showTimePicker, setShowTimePicker] = useState(false);
 
-    // Animations — now 6 cards instead of 5
-    const heroScale  = useRef(new Animated.Value(0.96)).current;
-    const cardAnims  = useRef([0,1,2,3,4,5].map(() => new Animated.Value(40))).current;
-    const cardFades  = useRef([0,1,2,3,4,5].map(() => new Animated.Value(0))).current;
+    // Scroll-wheel picker state
+    const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + i);
+    const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
+    const [pickerDay,   setPickerDay]   = useState(new Date().getDate() - 1);
+    const [pickerYear,  setPickerYear]  = useState(0);
+    const [pickerHour,  setPickerHour]  = useState(new Date().getHours());
+    const [pickerMinute, setPickerMinute] = useState(0);
+    // which date field is the date picker targeting: 'start' | 'end'
+    const [datePickerTarget, setDatePickerTarget] = useState('start');
+
+    // Animations
+    const heroScale = useRef(new Animated.Value(0.96)).current;
+    const cardAnims = useRef([0, 1, 2, 3, 4, 5].map(() => new Animated.Value(40))).current;
+    const cardFades = useRef([0, 1, 2, 3, 4, 5].map(() => new Animated.Value(0))).current;
 
     useEffect(() => {
         Animated.parallel([
@@ -103,37 +116,58 @@ export default function AddEventScreen({ navigation }) {
             const themeValue = customTheme.trim() || selectedTheme?.name || null;
 
             const eventRef = await addDoc(collection(db, 'events'), {
-                userId:        auth.currentUser.uid,
-                title:         title.trim(),
-                eventType:     finalType,
+                userId: auth.currentUser.uid,
+                title: title.trim(),
+                eventType: finalType,
                 startDate,
-                startTime:     fmtTime(startTime),
-                endDate:       isMultiDay ? endDate : null,
+                startTime: fmtTime(startTime),
+                endDate: isMultiDay ? endDate : null,
                 isMultiDay,
-                location:      location.trim() || 'To be decided',
-                description:   description.trim(),
-                theme:         themeValue,
-                themeAccent:   selectedTheme?.color || null,
+                location: location.trim() || 'To be decided',
+                venueId: selectedVenueId || null,
+                description: description.trim(),
+                theme: themeValue,
+                themeAccent: selectedTheme?.color || null,
                 collaborators: [],
-                createdAt:     serverTimestamp(),
+                createdAt: serverTimestamp(),
             });
 
             if (collaboratorEmail.trim()) {
                 const email = collaboratorEmail.trim().toLowerCase();
-                const snap  = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
+                const snap = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
                 if (!snap.empty) {
                     await addDoc(collection(db, 'notifications'), {
                         recipientId: snap.docs[0].id,
-                        senderId:    auth.currentUser.uid,
-                        senderName:  auth.currentUser.displayName || 'An organizer',
-                        eventId:     eventRef.id,
-                        eventTitle:  title.trim(),
-                        status:      'pending',
-                        type:        'invitation',
-                        createdAt:   serverTimestamp(),
+                        senderId: auth.currentUser.uid,
+                        senderName: auth.currentUser.displayName || 'An organizer',
+                        eventId: eventRef.id,
+                        eventTitle: title.trim(),
+                        status: 'pending',
+                        type: 'invitation',
+                        createdAt: serverTimestamp(),
                     });
                 }
             }
+
+            // ── SCHEDULE DEVICE REMINDER ──────────────────────────────
+            try {
+                const reminderDate = new Date(startDate);
+                // Set the reminder time exactly 1 hour before the start time
+                reminderDate.setHours(startTime.getHours() - 1);
+                reminderDate.setMinutes(startTime.getMinutes());
+
+                // Only schedule if the calculated reminder time is in the future
+                if (reminderDate > new Date()) {
+                    await NotificationService.scheduleEventReminder(
+                        'Upcoming Event!',
+                        `Your event "${title.trim()}" is starting in 1 hour.`,
+                        reminderDate
+                    );
+                }
+            } catch (notifError) {
+                console.warn('Failed to schedule local reminder:', notifError);
+            }
+            // ──────────────────────────────────────────────────────────
 
             Alert.alert('Event Created!', `"${title.trim()}" is all set.`, [
                 { text: 'Great!', onPress: () => navigation.goBack() },
@@ -146,18 +180,52 @@ export default function AddEventScreen({ navigation }) {
         }
     };
 
-    const accentColor    = '#00686F';
-    const accentBg       = '#E0F2F3';
-    const accentIcon     = eventType?.icon  || 'calendar-outline';
+    const openDatePicker = (target, date) => {
+        const base = date || new Date();
+        setPickerMonth(base.getMonth());
+        setPickerDay(base.getDate() - 1);
+        setPickerYear(YEAR_OPTIONS.indexOf(base.getFullYear()) !== -1 ? YEAR_OPTIONS.indexOf(base.getFullYear()) : 0);
+        setDatePickerTarget(target);
+        setShowStartPicker(true);
+    };
+
+    const confirmDate = () => {
+        const daysInMonth = new Date(YEAR_OPTIONS[pickerYear], pickerMonth + 1, 0).getDate();
+        const day = Math.min(pickerDay, daysInMonth - 1) + 1;
+        const picked = new Date(YEAR_OPTIONS[pickerYear], pickerMonth, day);
+        if (datePickerTarget === 'start') {
+            setStartDate(picked);
+            if (picked > endDate) setEndDate(picked);
+        } else {
+            setEndDate(picked);
+        }
+        setShowStartPicker(false);
+    };
+
+    const openTimePicker = () => {
+        setPickerHour(startTime.getHours());
+        setPickerMinute(startTime.getMinutes());
+        setShowTimePicker(true);
+    };
+
+    const confirmTime = () => {
+        const t = new Date();
+        t.setHours(pickerHour, pickerMinute, 0, 0);
+        setStartTime(t);
+        setShowTimePicker(false);
+    };
+
+    const accentColor = '#00686F';
+    const accentBg = '#E0F2F3';
+    const accentIcon = eventType?.icon || 'calendar-outline';
 
     const suggestedThemes = THEMES.filter(t => t.tags.includes(eventType?.key));
     const remainingThemes = THEMES.filter(t => !t.tags.includes(eventType?.key));
 
     return (
         <SafeAreaView style={tw`flex-1 bg-[#F0F4F8]`} edges={['top']}>
+            {/* The rest of your AddEventScreen UI remains exactly the same */}
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={tw`flex-1`}>
-
-                {/* ── HERO HEADER ─────────────────────────────── */}
                 <Animated.View style={{
                     transform: [{ scale: heroScale }],
                     marginHorizontal: 16,
@@ -175,7 +243,6 @@ export default function AddEventScreen({ navigation }) {
                     elevation: 6,
                 }}>
                     <View style={{ height: 5, backgroundColor: accentColor }} />
-
                     <View style={tw`px-5 py-4`}>
                         <View style={tw`flex-row items-center justify-between mb-4`}>
                             <TouchableOpacity
@@ -188,11 +255,9 @@ export default function AddEventScreen({ navigation }) {
                             >
                                 <Ionicons name="arrow-back" size={18} color={accentColor} />
                             </TouchableOpacity>
-
                             <CustomText fontFamily="extrabold" style={{ color: accentColor, fontSize: 16, letterSpacing: 0.3 }}>
                                 Plan Your Event
                             </CustomText>
-
                             <View style={[
                                 tw`w-9 h-9 rounded-full justify-center items-center`,
                                 { backgroundColor: '#00686F20' },
@@ -200,7 +265,6 @@ export default function AddEventScreen({ navigation }) {
                                 <Ionicons name={accentIcon} size={17} color="#00686F" />
                             </View>
                         </View>
-
                         <CustomText fontFamily="bold" style={{ color: accentColor + 'AA', fontSize: 10, letterSpacing: 1, marginBottom: 6 }}>
                             EVENT NAME <CustomText style={{ color: '#EF4444' }}>*</CustomText>
                         </CustomText>
@@ -283,11 +347,11 @@ export default function AddEventScreen({ navigation }) {
                         <View style={tw`flex-row flex-wrap mt-1`}>
                             {EVENT_TYPES.map((type) => {
                                 const active = eventType?.key === type.key;
-                                const tileColor  = active ? type.color : '#64748B';
+                                const tileColor = active ? type.color : '#64748B';
                                 const tileBorder = active ? type.color : '#E8EEF4';
-                                const tileBg     = active ? type.color + '12' : '#F8FAFC';
-                                const iconBg     = active ? type.color + '25' : '#E8EEF4';
-                                const iconColor  = active ? type.color : '#94A3B8';
+                                const tileBg = active ? type.color + '12' : '#F8FAFC';
+                                const iconBg = active ? type.color + '25' : '#E8EEF4';
+                                const iconColor = active ? type.color : '#94A3B8';
                                 return (
                                     <TouchableOpacity
                                         key={type.key}
@@ -365,7 +429,7 @@ export default function AddEventScreen({ navigation }) {
                                 value={fmt(startDate)}
                                 icon="calendar"
                                 color={accentColor}
-                                onPress={() => setShowStartPicker(true)}
+                                onPress={() => openDatePicker('start', startDate)}
                             />
                             <View style={tw`w-3`} />
                             <DateTimeButton
@@ -373,7 +437,7 @@ export default function AddEventScreen({ navigation }) {
                                 value={fmtTime(startTime)}
                                 icon="time"
                                 color={accentColor}
-                                onPress={() => setShowTimePicker(true)}
+                                onPress={openTimePicker}
                             />
                         </View>
 
@@ -411,7 +475,7 @@ export default function AddEventScreen({ navigation }) {
 
                         {isMultiDay && (
                             <TouchableOpacity
-                                onPress={() => setShowEndPicker(true)}
+                                onPress={() => openDatePicker('end', endDate)}
                                 activeOpacity={0.75}
                                 style={[
                                     tw`flex-row items-center mt-3 px-4 py-3 rounded-[14px]`,
@@ -516,33 +580,83 @@ export default function AddEventScreen({ navigation }) {
                     <FormCard anim={cardAnims[3]} fade={cardFades[3]}>
                         <SectionHeader icon="location-outline" label="Venue" color={accentColor} />
                         <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12, marginBottom: 14, marginTop: -8 }}>
-                            Where is this happening?
+                            Where is this happening? (optional)
                         </CustomText>
 
-                        <View style={[
-                            tw`flex-row items-center px-4 rounded-[14px]`,
-                            { backgroundColor: '#F8FAFC', borderWidth: 1.5, borderColor: '#E8EEF4' },
-                        ]}>
+                        {/* Venue display / trigger button */}
+                        <TouchableOpacity
+                            onPress={() => setVenuePickerVisible(true)}
+                            activeOpacity={0.78}
+                            style={[
+                                tw`flex-row items-center px-4 rounded-[14px]`,
+                                {
+                                    backgroundColor: location.trim() ? accentColor + '08' : '#F8FAFC',
+                                    borderWidth: 1.5,
+                                    borderColor: location.trim() ? accentColor + '50' : '#E8EEF4',
+                                    minHeight: 52,
+                                },
+                            ]}
+                        >
                             <View style={[
                                 tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
-                                { backgroundColor: accentColor + '15' },
+                                { backgroundColor: location.trim() ? accentColor + '20' : accentColor + '15' },
                             ]}>
-                                <Ionicons name="location-outline" size={16} color={accentColor} />
+                                <Ionicons
+                                    name={location.trim() ? 'location' : 'location-outline'}
+                                    size={16}
+                                    color={accentColor}
+                                />
                             </View>
-                            <TextInput
-                                style={[tw`flex-1 py-3.5 text-[14px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
-                                value={location}
-                                onChangeText={setLocation}
-                                placeholder="Venue name or address (optional)"
-                                placeholderTextColor="#CBD5E1"
-                            />
-                            {location.length > 0 && (
-                                <TouchableOpacity onPress={() => setLocation('')}>
+                            <CustomText
+                                fontFamily={location.trim() ? 'semibold' : 'medium'}
+                                style={{
+                                    flex: 1,
+                                    fontSize: 14,
+                                    color: location.trim() ? '#0F172A' : '#CBD5E1',
+                                    paddingVertical: 14,
+                                }}
+                                numberOfLines={1}
+                            >
+                                {location.trim() || 'Tap to choose a venue...'}
+                            </CustomText>
+                            {location.trim() ? (
+                                <TouchableOpacity
+                                    onPress={() => { setLocation(''); setSelectedVenueId(null); }}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
                                     <Ionicons name="close-circle" size={18} color="#CBD5E1" />
                                 </TouchableOpacity>
+                            ) : (
+                                <Ionicons name="chevron-forward" size={16} color="#CBD5E1" />
                             )}
-                        </View>
+                        </TouchableOpacity>
+
+                        {/* Pinned from DB badge */}
+                        {selectedVenueId && (
+                            <View style={{
+                                flexDirection: 'row', alignItems: 'center',
+                                marginTop: 8, paddingHorizontal: 10, paddingVertical: 6,
+                                backgroundColor: accentColor + '10',
+                                borderRadius: 10, borderWidth: 1, borderColor: accentColor + '25',
+                            }}>
+                                <Ionicons name="cube-outline" size={12} color={accentColor} />
+                                <CustomText fontFamily="semibold" style={{ color: accentColor, fontSize: 11, marginLeft: 5 }}>
+                                    Pinned from Occasio venues
+                                </CustomText>
+                            </View>
+                        )}
                     </FormCard>
+
+                    {/* Venue Picker Modal */}
+                    <VenuePicker
+                        visible={venuePickerVisible}
+                        onClose={() => setVenuePickerVisible(false)}
+                        onSelect={({ name, venueId }) => {
+                            setLocation(name);
+                            setSelectedVenueId(venueId);
+                        }}
+                        currentValue={location}
+                    />
 
                     {/* ══ SECTION 5: INVITE COLLABORATOR ══════════ */}
                     <FormCard anim={cardAnims[4]} fade={cardFades[4]}>
@@ -594,7 +708,6 @@ export default function AddEventScreen({ navigation }) {
                             <InlineError message="Please enter a valid email address" />
                         )}
 
-                        {/* Info hint */}
                         <View style={[
                             tw`flex-row items-start mt-3 px-3 py-2.5 rounded-[12px]`,
                             { backgroundColor: accentColor + '08', borderWidth: 1, borderColor: accentColor + '20' },
@@ -637,11 +750,11 @@ export default function AddEventScreen({ navigation }) {
                     { backgroundColor: '#F0F4F8', borderTopWidth: 1, borderTopColor: '#E8EEF4' },
                 ]}>
                     <View style={tw`flex-row items-center mb-3 flex-wrap`}>
-                        <ReadinessChip label="Name"  done={!!title.trim()}                             color={accentColor} />
-                        <ReadinessChip label="Type"  done={!!eventType}                                color={accentColor} />
-                        <ReadinessChip label="Date"  done                                              color={accentColor} />
-                        <ReadinessChip label="Theme" done={!!(selectedTheme || customTheme.trim())}    color={accentColor} optional />
-                        <ReadinessChip label="Venue" done={!!location.trim()}                          color={accentColor} optional />
+                        <ReadinessChip label="Name" done={!!title.trim()} color={accentColor} />
+                        <ReadinessChip label="Type" done={!!eventType} color={accentColor} />
+                        <ReadinessChip label="Date" done color={accentColor} />
+                        <ReadinessChip label="Theme" done={!!(selectedTheme || customTheme.trim())} color={accentColor} optional />
+                        <ReadinessChip label="Venue" done={!!location.trim()} color={accentColor} optional />
                     </View>
 
                     <TouchableOpacity
@@ -681,37 +794,137 @@ export default function AddEventScreen({ navigation }) {
 
             </KeyboardAvoidingView>
 
-            {/* ── PICKERS ──────────────────────────────────────── */}
-            {showStartPicker && (
-                <DateTimePicker
-                    value={startDate} mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(e, d) => {
-                        setShowStartPicker(Platform.OS === 'ios');
-                        if (d) { setStartDate(d); if (d > endDate) setEndDate(d); }
-                    }}
-                />
-            )}
-            {showEndPicker && (
-                <DateTimePicker
-                    value={endDate} mode="date" minimumDate={startDate}
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(e, d) => { setShowEndPicker(Platform.OS === 'ios'); if (d) setEndDate(d); }}
-                />
-            )}
-            {showTimePicker && (
-                <DateTimePicker
-                    value={startTime} mode="time" is24Hour={false}
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(e, t) => { setShowTimePicker(Platform.OS === 'ios'); if (t) setStartTime(t); }}
-                />
-            )}
+            {/* ── DATE PICKER MODAL ─────────────────────────── */}
+            {(() => {
+                const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                const daysInMonth = new Date(YEAR_OPTIONS[pickerYear], pickerMonth + 1, 0).getDate();
+                const DAYS = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+                return (
+                    <Modal visible={showStartPicker} transparent animationType="slide" onRequestClose={() => setShowStartPicker(false)}>
+                        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setShowStartPicker(false)}>
+                            <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 36 }}>
+                                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginTop: 12, marginBottom: 4 }} />
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                                    <TouchableOpacity onPress={() => setShowStartPicker(false)}>
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 15, fontWeight: '600' }}>Cancel</CustomText>
+                                    </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons name="calendar-outline" size={15} color="#00686F" />
+                                        <CustomText style={{ color: '#0F172A', fontSize: 15, fontWeight: '800', marginLeft: 6 }}>
+                                            {datePickerTarget === 'start' ? 'Start Date' : 'End Date'}
+                                        </CustomText>
+                                    </View>
+                                    <TouchableOpacity onPress={confirmDate} style={{ backgroundColor: '#00686F', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 }}>
+                                        <CustomText style={{ color: '#FFF', fontSize: 14, fontWeight: '800' }}>Done</CustomText>
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={{ alignItems: 'center', paddingVertical: 10, backgroundColor: '#F8FAFC' }}>
+                                    <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700' }}>
+                                        {MONTHS[pickerMonth]} {Math.min(pickerDay + 1, daysInMonth)}, {YEAR_OPTIONS[pickerYear]}
+                                    </CustomText>
+                                </View>
+                                <View style={{ flexDirection: 'row', height: 200, overflow: 'hidden', position: 'relative' }}>
+                                    <View style={{ position: 'absolute', top: '50%', left: 16, right: 16, height: 40, marginTop: -20, backgroundColor: '#E8F5F5', borderRadius: 12, zIndex: 0 }} />
+                                    <ScrollView style={{ flex: 2 }} showsVerticalScrollIndicator={false} snapToInterval={40} decelerationRate="fast" contentContainerStyle={{ paddingVertical: 80 }} onMomentumScrollEnd={(e) => setPickerMonth(Math.round(e.nativeEvent.contentOffset.y / 40))} contentOffset={{ x: 0, y: pickerMonth * 40 }}>
+                                        {MONTHS.map((m, i) => (
+                                            <TouchableOpacity key={m} onPress={() => setPickerMonth(i)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 15, fontWeight: pickerMonth === i ? '800' : '500', color: pickerMonth === i ? '#00686F' : '#64748B' }}>{m}</CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                    <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} snapToInterval={40} decelerationRate="fast" contentContainerStyle={{ paddingVertical: 80 }} onMomentumScrollEnd={(e) => setPickerDay(Math.round(e.nativeEvent.contentOffset.y / 40))} contentOffset={{ x: 0, y: pickerDay * 40 }}>
+                                        {DAYS.map((d, i) => (
+                                            <TouchableOpacity key={d} onPress={() => setPickerDay(i)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 15, fontWeight: pickerDay === i ? '800' : '500', color: pickerDay === i ? '#00686F' : '#64748B' }}>{String(d).padStart(2, '0')}</CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                    <ScrollView style={{ flex: 1.2 }} showsVerticalScrollIndicator={false} snapToInterval={40} decelerationRate="fast" contentContainerStyle={{ paddingVertical: 80 }} onMomentumScrollEnd={(e) => setPickerYear(Math.round(e.nativeEvent.contentOffset.y / 40))} contentOffset={{ x: 0, y: pickerYear * 40 }}>
+                                        {YEAR_OPTIONS.map((y, i) => (
+                                            <TouchableOpacity key={y} onPress={() => setPickerYear(i)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 15, fontWeight: pickerYear === i ? '800' : '500', color: pickerYear === i ? '#00686F' : '#64748B' }}>{y}</CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+                );
+            })()}
+
+            {/* ── TIME PICKER MODAL ─────────────────────────── */}
+            {(() => {
+                const HOURS   = Array.from({ length: 24 }, (_, i) => i);
+                const MINUTES = Array.from({ length: 60 }, (_, i) => i);
+                const h12 = pickerHour % 12 === 0 ? 12 : pickerHour % 12;
+                const ampm = pickerHour < 12 ? 'AM' : 'PM';
+
+                return (
+                    <Modal visible={showTimePicker} transparent animationType="slide" onRequestClose={() => setShowTimePicker(false)}>
+                        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setShowTimePicker(false)}>
+                            <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 36 }}>
+                                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginTop: 12, marginBottom: 4 }} />
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                                    <TouchableOpacity onPress={() => setShowTimePicker(false)}>
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 15, fontWeight: '600' }}>Cancel</CustomText>
+                                    </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons name="time-outline" size={15} color="#00686F" />
+                                        <CustomText style={{ color: '#0F172A', fontSize: 15, fontWeight: '800', marginLeft: 6 }}>Select Time</CustomText>
+                                    </View>
+                                    <TouchableOpacity onPress={confirmTime} style={{ backgroundColor: '#00686F', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 }}>
+                                        <CustomText style={{ color: '#FFF', fontSize: 14, fontWeight: '800' }}>Done</CustomText>
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={{ alignItems: 'center', paddingVertical: 10, backgroundColor: '#F8FAFC' }}>
+                                    <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700' }}>
+                                        {String(h12).padStart(2, '0')}:{String(pickerMinute).padStart(2, '0')} {ampm}
+                                    </CustomText>
+                                </View>
+                                <View style={{ flexDirection: 'row', height: 200, overflow: 'hidden', position: 'relative' }}>
+                                    <View style={{ position: 'absolute', top: '50%', left: 16, right: 16, height: 40, marginTop: -20, backgroundColor: '#E8F5F5', borderRadius: 12, zIndex: 0 }} />
+                                    <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} snapToInterval={40} decelerationRate="fast" contentContainerStyle={{ paddingVertical: 80 }} onMomentumScrollEnd={(e) => setPickerHour(Math.round(e.nativeEvent.contentOffset.y / 40))} contentOffset={{ x: 0, y: pickerHour * 40 }}>
+                                        {HOURS.map((h) => (
+                                            <TouchableOpacity key={h} onPress={() => setPickerHour(h)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 22, fontWeight: pickerHour === h ? '800' : '400', color: pickerHour === h ? '#00686F' : '#64748B' }}>
+                                                    {String(h % 12 === 0 ? 12 : h % 12).padStart(2, '0')}
+                                                </CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                    <View style={{ justifyContent: 'center', paddingHorizontal: 4 }}>
+                                        <CustomText style={{ fontSize: 24, fontWeight: '800', color: '#00686F' }}>:</CustomText>
+                                    </View>
+                                    <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} snapToInterval={40} decelerationRate="fast" contentContainerStyle={{ paddingVertical: 80 }} onMomentumScrollEnd={(e) => setPickerMinute(Math.round(e.nativeEvent.contentOffset.y / 40))} contentOffset={{ x: 0, y: pickerMinute * 40 }}>
+                                        {MINUTES.map((m) => (
+                                            <TouchableOpacity key={m} onPress={() => setPickerMinute(m)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 22, fontWeight: pickerMinute === m ? '800' : '400', color: pickerMinute === m ? '#00686F' : '#64748B' }}>
+                                                    {String(m).padStart(2, '0')}
+                                                </CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                    <View style={{ justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12, gap: 8 }}>
+                                        <TouchableOpacity onPress={() => { if (pickerHour >= 12) setPickerHour(pickerHour - 12); }} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: pickerHour < 12 ? '#00686F' : '#F1F5F9' }}>
+                                            <CustomText style={{ color: pickerHour < 12 ? '#FFF' : '#94A3B8', fontSize: 13, fontWeight: '800' }}>AM</CustomText>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity onPress={() => { if (pickerHour < 12) setPickerHour(pickerHour + 12); }} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: pickerHour >= 12 ? '#00686F' : '#F1F5F9' }}>
+                                            <CustomText style={{ color: pickerHour >= 12 ? '#FFF' : '#94A3B8', fontSize: 13, fontWeight: '800' }}>PM</CustomText>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+                );
+            })()}
         </SafeAreaView>
     );
 }
 
 // ── SUB-COMPONENTS ───────────────────────────────────────────
-
 const FormCard = ({ children, anim, fade, error }) => (
     <Animated.View style={{
         opacity: fade,
@@ -821,7 +1034,7 @@ const ReadinessChip = ({ label, done, color, optional }) => (
         {
             backgroundColor: done ? color + '18' : optional ? '#F8FAFC' : '#FEF2F2',
             borderWidth: 1,
-            borderColor:     done ? color + '40' : optional ? '#E8EEF4' : '#FECACA',
+            borderColor: done ? color + '40' : optional ? '#E8EEF4' : '#FECACA',
         },
     ]}>
         <Ionicons

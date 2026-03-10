@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View,
     TouchableOpacity,
@@ -48,6 +48,12 @@ export default function ProfileScreen({ navigation }) {
 
     // Original values for cancel functionality
     const [originalData, setOriginalData] = useState({});
+
+    // Stable onChange handlers — prevents InputField from remounting on every keystroke
+    const handleFirstNameChange = useCallback((v) => setFirstName(v), []);
+    const handleMiddleNameChange = useCallback((v) => setMiddleName(v), []);
+    const handleLastNameChange = useCallback((v) => setLastName(v), []);
+    const handleUsernameChange = useCallback((v) => setUsername(v), []);
 
     // Entrance animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -180,7 +186,9 @@ export default function ProfileScreen({ navigation }) {
         return (
             <SafeAreaView style={styles.container} edges={['top']}>
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#00686F" />
+                    <View style={styles.loadingSpinnerWrap}>
+                        <ActivityIndicator size="large" color="#00686F" />
+                    </View>
                     <CustomText style={styles.loadingText}>Loading profile...</CustomText>
                 </View>
             </SafeAreaView>
@@ -194,32 +202,37 @@ export default function ProfileScreen({ navigation }) {
                 onClose={() => setShowSuccess(false)}
             />
 
-            {/* Header with gradient effect */}
+            {/* ── HEADER ─────────────────────────────────────── */}
             <View style={styles.header}>
                 <TouchableOpacity
                     onPress={() => navigation.goBack()}
-                    style={styles.headerButton}
+                    style={styles.headerBtn}
                     hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                    <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                    <View style={styles.headerBtnInner}>
+                        <Ionicons name="arrow-back" size={20} color="#FFF" />
+                    </View>
                 </TouchableOpacity>
+
                 <CustomText style={styles.headerTitle}>
                     {isEditing ? 'Edit Profile' : 'My Profile'}
                 </CustomText>
+
                 {isEditing ? (
                     <TouchableOpacity
                         onPress={handleUpdateProfile}
-                        style={styles.headerButton}
+                        style={styles.headerBtn}
                         disabled={isSaving}
                     >
-                        {isSaving ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : (
-                            <CustomText style={styles.headerSaveText}>Save</CustomText>
-                        )}
+                        <View style={[styles.headerBtnInner, styles.headerSaveBtnInner]}>
+                            {isSaving
+                                ? <ActivityIndicator size="save" color="#FFF" />
+                                : <CustomText style={styles.headerSaveText}>Save</CustomText>
+                            }
+                        </View>
                     </TouchableOpacity>
                 ) : (
-                    <View style={{ width: 24 }} />
+                    <View style={{ width: 36 }} />
                 )}
             </View>
 
@@ -231,65 +244,78 @@ export default function ProfileScreen({ navigation }) {
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
                 >
-                    {/* Profile Header Card */}
+                    {/* ── HERO CARD ───────────────────────────── */}
                     <Animated.View style={[
-                        styles.profileCard,
-                        {
-                            opacity: fadeAnim,
-                            transform: [{ translateY: slideAnim }]
-                        }
+                        styles.heroCard,
+                        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
                     ]}>
-                        {/* Avatar with edit button overlay */}
+                        {/* Decorative circles */}
+                        <View style={styles.heroDeco1} />
+                        <View style={styles.heroDeco2} />
+
+                        {/* Avatar */}
                         <View style={styles.avatarContainer}>
                             <Animated.View style={[
-                                styles.avatarLarge,
+                                styles.avatarRing,
                                 { transform: [{ scale: avatarScale }] }
                             ]}>
-                                {selectedAvatar && AVATAR_MAP[selectedAvatar] ? (
-                                    <Image source={AVATAR_MAP[selectedAvatar]} style={styles.avatarImg} />
-                                ) : (
-                                    <View style={styles.avatarPlaceholder}>
-                                        <Ionicons name="person" size={50} color="#00686F" />
-                                    </View>
-                                )}
+                                <View style={styles.avatarInner}>
+                                    {selectedAvatar && AVATAR_MAP[selectedAvatar] ? (
+                                        <Image source={AVATAR_MAP[selectedAvatar]} style={styles.avatarImg} />
+                                    ) : (
+                                        <View style={styles.avatarPlaceholder}>
+                                            <Ionicons name="person" size={46} color="#00686F" />
+                                        </View>
+                                    )}
+                                </View>
                             </Animated.View>
 
                             {isEditing && (
-                                <Animated.View
-                                    style={[
-                                        styles.editAvatarBadge,
-                                        { opacity: editModeAnim, transform: [{ scale: editModeAnim }] }
-                                    ]}
-                                >
-                                    <Ionicons name="camera" size={18} color="#FFF" />
+                                <Animated.View style={[
+                                    styles.editAvatarBadge,
+                                    { opacity: editModeAnim, transform: [{ scale: editModeAnim }] }
+                                ]}>
+                                    <Ionicons name="camera" size={16} color="#FFF" />
                                 </Animated.View>
                             )}
                         </View>
 
+                        {/* Profile info (view mode only) */}
                         {!isEditing && (
-                            <Animated.View style={[styles.profileInfo, { opacity: contentOpacity }]}>
-                                <CustomText style={styles.nameText}>
+                            <Animated.View style={[styles.heroInfo, { opacity: contentOpacity }]}>
+                                <CustomText style={styles.heroName}>
                                     {`${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`}
                                 </CustomText>
-                                <CustomText style={styles.handleText}>@{username}</CustomText>
-                                <View style={styles.emailBadge}>
-                                    <Ionicons name="mail" size={14} color="#00686F" style={{ marginRight: 6 }} />
+                                <View style={styles.heroBadgeRow}>
+                                    <View style={styles.usernameBadge}>
+                                        <Ionicons name="at" size={12} color="#00686F" />
+                                        <CustomText style={styles.usernameText}>{username}</CustomText>
+                                    </View>
+                                </View>
+                                <View style={styles.emailRow}>
+                                    <Ionicons name="mail-outline" size={13} color="rgba(255,255,255,0.7)" style={{ marginRight: 5 }} />
                                     <CustomText style={styles.emailText}>{auth.currentUser?.email}</CustomText>
                                 </View>
                             </Animated.View>
                         )}
                     </Animated.View>
 
-                    {/* Content Section */}
+                    {/* ── CONTENT ─────────────────────────────── */}
                     <Animated.View style={[
                         styles.contentSection,
                         { opacity: contentOpacity, transform: [{ translateY: slideAnim }] }
                     ]}>
                         {isEditing ? (
                             <View style={styles.editForm}>
-                                {/* Avatar Selection */}
-                                <View style={styles.formSection}>
-                                    <CustomText style={styles.sectionTitle}>Profile Picture</CustomText>
+
+                                {/* Avatar picker */}
+                                <View style={styles.formBlock}>
+                                    <View style={styles.formBlockHeader}>
+                                        <View style={styles.formBlockIconWrap}>
+                                            <Ionicons name="image-outline" size={16} color="#00686F" />
+                                        </View>
+                                        <CustomText style={styles.formBlockTitle}>Profile Picture</CustomText>
+                                    </View>
                                     <ScrollView
                                         horizontal
                                         showsHorizontalScrollIndicator={false}
@@ -312,59 +338,78 @@ export default function ProfileScreen({ navigation }) {
                                     </ScrollView>
                                 </View>
 
-                                {/* Form Fields */}
-                                <View style={styles.formSection}>
-                                    <CustomText style={styles.sectionTitle}>Personal Information</CustomText>
-                                    <InputField
-                                        label="First Name"
-                                        value={firstName}
-                                        onChange={setFirstName}
-                                        icon="person-outline"
-                                        required
-                                    />
-                                    <InputField
-                                        label="Middle Name"
-                                        value={middleName}
-                                        onChange={setMiddleName}
-                                        icon="person-outline"
-                                    />
+                                {/* Divider */}
+                                <View style={styles.formDivider} />
+
+                                {/* Personal info fields */}
+                                <View style={styles.formBlock}>
+                                    <View style={styles.formBlockHeader}>
+                                        <View style={styles.formBlockIconWrap}>
+                                            <Ionicons name="person-outline" size={16} color="#00686F" />
+                                        </View>
+                                        <CustomText style={styles.formBlockTitle}>Personal Information</CustomText>
+                                    </View>
+
+                                    <View style={styles.fieldRow}>
+                                        <View style={{ flex: 1, marginRight: 8 }}>
+                                            <InputField
+                                                label="First Name"
+                                                value={firstName}
+                                                onChange={handleFirstNameChange}
+                                                icon="person-outline"
+                                                required
+                                            />
+                                        </View>
+                                        <View style={{ flex: 1 }}>
+                                            <InputField
+                                                label="Middle Name"
+                                                value={middleName}
+                                                onChange={handleMiddleNameChange}
+                                                icon="person-outline"
+                                            />
+                                        </View>
+                                    </View>
+
                                     <InputField
                                         label="Last Name"
                                         value={lastName}
-                                        onChange={setLastName}
+                                        onChange={handleLastNameChange}
                                         icon="person-outline"
                                         required
                                     />
                                     <InputField
                                         label="Username"
                                         value={username}
-                                        onChange={setUsername}
+                                        onChange={handleUsernameChange}
                                         icon="at"
                                         autoCapitalize="none"
                                         required
+                                        hint="Letters, numbers and underscores only"
                                     />
                                 </View>
 
-                                {/* Action Buttons */}
+                                {/* Action buttons */}
                                 <View style={styles.editActions}>
                                     <TouchableOpacity
                                         style={[styles.actionBtn, styles.cancelBtn]}
                                         onPress={handleCancel}
                                         disabled={isSaving}
+                                        activeOpacity={0.7}
                                     >
-                                        <Ionicons name="close-circle-outline" size={20} color="#64748B" style={{ marginRight: 6 }} />
-                                        <CustomText style={styles.cancelBtnText}>Cancel</CustomText>
+                                        <Ionicons name="close" size={18} color="#64748B" style={{ marginRight: 6 }} />
+                                        <CustomText style={styles.cancelBtnText}>Discard</CustomText>
                                     </TouchableOpacity>
                                     <TouchableOpacity
                                         style={[styles.actionBtn, styles.saveBtn, isSaving && styles.saveBtnDisabled]}
                                         onPress={handleUpdateProfile}
                                         disabled={isSaving}
+                                        activeOpacity={0.8}
                                     >
                                         {isSaving ? (
                                             <ActivityIndicator size="small" color="#FFF" />
                                         ) : (
                                             <>
-                                                <Ionicons name="checkmark-circle" size={20} color="#FFF" style={{ marginRight: 6 }} />
+                                                <Ionicons name="checkmark" size={18} color="#FFF" style={{ marginRight: 6 }} />
                                                 <CustomText style={styles.saveBtnText}>Save Changes</CustomText>
                                             </>
                                         )}
@@ -373,30 +418,40 @@ export default function ProfileScreen({ navigation }) {
                             </View>
                         ) : (
                             <>
+                                {/* Account Settings section */}
                                 <View style={styles.settingsSection}>
                                     <CustomText style={styles.sectionLabel}>Account Settings</CustomText>
-                                    <ProfileOption
-                                        icon="create-outline"
-                                        label="Edit Profile"
-                                        subtitle="Update your personal information"
-                                        onPress={() => setIsEditing(true)}
-                                    />
-                                    <ProfileOption
-                                        icon="shield-checkmark-outline"
-                                        label="Email Address"
-                                        subtitle={auth.currentUser?.email}
-                                        isLocked
-                                    />
+                                    <View style={styles.optionsCard}>
+                                        <ProfileOption
+                                            icon="create-outline"
+                                            label="Edit Profile"
+                                            subtitle="Update your personal information"
+                                            onPress={() => setIsEditing(true)}
+                                            showChevron
+                                            accent
+                                        />
+                                        <View style={styles.optionDivider} />
+                                        <ProfileOption
+                                            icon="mail-outline"
+                                            label="Email Address"
+                                            subtitle={auth.currentUser?.email}
+                                            isLocked
+                                        />
+                                    </View>
                                 </View>
 
+                                {/* Quick Actions section */}
                                 <View style={styles.settingsSection}>
-                                    <CustomText style={styles.sectionLabel}>Quick Actions</CustomText>
-                                    <ProfileOption
-                                        icon="home-outline"
-                                        label="Back to Dashboard"
-                                        onPress={() => navigation.navigate('Dashboard')}
-                                        showChevron
-                                    />
+                                    <CustomText style={styles.sectionLabel}>Navigation</CustomText>
+                                    <View style={styles.optionsCard}>
+                                        <ProfileOption
+                                            icon="home-outline"
+                                            label="Back to Dashboard"
+                                            subtitle="Return to your events overview"
+                                            onPress={() => navigation.navigate('Dashboard')}
+                                            showChevron
+                                        />
+                                    </View>
                                 </View>
                             </>
                         )}
@@ -457,52 +512,55 @@ const AvatarOption = ({ source, isSelected, onPress, isNone }) => {
     );
 };
 
-const InputField = ({ label, value, onChange, icon, autoCapitalize = "words", required }) => {
+const InputField = ({ label, value, onChange, icon, autoCapitalize = "words", required, hint }) => {
     const [isFocused, setIsFocused] = useState(false);
 
     return (
         <View style={styles.inputWrapper}>
             <View style={styles.inputLabelRow}>
-                <CustomText style={styles.inputLabel}>
+                <CustomText style={[styles.inputLabel, isFocused && styles.inputLabelFocused]}>
                     {label}
-                    {required && <CustomText style={styles.requiredStar}> *</CustomText>}
                 </CustomText>
+                {required && <CustomText style={styles.requiredStar}> *</CustomText>}
             </View>
-            <View style={[styles.inputContainer, isFocused && styles.inputContainerFocused]}>
-                <Ionicons name={icon} size={20} color={isFocused ? '#00686F' : '#94A3B8'} style={styles.inputIcon} />
+            <View style={styles.inputContainer}>
+                {isFocused && <View style={styles.inputFocusRing} pointerEvents="none" />}
+                <Ionicons
+                    name={icon}
+                    size={18}
+                    color={isFocused ? '#00686F' : '#94A3B8'}
+                    style={styles.inputIcon}
+                />
                 <TextInput
                     style={styles.input}
                     value={value}
                     onChangeText={onChange}
                     placeholder={`Enter ${label.toLowerCase()}`}
-                    placeholderTextColor="#CBD5E1"
+                    placeholderTextColor="#C4CDD8"
                     autoCapitalize={autoCapitalize}
+                    autoCorrect={false}
+                    spellCheck={false}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                 />
             </View>
+            {hint && !isFocused && (
+                <CustomText style={styles.inputHint}>{hint}</CustomText>
+            )}
         </View>
     );
 };
 
-const ProfileOption = ({ icon, label, subtitle, onPress, isLocked, showChevron }) => {
+const ProfileOption = ({ icon, label, subtitle, onPress, isLocked, showChevron, accent }) => {
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
     const handlePressIn = () => {
         if (!isLocked) {
-            Animated.spring(scaleAnim, {
-                toValue: 0.97,
-                useNativeDriver: true,
-            }).start();
+            Animated.spring(scaleAnim, { toValue: 0.98, useNativeDriver: true }).start();
         }
     };
-
     const handlePressOut = () => {
-        Animated.spring(scaleAnim, {
-            toValue: 1,
-            friction: 3,
-            useNativeDriver: true,
-        }).start();
+        Animated.spring(scaleAnim, { toValue: 1, friction: 3, useNativeDriver: true }).start();
     };
 
     return (
@@ -513,22 +571,34 @@ const ProfileOption = ({ icon, label, subtitle, onPress, isLocked, showChevron }
             onPressOut={handlePressOut}
         >
             <Animated.View style={[styles.optionRow, { transform: [{ scale: scaleAnim }] }]}>
-                <View style={[styles.optionIconBox, isLocked && styles.optionIconBoxLocked]}>
-                    <Ionicons name={icon} size={22} color={isLocked ? '#94A3B8' : '#00686F'} />
+                <View style={[
+                    styles.optionIconBox,
+                    isLocked && styles.optionIconBoxLocked,
+                    accent && styles.optionIconBoxAccent,
+                ]}>
+                    <Ionicons
+                        name={icon}
+                        size={20}
+                        color={isLocked ? '#94A3B8' : accent ? '#FFF' : '#00686F'}
+                    />
                 </View>
                 <View style={styles.optionContent}>
                     <CustomText style={[styles.optionLabel, isLocked && styles.optionLabelLocked]}>
                         {label}
                     </CustomText>
                     {subtitle && (
-                        <CustomText style={styles.optionSubtitle}>{subtitle}</CustomText>
+                        <CustomText style={styles.optionSubtitle} numberOfLines={1}>{subtitle}</CustomText>
                     )}
                 </View>
                 {!isLocked && showChevron && (
-                    <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+                    <View style={styles.chevronWrap}>
+                        <Ionicons name="chevron-forward" size={16} color="#00686F" />
+                    </View>
                 )}
                 {isLocked && (
-                    <Ionicons name="lock-closed" size={18} color="#CBD5E1" />
+                    <View style={styles.lockWrap}>
+                        <Ionicons name="lock-closed" size={14} color="#94A3B8" />
+                    </View>
                 )}
             </Animated.View>
         </Pressable>
@@ -584,253 +654,377 @@ const SuccessModal = ({ visible, onClose }) => {
 };
 
 const styles = StyleSheet.create({
+    // ── Base ────────────────────────────────────────
     container: {
         flex: 1,
-        backgroundColor: '#F1F5F9'
+        backgroundColor: '#F0F4F8',
     },
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: '#F0F4F8',
+    },
+    loadingSpinnerWrap: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: '#E0F2F3',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 14,
     },
     loadingText: {
-        marginTop: 16,
-        fontSize: 16,
+        fontSize: 15,
         color: '#64748B',
+        fontWeight: '500',
     },
+
+    // ── Header ──────────────────────────────────────
     header: {
         backgroundColor: '#00686F',
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingBottom: 20,
-        paddingTop: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        paddingTop: 8,
     },
-    headerButton: {
-        padding: 4,
+    headerBtn: {
+        width: 36,
+        alignItems: 'center',
+    },
+    headerBtnInner: {
+        width: 36,
+        height: 36,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerSaveBtnInner: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingHorizontal: 14,
+        width: '60',
+        borderRadius: 12,
+        marginRight: 20,
     },
     headerTitle: {
         color: '#FFF',
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
-        letterSpacing: 0.3,
+        letterSpacing: 0.2,
     },
     headerSaveText: {
         color: '#FFF',
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '700',
     },
+
+    // ── Scroll ──────────────────────────────────────
     scrollContent: {
-        paddingBottom: 30,
+        paddingBottom: 40,
     },
-    profileCard: {
-        alignItems: 'center',
-        paddingVertical: 40,
-        paddingHorizontal: 20,
+
+    // ── Hero Card ───────────────────────────────────
+    heroCard: {
         backgroundColor: '#00686F',
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
-        shadowColor: '#00686F',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 8,
+        alignItems: 'center',
+        paddingTop: 32,
+        paddingBottom: 36,
+        paddingHorizontal: 20,
+        overflow: 'hidden',
+        // Curved bottom
+        borderBottomLeftRadius: 36,
+        borderBottomRightRadius: 36,
+        shadowColor: '#004E54',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.28,
+        shadowRadius: 16,
+        elevation: 10,
     },
+    // Decorative background circles
+    heroDeco1: {
+        position: 'absolute',
+        width: 200,
+        height: 200,
+        borderRadius: 100,
+        backgroundColor: 'rgba(255,255,255,0.06)',
+        top: -60,
+        right: -40,
+    },
+    heroDeco2: {
+        position: 'absolute',
+        width: 140,
+        height: 140,
+        borderRadius: 70,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        bottom: -20,
+        left: -30,
+    },
+
+    // Avatar
     avatarContainer: {
         position: 'relative',
-        marginBottom: 20,
+        marginBottom: 18,
     },
-    avatarLarge: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: '#FFF',
-        overflow: 'hidden',
-        borderWidth: 4,
-        borderColor: 'rgba(255,255,255,0.4)',
+    avatarRing: {
+        width: 114,
+        height: 114,
+        borderRadius: 57,
+        padding: 3,
+        backgroundColor: 'rgba(255,255,255,0.3)',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
-        shadowRadius: 8,
+        shadowRadius: 10,
         elevation: 6,
+    },
+    avatarInner: {
+        flex: 1,
+        borderRadius: 54,
+        overflow: 'hidden',
+        backgroundColor: '#FFF',
     },
     avatarImg: {
         width: '100%',
-        height: '100%'
+        height: '100%',
     },
     avatarPlaceholder: {
-        width: '100%',
-        height: '100%',
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F0F9FA',
+        backgroundColor: '#E0F2F3',
     },
     editAvatarBadge: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
-        backgroundColor: '#00686F',
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        bottom: 2,
+        right: 2,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#004E54',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 3,
+        borderWidth: 2.5,
         borderColor: '#FFF',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
+        shadowOpacity: 0.25,
         shadowRadius: 4,
         elevation: 4,
     },
-    profileInfo: {
+
+    // Hero text
+    heroInfo: {
         alignItems: 'center',
     },
-    nameText: {
+    heroName: {
         color: '#FFF',
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: '700',
-        marginBottom: 6,
+        marginBottom: 8,
         textAlign: 'center',
+        letterSpacing: 0.2,
     },
-    handleText: {
-        color: '#D1FAE5',
-        fontSize: 16,
-        marginBottom: 12,
-        fontWeight: '500',
-    },
-    emailBadge: {
+    heroBadgeRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        marginBottom: 10,
+    },
+    usernameBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        paddingHorizontal: 12,
+        paddingVertical: 5,
         borderRadius: 20,
-        marginTop: 4,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.25)',
+    },
+    usernameText: {
+        color: '#FFF',
+        fontSize: 13,
+        fontWeight: '600',
+        marginLeft: 4,
+    },
+    emailRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     emailText: {
-        color: '#FFF',
-        fontSize: 14,
-        fontWeight: '500',
+        color: 'rgba(255,255,255,0.72)',
+        fontSize: 13,
+        fontWeight: '400',
     },
+
+    // ── Content Section ─────────────────────────────
     contentSection: {
-        padding: 20,
+        paddingHorizontal: 16,
+        paddingTop: 20,
     },
+
+    // ── Settings (view mode) ────────────────────────
     settingsSection: {
-        marginBottom: 28
+        marginBottom: 24,
     },
     sectionLabel: {
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: '700',
-        color: '#64748B',
+        color: '#94A3B8',
         textTransform: 'uppercase',
-        marginBottom: 12,
+        letterSpacing: 1,
+        marginBottom: 10,
         marginLeft: 4,
-        letterSpacing: 0.5,
     },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#1E293B',
-        marginBottom: 16,
+    optionsCard: {
+        backgroundColor: '#FFF',
+        borderRadius: 20,
+        overflow: 'hidden',
+        shadowColor: '#64748B',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.07,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    optionDivider: {
+        height: 1,
+        backgroundColor: '#F1F5F9',
+        marginLeft: 72,
     },
     optionRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#FFF',
-        padding: 16,
-        borderRadius: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
     },
     optionIconBox: {
-        width: 44,
-        height: 44,
-        borderRadius: 14,
-        backgroundColor: '#E0F2F3',
+        width: 42,
+        height: 42,
+        borderRadius: 13,
+        backgroundColor: '#E8F5F6',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 14
+        marginRight: 14,
     },
     optionIconBoxLocked: {
         backgroundColor: '#F1F5F9',
+    },
+    optionIconBoxAccent: {
+        backgroundColor: '#00686F',
     },
     optionContent: {
         flex: 1,
     },
     optionLabel: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '600',
         color: '#1E293B',
-        marginBottom: 2,
+        marginBottom: 1,
     },
     optionLabelLocked: {
         color: '#64748B',
+        fontWeight: '500',
     },
     optionSubtitle: {
-        fontSize: 13,
+        fontSize: 12,
         color: '#94A3B8',
-        marginTop: 2,
+        fontWeight: '400',
     },
+    chevronWrap: {
+        width: 28,
+        height: 28,
+        borderRadius: 9,
+        backgroundColor: '#E8F5F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    lockWrap: {
+        width: 28,
+        height: 28,
+        borderRadius: 9,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+
+    // ── Edit Form ───────────────────────────────────
     editForm: {
         backgroundColor: '#FFF',
-        padding: 20,
         borderRadius: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        overflow: 'hidden',
+        shadowColor: '#64748B',
+        shadowOffset: { width: 0, height: 3 },
         shadowOpacity: 0.08,
         shadowRadius: 12,
         elevation: 4,
     },
-    formSection: {
-        marginBottom: 28,
+    formBlock: {
+        padding: 20,
+    },
+    formDivider: {
+        height: 1,
+        backgroundColor: '#F1F5F9',
+        marginHorizontal: 20,
+    },
+    formBlockHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    formBlockIconWrap: {
+        width: 30,
+        height: 30,
+        borderRadius: 9,
+        backgroundColor: '#E8F5F6',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 10,
+    },
+    formBlockTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#1E293B',
+    },
+    fieldRow: {
+        flexDirection: 'row',
     },
     avatarScrollView: {
         marginHorizontal: -20,
         paddingHorizontal: 20,
     },
     avatarPicker: {
-    flexDirection: 'row',
-    gap: 16,
-    paddingVertical: 4,
-    paddingRight: 40,
-},
+        flexDirection: 'row',
+        gap: 12,
+        paddingVertical: 4,
+        paddingRight: 40,
+    },
     avatarOption: {
         position: 'relative',
-        borderRadius: 34,
-        borderWidth: 3,
+        borderRadius: 32,
+        borderWidth: 2.5,
         borderColor: 'transparent',
     },
     selectedAvatarOption: {
         borderColor: '#00686F',
         shadowColor: '#00686F',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 4,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.35,
+        shadowRadius: 6,
+        elevation: 5,
     },
     avatarThumb: {
-        width: 64,
-        height: 64,
-        borderRadius: 32
+        width: 60,
+        height: 60,
+        borderRadius: 30,
     },
     noneThumb: {
         backgroundColor: '#F8FAFC',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
+        borderWidth: 1.5,
         borderColor: '#E2E8F0',
-        borderStyle: 'dashed'
+        borderStyle: 'dashed',
     },
     selectedIndicator: {
         position: 'absolute',
@@ -840,150 +1034,169 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.2,
+        shadowOpacity: 0.15,
         shadowRadius: 2,
         elevation: 3,
     },
+
+    // ── Inputs ──────────────────────────────────────
     inputWrapper: {
-        marginBottom: 20
+        marginBottom: 16,
     },
     inputLabelRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 6,
     },
     inputLabel: {
-        fontSize: 13,
+        fontSize: 12,
         fontWeight: '600',
-        color: '#475569',
-        marginLeft: 4,
+        color: '#64748B',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    inputLabelFocused: {
+        color: '#00686F',
     },
     requiredStar: {
         color: '#EF4444',
         fontSize: 13,
+        fontWeight: '700',
     },
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#F8FAFC',
         borderRadius: 14,
-        borderWidth: 2,
-        borderColor: '#E2E8F0',
-        paddingHorizontal: 14,
+        borderWidth: 1.5,
+        borderColor: '#E8EEF4',
+        paddingHorizontal: 12,
+        position: 'relative',
+        overflow: 'hidden',
     },
-    inputContainerFocused: {
+    inputFocusRing: {
+        position: 'absolute',
+        top: -1.5,
+        left: -1.5,
+        right: -1.5,
+        bottom: -1.5,
+        borderRadius: 14,
+        borderWidth: 2,
         borderColor: '#00686F',
-        backgroundColor: '#FFF',
-        shadowColor: '#00686F',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 2,
+        backgroundColor: 'transparent',
     },
     inputIcon: {
-        marginRight: 10,
+        marginRight: 8,
     },
     input: {
         flex: 1,
-        paddingVertical: 14,
+        paddingVertical: 13,
         color: '#1E293B',
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '500',
     },
+    inputHint: {
+        fontSize: 11,
+        color: '#94A3B8',
+        marginTop: 4,
+        marginLeft: 2,
+    },
+
+    // ── Edit Action Buttons ─────────────────────────
     editActions: {
         flexDirection: 'row',
-        gap: 12,
-        marginTop: 8,
+        gap: 10,
+        padding: 20,
+        paddingTop: 4,
     },
     actionBtn: {
         flex: 1,
         paddingVertical: 14,
-        borderRadius: 14,
+        borderRadius: 16,
         alignItems: 'center',
         flexDirection: 'row',
         justifyContent: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 2,
     },
     saveBtn: {
-        backgroundColor: '#00686F'
+        backgroundColor: '#00686F',
+        shadowColor: '#00686F',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     saveBtnDisabled: {
         opacity: 0.6,
     },
     cancelBtn: {
         backgroundColor: '#F1F5F9',
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderColor: '#E2E8F0',
     },
     saveBtnText: {
         color: '#FFF',
         fontWeight: '700',
-        fontSize: 16,
+        fontSize: 15,
     },
     cancelBtnText: {
         color: '#64748B',
-        fontWeight: '700',
-        fontSize: 16,
+        fontWeight: '600',
+        fontSize: 15,
     },
 
-    // Modal Styles
+    // ── Success Modal ───────────────────────────────
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: 'rgba(0,0,0,0.55)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20
+        padding: 24,
     },
     modalContent: {
         width: '100%',
-        maxWidth: 340,
+        maxWidth: 320,
         backgroundColor: '#FFF',
         borderRadius: 28,
         padding: 32,
         alignItems: 'center',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 20,
-        elevation: 10,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 24,
+        elevation: 12,
     },
     successIconCircle: {
-        width: 88,
-        height: 88,
-        borderRadius: 44,
-        backgroundColor: '#10B981',
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: '#00686F',
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 24,
-        shadowColor: '#10B981',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 6,
+        marginBottom: 22,
+        shadowColor: '#00686F',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
+        elevation: 8,
     },
     successTitle: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '700',
         color: '#1E293B',
-        marginBottom: 12,
+        marginBottom: 8,
         textAlign: 'center',
     },
     successSub: {
-        fontSize: 15,
+        fontSize: 14,
         color: '#64748B',
         textAlign: 'center',
-        marginBottom: 28,
-        lineHeight: 22,
-        paddingHorizontal: 10,
+        marginBottom: 26,
+        lineHeight: 20,
     },
     successCloseBtn: {
         backgroundColor: '#00686F',
-        paddingHorizontal: 48,
-        paddingVertical: 14,
+        paddingHorizontal: 40,
+        paddingVertical: 13,
         borderRadius: 14,
         shadowColor: '#00686F',
         shadowOffset: { width: 0, height: 4 },
@@ -994,6 +1207,6 @@ const styles = StyleSheet.create({
     successCloseBtnText: {
         color: '#FFF',
         fontWeight: '700',
-        fontSize: 16,
-    }
+        fontSize: 15,
+    },
 });

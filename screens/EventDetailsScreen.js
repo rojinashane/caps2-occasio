@@ -123,6 +123,15 @@ export default function EventDetailsScreen({ route, navigation }) {
 
     const [activeTask, setActiveTask] = useState(null);
     const [activeColumnId, setActiveColumnId] = useState(null);
+    const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
+    const [deadlineDatePickerVisible, setDeadlineDatePickerVisible] = useState(false);
+    const [deadlineTimePickerVisible, setDeadlineTimePickerVisible] = useState(false);
+    // Picker scroll state
+    const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
+    const [pickerDay, setPickerDay]     = useState(new Date().getDate() - 1);
+    const [pickerYear, setPickerYear]   = useState(0);
+    const [pickerHour, setPickerHour]   = useState(new Date().getHours());
+    const [pickerMinute, setPickerMinute] = useState(0);
 
     // ── Scroll navigation refs ─────────────────────────────────────────────────
     const mainScrollRef = useRef(null);
@@ -253,6 +262,97 @@ export default function EventDetailsScreen({ route, navigation }) {
         }
     };
 
+    // ── Task assignment notification ───────────────────────────────────────────
+    const sendTaskAssignedNotification = async (assigneeEmail, taskTitle) => {
+        const user = auth.currentUser;
+        if (!user || !eventData || !assigneeEmail) return;
+        try {
+            const userQ = query(collection(db, 'users'), where('email', '==', assigneeEmail.toLowerCase()), limit(1));
+            const userSnap = await getDocs(userQ);
+            if (!userSnap.empty) {
+                const recipientId = userSnap.docs[0].id;
+                await addDoc(collection(db, 'notifications'), {
+                    recipientId,
+                    senderName: auth.currentUser?.displayName || user.email,
+                    type: 'task_assigned',
+                    body: `You've been assigned "${taskTitle}" in ${eventData?.title || 'a workspace'}.`,
+                    status: 'pending',
+                    eventId,
+                    eventTitle: eventData?.title || 'Workspace',
+                    createdAt: serverTimestamp(),
+                });
+            }
+        } catch (err) {
+            console.error('sendTaskAssignedNotification error:', err);
+        }
+    };
+
+    // ── Deadline reminder notifications ───────────────────────────────────────
+    // Sends a notification to all participants (and assignee) about deadline status
+    const sendDeadlineNotification = async (taskTitle, assigneeEmail, deadlineMs, type) => {
+        const user = auth.currentUser;
+        if (!user || !eventData) return;
+
+        const deadlineStr = new Date(deadlineMs).toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+        });
+
+        const recipients = new Set();
+        // Always notify owner
+        const ownerEmail = await getOwnerEmail(eventData.userId);
+        if (ownerEmail) recipients.add(ownerEmail);
+        // Notify assignee
+        if (assigneeEmail) recipients.add(assigneeEmail.toLowerCase());
+
+        for (const email of recipients) {
+            try {
+                const userQ = query(collection(db, 'users'), where('email', '==', email), limit(1));
+                const snap = await getDocs(userQ);
+                if (!snap.empty) {
+                    await addDoc(collection(db, 'notifications'), {
+                        recipientId: snap.docs[0].id,
+                        senderName: 'Occasio',
+                        type,
+                        body: type === 'task_deadline_ended'
+                            ? `Deadline passed for "${taskTitle}" in ${eventData?.title}. Was due ${deadlineStr}.`
+                            : `"${taskTitle}" in ${eventData?.title} is due on ${deadlineStr}.`,
+                        status: 'pending',
+                        eventId,
+                        eventTitle: eventData?.title || 'Workspace',
+                        createdAt: serverTimestamp(),
+                    });
+                }
+            } catch (err) {
+                console.error('sendDeadlineNotification error:', err);
+            }
+        }
+    };
+
+    // ── Schedule deadline reminders using setTimeout ───────────────────────────
+    const scheduleDeadlineReminders = (taskTitle, assigneeEmail, deadlineMs) => {
+        const now = Date.now();
+        const msLeft = deadlineMs - now;
+
+        // Reminder 30 min before deadline
+        const thirtyMin = msLeft - 30 * 60 * 1000;
+        if (thirtyMin > 0) {
+            setTimeout(() => {
+                sendDeadlineNotification(taskTitle, assigneeEmail, deadlineMs, 'task_deadline').catch(console.error);
+            }, thirtyMin);
+        }
+
+        // Notification when deadline has passed
+        if (msLeft > 0) {
+            setTimeout(() => {
+                sendDeadlineNotification(taskTitle, assigneeEmail, deadlineMs, 'task_deadline_ended').catch(console.error);
+            }, msLeft);
+        } else {
+            // Already past — fire immediately
+            sendDeadlineNotification(taskTitle, assigneeEmail, deadlineMs, 'task_deadline_ended').catch(console.error);
+        }
+    };
+
     // ── Firebase Sync ──────────────────────────────────────────────────────────
     const syncToFirebase = async (updatedColumns) => {
         try {
@@ -318,6 +418,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                 recipientId: snap.docs[0].id,
                 status: 'pending',
                 createdAt: serverTimestamp(),
+                expiresInMinutes: 10,
             });
             setCollabModalVisible(false);
             setCollabEmail('');
@@ -385,22 +486,55 @@ export default function EventDetailsScreen({ route, navigation }) {
             description: task.description || '',
             priority: task.priority || 'C',
             subtasks: task.subtasks || [],
-            attachments: task.attachments || []
+            attachments: task.attachments || [],
+            assignee: task.assignee || null,
+            deadline: task.deadline || null,
         });
+        // Pre-fill picker state from existing deadline
+        const base = task.deadline ? new Date(task.deadline) : new Date();
+        const yearOptions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + i);
+        setPickerMonth(base.getMonth());
+        setPickerDay(base.getDate() - 1);
+        setPickerYear(task.deadline ? yearOptions.indexOf(base.getFullYear()) : 0);
+        setPickerHour(base.getHours());
+        setPickerMinute(base.getMinutes());
         setDetailModalVisible(true);
     };
 
     const saveTaskDetails = async () => {
         setSavingTask(true);
         try {
+            const prevTask = columns
+                .find(c => c.id === activeColumnId)?.tasks
+                .find(t => t.id === activeTask.id);
+
+            const taskToSave = { ...activeTask };
+
             const updatedColumns = columns.map(col => {
                 if (col.id === activeColumnId) {
-                    return { ...col, tasks: col.tasks.map(t => t.id === activeTask.id ? activeTask : t) };
+                    return { ...col, tasks: col.tasks.map(t => t.id === activeTask.id ? taskToSave : t) };
                 }
                 return col;
             });
             setColumns(updatedColumns);
             await syncToFirebase(updatedColumns);
+
+            // Notify newly assigned user
+            const newAssignee = taskToSave.assignee;
+            const prevAssignee = prevTask?.assignee;
+            if (newAssignee && newAssignee !== prevAssignee) {
+                await sendTaskAssignedNotification(newAssignee, taskToSave.text || taskToSave.title || 'a task');
+            }
+
+            // Schedule deadline reminders if deadline was set or changed
+            if (taskToSave.deadline && taskToSave.deadline !== prevTask?.deadline) {
+                scheduleDeadlineReminders(
+                    taskToSave.text || taskToSave.title || 'Task',
+                    newAssignee || null,
+                    taskToSave.deadline
+                );
+            }
+
             setDetailModalVisible(false);
         } finally {
             setSavingTask(false);
@@ -414,15 +548,15 @@ export default function EventDetailsScreen({ route, navigation }) {
     const addSubtask = () => {
         if (!subtaskText.trim()) return;
         const newText = subtaskText.trim();
+        const taskName = activeTask?.text || activeTask?.title || 'a task';
         setActiveTask({
             ...activeTask,
             subtasks: [...(activeTask.subtasks || []), { id: Date.now().toString(), text: newText, completed: false }]
         });
         setSubtaskText('');
-        // Notify all participants that a checklist item was added
         sendUniversalNotification(
             'checklist_added',
-            `added checklist item "${newText}" to "${activeTask?.text || activeTask?.title || 'a card'}"`
+            `"${newText}" was added to the checklist of task "${taskName}" in ${eventData?.title || 'the workspace'}`
         ).catch(console.error);
     };
 
@@ -527,11 +661,11 @@ export default function EventDetailsScreen({ route, navigation }) {
             if (modalConfig.type === 'ADD_COLUMN') {
                 newColumns.push({ id: Date.now().toString(), title: inputText, tasks: [] });
                 notificationType = 'list_added';
-                notificationDetail = `added a new list: "${inputText}"`;
+                notificationDetail = `added a new list "${inputText}" to ${eventData?.title || 'the workspace'}`;
             } else if (modalConfig.type === 'ADD_TASK') {
                 newColumns = columns.map(col => {
                     if (col.id === modalConfig.columnId) {
-                        notificationDetail = `added a card "${inputText}" to ${col.title}`;
+                        notificationDetail = `"${inputText}" was added to ${eventData?.title || 'the workspace'}`;
                         return {
                             ...col,
                             tasks: [...col.tasks, {
@@ -1190,7 +1324,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                                                     </CustomText>
 
                                                     {/* Meta row */}
-                                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8 }}>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8, flexWrap: 'wrap' }}>
                                                         {/* Priority pill */}
                                                         {!task.completed && (
                                                             <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: pm.bg, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
@@ -1198,6 +1332,31 @@ export default function EventDetailsScreen({ route, navigation }) {
                                                                 <CustomText style={{ color: pm.color, fontSize: 10, fontWeight: '700' }}>{pm.label}</CustomText>
                                                             </View>
                                                         )}
+                                                        {/* Assignee badge */}
+                                                        {task.assignee && (
+                                                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                                                <Ionicons name="person-outline" size={9} color="#3B82F6" />
+                                                                <CustomText style={{ color: '#3B82F6', fontSize: 10, fontWeight: '700', marginLeft: 3 }} numberOfLines={1}>
+                                                                    {task.assignee.split('@')[0]}
+                                                                </CustomText>
+                                                            </View>
+                                                        )}
+                                                        {/* Deadline badge */}
+                                                        {task.deadline && (() => {
+                                                            const now = Date.now();
+                                                            const isPast = task.deadline < now;
+                                                            const hrsLeft = (task.deadline - now) / 3600000;
+                                                            const isSoon = !isPast && hrsLeft <= 24;
+                                                            const deadlineLabel = new Date(task.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                                            return (
+                                                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isPast ? '#FEF2F2' : isSoon ? '#FFF7ED' : '#F8FAFC', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                                                                    <Ionicons name="alarm-outline" size={9} color={isPast ? '#EF4444' : isSoon ? '#F97316' : '#94A3B8'} />
+                                                                    <CustomText style={{ color: isPast ? '#EF4444' : isSoon ? '#F97316' : '#94A3B8', fontSize: 10, fontWeight: '700', marginLeft: 3 }}>
+                                                                        {isPast ? 'Overdue' : deadlineLabel}
+                                                                    </CustomText>
+                                                                </View>
+                                                            );
+                                                        })()}
                                                         {/* Subtask badge */}
                                                         {task.subtasks?.length > 0 && (
                                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
@@ -1535,11 +1694,11 @@ export default function EventDetailsScreen({ route, navigation }) {
                             <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 8 }}>TITLE</CustomText>
                             <TextInput
                                 style={{ fontSize: 16, fontWeight: '700', color: '#1E293B', borderBottomWidth: 1.5, borderBottomColor: '#F1F5F9', paddingBottom: 10, marginBottom: 16 }}
-                                value={activeTask?.text}
+                                value={activeTask?.text ?? activeTask?.title ?? ''}
                                 editable={isOwner}
                                 placeholder="Task title..."
                                 placeholderTextColor="#CBD5E1"
-                                onChangeText={(t) => setActiveTask({ ...activeTask, text: t })}
+                                onChangeText={(t) => setActiveTask({ ...activeTask, text: t, title: t })}
                             />
 
                             <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 10 }}>PRIORITY</CustomText>
@@ -1587,6 +1746,130 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 onChangeText={(t) => setActiveTask({ ...activeTask, description: t })}
                             />
                         </View>
+
+                        {/* ── Card: Assign & Deadline ── */}
+                        {(isOwner || activeTask?.assignee || activeTask?.deadline) && (
+                            <View style={{ backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, borderRadius: 18, padding: 16, shadowColor: '#64748B', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
+
+                                {/* Assignee */}
+                                <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 8 }}>ASSIGNED TO</CustomText>
+                                {isOwner && eventData?.collaborators?.length > 0 ? (
+                                    <TouchableOpacity
+                                        onPress={() => setAssigneePickerVisible(true)}
+                                        style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1.5, borderColor: '#E2E8F0', marginBottom: 16 }}
+                                    >
+                                        <Ionicons name="person-outline" size={15} color="#3B82F6" style={{ marginRight: 8 }} />
+                                        <CustomText style={{ flex: 1, color: activeTask?.assignee ? '#1E293B' : '#CBD5E1', fontSize: 14, fontWeight: '600' }}>
+                                            {activeTask?.assignee || 'Assign to collaborator...'}
+                                        </CustomText>
+                                        {activeTask?.assignee && (
+                                            <TouchableOpacity onPress={() => setActiveTask({ ...activeTask, assignee: null })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                                <Ionicons name="close-circle" size={17} color="#CBD5E1" />
+                                            </TouchableOpacity>
+                                        )}
+                                        {!activeTask?.assignee && <Ionicons name="chevron-down" size={15} color="#CBD5E1" />}
+                                    </TouchableOpacity>
+                                ) : (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
+                                        {activeTask?.assignee ? (
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 }}>
+                                                <Ionicons name="person" size={13} color="#3B82F6" style={{ marginRight: 6 }} />
+                                                <CustomText style={{ color: '#3B82F6', fontSize: 13, fontWeight: '700' }}>{activeTask.assignee}</CustomText>
+                                            </View>
+                                        ) : (
+                                            <CustomText style={{ color: '#CBD5E1', fontSize: 13, fontWeight: '500' }}>Not assigned</CustomText>
+                                        )}
+                                    </View>
+                                )}
+
+                                {/* No collaborators warning for owner */}
+                                {isOwner && (!eventData?.collaborators || eventData.collaborators.length === 0) && (
+                                    <CustomText style={{ color: '#94A3B8', fontSize: 12, fontWeight: '500', marginBottom: 16 }}>
+                                        Add collaborators to enable task assignment.
+                                    </CustomText>
+                                )}
+
+                                {/* Deadline */}
+                                {isOwner && (() => {
+                                    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                    const deadline = activeTask?.deadline;
+                                    const isPast = deadline && deadline < Date.now();
+                                    const deadlineLabel = deadline
+                                        ? new Date(deadline).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                                        : null;
+                                    return (
+                                        <>
+                                            <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 8 }}>DEADLINE</CustomText>
+                                            <View style={{ flexDirection: 'row', gap: 8, marginBottom: deadline ? 8 : 0 }}>
+                                                {/* Date button */}
+                                                <TouchableOpacity
+                                                    onPress={() => {
+                                                        if (deadline) {
+                                                            const d = new Date(deadline);
+                                                            const yearOptions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + i);
+                                                            setPickerMonth(d.getMonth());
+                                                            setPickerDay(d.getDate() - 1);
+                                                            setPickerYear(Math.max(0, yearOptions.indexOf(d.getFullYear())));
+                                                        }
+                                                        setDeadlineDatePickerVisible(true);
+                                                    }}
+                                                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, borderWidth: 1.5, borderColor: deadline ? '#00686F' : '#E2E8F0' }}
+                                                >
+                                                    <Ionicons name="calendar-outline" size={15} color={deadline ? '#00686F' : '#94A3B8'} style={{ marginRight: 7 }} />
+                                                    <CustomText style={{ color: deadline ? '#1E293B' : '#CBD5E1', fontSize: 13, fontWeight: '600' }}>
+                                                        {deadline
+                                                            ? new Date(deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                                            : 'Set date'}
+                                                    </CustomText>
+                                                </TouchableOpacity>
+                                                {/* Time button */}
+                                                <TouchableOpacity
+                                                    onPress={() => {
+                                                        if (deadline) {
+                                                            const d = new Date(deadline);
+                                                            setPickerHour(d.getHours());
+                                                            setPickerMinute(d.getMinutes());
+                                                        }
+                                                        setDeadlineTimePickerVisible(true);
+                                                    }}
+                                                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, paddingVertical: 11, borderWidth: 1.5, borderColor: deadline ? '#00686F' : '#E2E8F0' }}
+                                                >
+                                                    <Ionicons name="time-outline" size={15} color={deadline ? '#00686F' : '#94A3B8'} style={{ marginRight: 7 }} />
+                                                    <CustomText style={{ color: deadline ? '#1E293B' : '#CBD5E1', fontSize: 13, fontWeight: '600' }}>
+                                                        {deadline
+                                                            ? new Date(deadline).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                                                            : 'Set time'}
+                                                    </CustomText>
+                                                </TouchableOpacity>
+                                            </View>
+                                            {/* Deadline summary + clear */}
+                                            {deadline && (
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: isPast ? '#FEF2F2' : '#FFF7ED', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7 }}>
+                                                    <Ionicons name="alarm-outline" size={13} color={isPast ? '#EF4444' : '#F97316'} />
+                                                    <CustomText style={{ flex: 1, color: isPast ? '#EF4444' : '#92400E', fontSize: 12, fontWeight: '600', marginLeft: 6 }}>
+                                                        {isPast ? 'Overdue · ' : 'Due: '}{deadlineLabel}
+                                                    </CustomText>
+                                                    <TouchableOpacity onPress={() => setActiveTask({ ...activeTask, deadline: null })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                                        <Ionicons name="close-circle" size={16} color={isPast ? '#FCA5A5' : '#FCD34D'} />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                                {!isOwner && activeTask?.deadline && (
+                                    <>
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 6 }}>DEADLINE</CustomText>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Ionicons name="alarm-outline" size={14} color={activeTask.deadline < Date.now() ? '#EF4444' : '#F97316'} />
+                                            <CustomText style={{ color: activeTask.deadline < Date.now() ? '#EF4444' : '#334155', fontSize: 13, fontWeight: '600', marginLeft: 6 }}>
+                                                {new Date(activeTask.deadline).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                            </CustomText>
+                                        </View>
+                                    </>
+                                )}
+                            </View>
+                        )}
 
                         {/* ── Card: Checklist ── */}
                         <View style={{ backgroundColor: '#FFF', marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: 'hidden', shadowColor: '#64748B', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
@@ -1735,6 +2018,273 @@ export default function EventDetailsScreen({ route, navigation }) {
                     </ScrollView>
                 </SafeAreaView>
             </Modal>
+
+            {/* ── Assignee Picker Modal ─────────────────────────────────────── */}
+            <Modal
+                visible={assigneePickerVisible}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setAssigneePickerVisible(false)}
+            >
+                <TouchableOpacity
+                    style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }}
+                    activeOpacity={1}
+                    onPress={() => setAssigneePickerVisible(false)}
+                >
+                    <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 36, paddingHorizontal: 20, paddingTop: 12 }}>
+                        <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginBottom: 18 }} />
+                        <CustomText style={{ color: '#0F172A', fontSize: 16, fontWeight: '800', marginBottom: 4 }}>Assign Task</CustomText>
+                        <CustomText style={{ color: '#94A3B8', fontSize: 13, marginBottom: 16 }}>Select a collaborator to assign this task to</CustomText>
+
+                        {/* Unassign option */}
+                        <TouchableOpacity
+                            onPress={() => { setActiveTask({ ...activeTask, assignee: null }); setAssigneePickerVisible(false); }}
+                            style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                        >
+                            <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <Ionicons name="person-remove-outline" size={17} color="#94A3B8" />
+                            </View>
+                            <CustomText style={{ color: '#64748B', fontSize: 14, fontWeight: '600' }}>Unassigned</CustomText>
+                            {!activeTask?.assignee && <Ionicons name="checkmark" size={17} color="#00686F" style={{ marginLeft: 'auto' }} />}
+                        </TouchableOpacity>
+
+                        {/* Collaborator list */}
+                        {(eventData?.collaborators || []).map((email) => (
+                            <TouchableOpacity
+                                key={email}
+                                onPress={() => { setActiveTask({ ...activeTask, assignee: email }); setAssigneePickerVisible(false); }}
+                                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                            >
+                                <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                    <CustomText style={{ color: '#3B82F6', fontSize: 14, fontWeight: '800' }}>{email.charAt(0).toUpperCase()}</CustomText>
+                                </View>
+                                <CustomText style={{ flex: 1, color: '#1E293B', fontSize: 14, fontWeight: '600' }} numberOfLines={1}>{email}</CustomText>
+                                {activeTask?.assignee === email && <Ionicons name="checkmark" size={17} color="#00686F" />}
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* ── Deadline DATE Picker ──────────────────────────────────────── */}
+            {(() => {
+                const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+                const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + i);
+                const daysInMonth = new Date(YEAR_OPTIONS[pickerYear], pickerMonth + 1, 0).getDate();
+                const DAYS = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+                const confirmDate = () => {
+                    const yr = YEAR_OPTIONS[pickerYear];
+                    const mo = pickerMonth;
+                    const dy = Math.min(pickerDay, daysInMonth - 1);
+                    const existing = activeTask?.deadline ? new Date(activeTask.deadline) : new Date();
+                    const updated = new Date(yr, mo, dy + 1, existing.getHours(), existing.getMinutes(), 0, 0);
+                    setActiveTask({ ...activeTask, deadline: updated.getTime() });
+                    setDeadlineDatePickerVisible(false);
+                };
+
+                return (
+                    <Modal visible={deadlineDatePickerVisible} transparent animationType="slide" onRequestClose={() => setDeadlineDatePickerVisible(false)}>
+                        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setDeadlineDatePickerVisible(false)}>
+                            <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 36 }}>
+                                {/* Handle */}
+                                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginTop: 12, marginBottom: 4 }} />
+
+                                {/* Header */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                                    <TouchableOpacity onPress={() => setDeadlineDatePickerVisible(false)}>
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 15, fontWeight: '600' }}>Cancel</CustomText>
+                                    </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons name="calendar-outline" size={15} color="#00686F" />
+                                        <CustomText style={{ color: '#0F172A', fontSize: 15, fontWeight: '800', marginLeft: 6 }}>Select Date</CustomText>
+                                    </View>
+                                    <TouchableOpacity onPress={confirmDate} style={{ backgroundColor: '#00686F', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 }}>
+                                        <CustomText style={{ color: '#FFF', fontSize: 14, fontWeight: '800' }}>Done</CustomText>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Preview */}
+                                <View style={{ alignItems: 'center', paddingVertical: 10, backgroundColor: '#F8FAFC' }}>
+                                    <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700' }}>
+                                        {MONTHS[pickerMonth]} {Math.min(pickerDay + 1, daysInMonth)}, {YEAR_OPTIONS[pickerYear]}
+                                    </CustomText>
+                                </View>
+
+                                {/* Scroll columns */}
+                                <View style={{ flexDirection: 'row', height: 200, overflow: 'hidden', position: 'relative' }}>
+                                    {/* Selection highlight */}
+                                    <View style={{ position: 'absolute', top: '50%', left: 16, right: 16, height: 40, marginTop: -20, backgroundColor: '#E8F5F5', borderRadius: 12, zIndex: 0 }} />
+
+                                    {/* Month */}
+                                    <ScrollView
+                                        style={{ flex: 2 }}
+                                        showsVerticalScrollIndicator={false}
+                                        snapToInterval={40}
+                                        decelerationRate="fast"
+                                        contentContainerStyle={{ paddingVertical: 80 }}
+                                        onMomentumScrollEnd={(e) => setPickerMonth(Math.round(e.nativeEvent.contentOffset.y / 40))}
+                                        contentOffset={{ x: 0, y: pickerMonth * 40 }}
+                                    >
+                                        {MONTHS.map((m, i) => (
+                                            <TouchableOpacity key={m} onPress={() => setPickerMonth(i)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 15, fontWeight: pickerMonth === i ? '800' : '500', color: pickerMonth === i ? '#00686F' : '#64748B' }}>{m}</CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+
+                                    {/* Day */}
+                                    <ScrollView
+                                        style={{ flex: 1 }}
+                                        showsVerticalScrollIndicator={false}
+                                        snapToInterval={40}
+                                        decelerationRate="fast"
+                                        contentContainerStyle={{ paddingVertical: 80 }}
+                                        onMomentumScrollEnd={(e) => setPickerDay(Math.round(e.nativeEvent.contentOffset.y / 40))}
+                                        contentOffset={{ x: 0, y: pickerDay * 40 }}
+                                    >
+                                        {DAYS.map((d, i) => (
+                                            <TouchableOpacity key={d} onPress={() => setPickerDay(i)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 15, fontWeight: pickerDay === i ? '800' : '500', color: pickerDay === i ? '#00686F' : '#64748B' }}>{String(d).padStart(2,'0')}</CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+
+                                    {/* Year */}
+                                    <ScrollView
+                                        style={{ flex: 1.2 }}
+                                        showsVerticalScrollIndicator={false}
+                                        snapToInterval={40}
+                                        decelerationRate="fast"
+                                        contentContainerStyle={{ paddingVertical: 80 }}
+                                        onMomentumScrollEnd={(e) => setPickerYear(Math.round(e.nativeEvent.contentOffset.y / 40))}
+                                        contentOffset={{ x: 0, y: pickerYear * 40 }}
+                                    >
+                                        {YEAR_OPTIONS.map((y, i) => (
+                                            <TouchableOpacity key={y} onPress={() => setPickerYear(i)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 15, fontWeight: pickerYear === i ? '800' : '500', color: pickerYear === i ? '#00686F' : '#64748B' }}>{y}</CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+                );
+            })()}
+
+            {/* ── Deadline TIME Picker ──────────────────────────────────────── */}
+            {(() => {
+                const HOURS   = Array.from({ length: 24 }, (_, i) => i);
+                const MINUTES = Array.from({ length: 60 }, (_, i) => i);
+
+                const confirmTime = () => {
+                    const existing = activeTask?.deadline ? new Date(activeTask.deadline) : new Date();
+                    const updated = new Date(existing.getFullYear(), existing.getMonth(), existing.getDate(), pickerHour, pickerMinute, 0, 0);
+                    setActiveTask({ ...activeTask, deadline: updated.getTime() });
+                    setDeadlineTimePickerVisible(false);
+                };
+
+                const h12 = pickerHour % 12 === 0 ? 12 : pickerHour % 12;
+                const ampm = pickerHour < 12 ? 'AM' : 'PM';
+
+                return (
+                    <Modal visible={deadlineTimePickerVisible} transparent animationType="slide" onRequestClose={() => setDeadlineTimePickerVisible(false)}>
+                        <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' }} activeOpacity={1} onPress={() => setDeadlineTimePickerVisible(false)}>
+                            <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingBottom: 36 }}>
+                                {/* Handle */}
+                                <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginTop: 12, marginBottom: 4 }} />
+
+                                {/* Header */}
+                                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
+                                    <TouchableOpacity onPress={() => setDeadlineTimePickerVisible(false)}>
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 15, fontWeight: '600' }}>Cancel</CustomText>
+                                    </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                        <Ionicons name="time-outline" size={15} color="#00686F" />
+                                        <CustomText style={{ color: '#0F172A', fontSize: 15, fontWeight: '800', marginLeft: 6 }}>Select Time</CustomText>
+                                    </View>
+                                    <TouchableOpacity onPress={confirmTime} style={{ backgroundColor: '#00686F', paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20 }}>
+                                        <CustomText style={{ color: '#FFF', fontSize: 14, fontWeight: '800' }}>Done</CustomText>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {/* Preview */}
+                                <View style={{ alignItems: 'center', paddingVertical: 10, backgroundColor: '#F8FAFC' }}>
+                                    <CustomText style={{ color: '#00686F', fontSize: 13, fontWeight: '700' }}>
+                                        {String(h12).padStart(2,'0')}:{String(pickerMinute).padStart(2,'0')} {ampm}
+                                    </CustomText>
+                                </View>
+
+                                {/* Scroll columns */}
+                                <View style={{ flexDirection: 'row', height: 200, overflow: 'hidden', position: 'relative' }}>
+                                    {/* Selection highlight */}
+                                    <View style={{ position: 'absolute', top: '50%', left: 16, right: 16, height: 40, marginTop: -20, backgroundColor: '#E8F5F5', borderRadius: 12, zIndex: 0 }} />
+
+                                    {/* Hour */}
+                                    <ScrollView
+                                        style={{ flex: 1 }}
+                                        showsVerticalScrollIndicator={false}
+                                        snapToInterval={40}
+                                        decelerationRate="fast"
+                                        contentContainerStyle={{ paddingVertical: 80 }}
+                                        onMomentumScrollEnd={(e) => setPickerHour(Math.round(e.nativeEvent.contentOffset.y / 40))}
+                                        contentOffset={{ x: 0, y: pickerHour * 40 }}
+                                    >
+                                        {HOURS.map((h) => (
+                                            <TouchableOpacity key={h} onPress={() => setPickerHour(h)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 22, fontWeight: pickerHour === h ? '800' : '400', color: pickerHour === h ? '#00686F' : '#64748B' }}>
+                                                    {String(h % 12 === 0 ? 12 : h % 12).padStart(2,'0')}
+                                                </CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+
+                                    {/* Colon separator */}
+                                    <View style={{ justifyContent: 'center', paddingHorizontal: 4 }}>
+                                        <CustomText style={{ fontSize: 24, fontWeight: '800', color: '#00686F' }}>:</CustomText>
+                                    </View>
+
+                                    {/* Minute */}
+                                    <ScrollView
+                                        style={{ flex: 1 }}
+                                        showsVerticalScrollIndicator={false}
+                                        snapToInterval={40}
+                                        decelerationRate="fast"
+                                        contentContainerStyle={{ paddingVertical: 80 }}
+                                        onMomentumScrollEnd={(e) => setPickerMinute(Math.round(e.nativeEvent.contentOffset.y / 40))}
+                                        contentOffset={{ x: 0, y: pickerMinute * 40 }}
+                                    >
+                                        {MINUTES.map((m) => (
+                                            <TouchableOpacity key={m} onPress={() => setPickerMinute(m)} style={{ height: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                                <CustomText style={{ fontSize: 22, fontWeight: pickerMinute === m ? '800' : '400', color: pickerMinute === m ? '#00686F' : '#64748B' }}>
+                                                    {String(m).padStart(2,'0')}
+                                                </CustomText>
+                                            </TouchableOpacity>
+                                        ))}
+                                    </ScrollView>
+
+                                    {/* AM/PM */}
+                                    <View style={{ justifyContent: 'center', alignItems: 'center', paddingHorizontal: 12, gap: 8 }}>
+                                        <TouchableOpacity
+                                            onPress={() => { if (pickerHour >= 12) setPickerHour(pickerHour - 12); }}
+                                            style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: pickerHour < 12 ? '#00686F' : '#F1F5F9' }}
+                                        >
+                                            <CustomText style={{ color: pickerHour < 12 ? '#FFF' : '#94A3B8', fontSize: 13, fontWeight: '800' }}>AM</CustomText>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => { if (pickerHour < 12) setPickerHour(pickerHour + 12); }}
+                                            style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: pickerHour >= 12 ? '#00686F' : '#F1F5F9' }}
+                                        >
+                                            <CustomText style={{ color: pickerHour >= 12 ? '#FFF' : '#94A3B8', fontSize: 13, fontWeight: '800' }}>PM</CustomText>
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    </Modal>
+                );
+            })()}
 
         </View>
     );

@@ -5,11 +5,10 @@ import { ActivityIndicator, View } from 'react-native';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-// 1. Import Notifications and SafeAreaProvider
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-// Screens
+// Screens & Components
 import LandingScreen from './screens/LandingScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
@@ -18,21 +17,22 @@ import DashboardScreen from './screens/DashboardScreen';
 import AddEvent from './components/AddEvent';
 import EventDetailsScreen from './screens/EventDetailsScreen';
 import UpdateEvent from './components/UpdateEvent';
+import Venuepicker from './components/Venuepicker';
 import ProfileScreen from './screens/ProfileScreen';
 import RSVPTrackerScreen from './screens/RSVPTrackerScreen';
-import CaptureVenueScreen from './screens/CaptureVenueScreen';
 import MyEventsScreen from './screens/MyEventsScreen';
 import VendorScreen from './screens/VendorScreen';
 
-// NEW: Import the Venues and AR Screens
+// NEW: Services & AR Screens
+import NotificationService from './services/NotificationService';
 import VenuesScreen from './screens/VenuesScreen';
 import ARVenueScreen from './screens/ARVenueScreen';
 import VenueDetailsScreen from './screens/VenueDetailsScreen';
-// 2. CONFIGURE NOTIFICATIONS (Fixes the Warning)
+
+// CONFIGURE NOTIFICATIONS
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowBanner: true, // Replaces deprecated shouldShowAlert
-    shouldShowList: true,   // Replaces deprecated shouldShowAlert
+    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),
@@ -45,15 +45,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Initialize Notifications on Mount
+    NotificationService.registerForPushNotificationsAsync();
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
           await user.reload();
-          if (user.emailVerified) {
-            setInitialRoute('Dashboard');
-          } else {
-            setInitialRoute('Landing');
-          }
+          setInitialRoute(user.emailVerified ? 'Dashboard' : 'Landing');
         } catch (e) {
           console.log('Error reloading user:', e);
           setInitialRoute('Landing');
@@ -75,7 +74,6 @@ export default function App() {
   }
 
   return (
-    // 3. Wrap everything in SafeAreaProvider (Fixes the Header being cut off)
     <SafeAreaProvider>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <NavigationContainer>
@@ -89,22 +87,19 @@ export default function App() {
             <Stack.Screen name="Landing" component={LandingScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
-            <Stack.Screen name="AdminDashboard" component={AdminDashboard} options={{ headerShown: false }} />
+            <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
             <Stack.Screen name="Dashboard" component={DashboardScreen} />
             <Stack.Screen name="AddEvent" component={AddEvent} />
             <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
             <Stack.Screen name="UpdateEvent" component={UpdateEvent} />
             <Stack.Screen name="Profile" component={ProfileScreen} />
-            <Stack.Screen name="RSVPTrackerScreen" component={RSVPTrackerScreen} options={{ title: 'RSVP Tracker' }} />
+            <Stack.Screen name="RSVPTrackerScreen" component={RSVPTrackerScreen} />
             <Stack.Screen name="MyEvents" component={MyEventsScreen} />
             <Stack.Screen name="VendorScreen" component={VendorScreen} />
-
-            {/* NEW: Register the Venues and AR Screens */}
-            <Stack.Screen name="Venues" component={VenuesScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="VenueDetails" component={VenueDetailsScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="ARVenue" component={ARVenueScreen} options={{ headerShown: false }} />
-            <Stack.Screen name="CaptureVenue" component={CaptureVenueScreen} options={{ headerShown: false }} />
-
+            <Stack.Screen name="Venues" component={VenuesScreen} />
+            <Stack.Screen name="VenueDetails" component={VenueDetailsScreen} />
+            <Stack.Screen name="ARVenue" component={ARVenueScreen} />
+            <Stack.Screen name="Venuepicker" component={Venuepicker} />
           </Stack.Navigator>
         </NavigationContainer>
       </GestureHandlerRootView>

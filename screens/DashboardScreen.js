@@ -11,10 +11,10 @@ import {
     TouchableWithoutFeedback,
     Alert,
     Modal,
+    Image, // Added Image for venue cards
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Calendar } from 'react-native-calendars';
 import CustomText from '../components/CustomText';
 import NotificationModal from '../components/NotificationModal';
 import BottomNav from '../components/BottomNav';
@@ -29,7 +29,9 @@ import {
     onSnapshot,
     or,
     where,
+    limit, // Added limit
 } from 'firebase/firestore';
+
 import tw from 'twrnc';
 
 const { width } = Dimensions.get('window');
@@ -97,10 +99,12 @@ const EVENT_COLORS = {
 export default function DashboardScreen({ navigation }) {
     const [userData, setUserData]   = useState(null);
     const [allEvents, setAllEvents] = useState([]);
+    const [arVenues, setArVenues]   = useState([]); // State for venues
     const [loading, setLoading]     = useState(true);
     const [greeting, setGreeting]   = useState('');
     const [emoji, setEmoji]         = useState('');
     const [notifVisible, setNotifVisible] = useState(false);
+    const [unreadCount, setUnreadCount]   = useState(0);
     const [menuVisible, setMenuVisible]   = useState(false);
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
@@ -108,6 +112,19 @@ export default function DashboardScreen({ navigation }) {
     const fadeAnim   = useRef(new Animated.Value(0)).current;
     const slideAnim  = useRef(new Animated.Value(width)).current;
     const heroSlide  = useRef(new Animated.Value(24)).current;
+
+    // ── Listen for unread notification count ──
+    useEffect(() => {
+        const user = auth.currentUser;
+        if (!user) return;
+        const q = query(
+            collection(db, 'notifications'),
+            where('recipientId', '==', user.uid),
+            where('status', '==', 'pending')
+        );
+        const unsub = onSnapshot(q, (snap) => setUnreadCount(snap.size));
+        return () => unsub();
+    }, []);
 
     useFocusEffect(useCallback(() => {
         fetchUserData();
@@ -121,7 +138,8 @@ export default function DashboardScreen({ navigation }) {
         const user = auth.currentUser;
         if (!user) { setLoading(false); return; }
 
-        const q = query(
+        // Fetch User's Events
+        const qEvents = query(
             collection(db, 'events'),
             or(
                 where('userId', '==', user.uid),
@@ -129,7 +147,7 @@ export default function DashboardScreen({ navigation }) {
             )
         );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        const unsubscribeEvents = onSnapshot(qEvents, (snapshot) => {
             const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             setAllEvents(data);
             setLoading(false);
@@ -139,7 +157,17 @@ export default function DashboardScreen({ navigation }) {
             ]).start();
         });
 
-        return () => unsubscribe();
+        // Fetch Featured Venues for the dashboard
+        const qVenues = query(collection(db, 'venues'), limit(5));
+        const unsubscribeVenues = onSnapshot(qVenues, (snapshot) => {
+            const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            setArVenues(data);
+        });
+
+        return () => {
+            unsubscribeEvents();
+            unsubscribeVenues();
+        };
     }, []);
 
     const fetchUserData = async () => {
@@ -169,7 +197,6 @@ export default function DashboardScreen({ navigation }) {
 
     const handleLogout = () => {
         toggleMenu(false);
-        // Small delay so the drawer finishes closing before modal appears
         setTimeout(() => setLogoutModalVisible(true), 280);
     };
 
@@ -201,29 +228,6 @@ export default function DashboardScreen({ navigation }) {
 
     const nextEvent     = upcomingEvents[0] || null;
     const previewEvents = upcomingEvents.slice(1, 4);
-
-    const markedDates = useMemo(() => {
-        const marks = {};
-        allEvents.forEach(event => {
-            const start = parseDateToObj(event.startDate);
-            const end   = event.isMultiDay && event.endDate ? parseDateToObj(event.endDate) : start;
-            const color = EVENT_COLORS[event.eventType] || BRAND.primary;
-            let curr = new Date(start);
-            while (curr <= end) {
-                const key     = curr.toISOString().split('T')[0];
-                const isStart = curr.getTime() === start.getTime();
-                const isEnd   = curr.getTime() === end.getTime();
-                marks[key] = {
-                    startingDay: isStart,
-                    endingDay:   isEnd,
-                    color:       isStart || isEnd ? color : color + '40',
-                    textColor:   isStart || isEnd ? '#fff' : color,
-                };
-                curr.setDate(curr.getDate() + 1);
-            }
-        });
-        return marks;
-    }, [allEvents]);
 
     if (loading) {
         return (
@@ -279,18 +283,27 @@ export default function DashboardScreen({ navigation }) {
                 </View>
 
                 <View style={tw`flex-row items-center gap-2`}>
-                    {/* Notification bell */}
                     <TouchableOpacity
-                        onPress={() => setNotifVisible(true)}
+                        onPress={() => { setNotifVisible(true); }}
                         style={[
                             tw`w-10 h-10 rounded-full justify-center items-center`,
                             { backgroundColor: BRAND.primaryMid, borderWidth: 1, borderColor: BRAND.primary + '30' },
                         ]}
                     >
-                        <Ionicons name="notifications-outline" size={20} color={BRAND.primary} />
+                        <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={20} color={BRAND.primary} />
+                        {unreadCount > 0 && (
+                            <View style={{
+                                position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16,
+                                borderRadius: 8, backgroundColor: '#EF4444', alignItems: 'center',
+                                justifyContent: 'center', paddingHorizontal: 3, borderWidth: 1.5, borderColor: '#F0F4F8',
+                            }}>
+                                <CustomText fontFamily="bold" style={{ color: '#FFF', fontSize: 9, lineHeight: 12 }}>
+                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                </CustomText>
+                            </View>
+                        )}
                     </TouchableOpacity>
 
-                    {/* Menu button — opens the drawer where Log Out lives */}
                     <TouchableOpacity
                         onPress={() => toggleMenu(true)}
                         style={[
@@ -310,34 +323,18 @@ export default function DashboardScreen({ navigation }) {
             >
 
                 {/* ── NEXT EVENT HERO ─────────────────────────── */}
-                <Animated.View style={{
-                    opacity: fadeAnim,
-                    transform: [{ translateY: heroSlide }],
-                    marginBottom: 16,
-                }}>
+                <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: heroSlide }], marginBottom: 16 }}>
                     {nextEvent ? (
                         <TouchableOpacity
                             activeOpacity={0.93}
                             onPress={() => navigation.navigate('EventDetails', { eventId: nextEvent.id })}
                             style={[
                                 tw`rounded-[26px] overflow-hidden`,
-                                {
-                                    shadowColor: BRAND.primary,
-                                    shadowOffset: { width: 0, height: 8 },
-                                    shadowOpacity: 0.18,
-                                    shadowRadius: 20,
-                                    elevation: 6,
-                                },
+                                { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 6 },
                             ]}
                         >
                             <View style={{ backgroundColor: BRAND.primaryBg, borderRadius: 26 }}>
-                                <View style={{
-                                    height: 5,
-                                    backgroundColor: BRAND.primary,
-                                    borderTopLeftRadius: 26,
-                                    borderTopRightRadius: 26,
-                                }} />
-
+                                <View style={{ height: 5, backgroundColor: BRAND.primary, borderTopLeftRadius: 26, borderTopRightRadius: 26 }} />
                                 <View style={tw`p-5`}>
                                     <View style={tw`flex-row justify-between items-center mb-3`}>
                                         <View style={[tw`flex-row items-center px-3 py-1 rounded-full`, { backgroundColor: BRAND.primary + '18' }]}>
@@ -354,22 +351,14 @@ export default function DashboardScreen({ navigation }) {
                                             tw`w-6 h-6 rounded-full justify-center items-center mr-2`,
                                             { backgroundColor: (EVENT_COLORS[nextEvent.eventType] || BRAND.primary) + '22' },
                                         ]}>
-                                            <Ionicons
-                                                name={EVENT_ICONS[nextEvent.eventType] || 'star'}
-                                                size={13}
-                                                color={EVENT_COLORS[nextEvent.eventType] || BRAND.primary}
-                                            />
+                                            <Ionicons name={EVENT_ICONS[nextEvent.eventType] || 'star'} size={13} color={EVENT_COLORS[nextEvent.eventType] || BRAND.primary} />
                                         </View>
                                         <CustomText fontFamily="semibold" style={{ color: '#64748B', fontSize: 12 }}>
                                             {typeof nextEvent.eventType === 'string' ? nextEvent.eventType : 'Event'}
                                         </CustomText>
                                     </View>
 
-                                    <CustomText
-                                        fontFamily="extrabold"
-                                        style={{ color: '#0F172A', fontSize: 21, lineHeight: 27, marginBottom: 10 }}
-                                        numberOfLines={2}
-                                    >
+                                    <CustomText fontFamily="extrabold" style={{ color: '#0F172A', fontSize: 21, lineHeight: 27, marginBottom: 10 }} numberOfLines={2}>
                                         {typeof nextEvent.title === 'string' ? nextEvent.title : ''}
                                     </CustomText>
 
@@ -386,11 +375,7 @@ export default function DashboardScreen({ navigation }) {
                                     {nextEvent.location && nextEvent.location !== 'To be decided' && (
                                         <View style={tw`flex-row items-center mb-4`}>
                                             <Ionicons name="location-outline" size={13} color={BRAND.primary} />
-                                            <CustomText
-                                                fontFamily="semibold"
-                                                style={{ color: '#334155', fontSize: 13, marginLeft: 7, flex: 1 }}
-                                                numberOfLines={1}
-                                            >
+                                            <CustomText fontFamily="semibold" style={{ color: '#334155', fontSize: 13, marginLeft: 7, flex: 1 }} numberOfLines={1}>
                                                 {typeof nextEvent.location === 'string' ? nextEvent.location : ''}
                                             </CustomText>
                                         </View>
@@ -400,19 +385,10 @@ export default function DashboardScreen({ navigation }) {
                                         onPress={() => navigation.navigate('EventDetails', { eventId: nextEvent.id })}
                                         style={[
                                             tw`flex-row items-center justify-center py-3 rounded-[14px]`,
-                                            {
-                                                backgroundColor: BRAND.primary,
-                                                shadowColor: BRAND.primaryDark,
-                                                shadowOffset: { width: 0, height: 4 },
-                                                shadowOpacity: 0.3,
-                                                shadowRadius: 8,
-                                                elevation: 4,
-                                            },
+                                            { backgroundColor: BRAND.primary, shadowColor: BRAND.primaryDark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
                                         ]}
                                     >
-                                        <CustomText fontFamily="bold" style={{ color: '#FFF', fontSize: 14 }}>
-                                            View Details
-                                        </CustomText>
+                                        <CustomText fontFamily="bold" style={{ color: '#FFF', fontSize: 14 }}>View Details</CustomText>
                                         <Ionicons name="arrow-forward" size={15} color="#FFF" style={{ marginLeft: 6 }} />
                                     </TouchableOpacity>
                                 </View>
@@ -424,24 +400,131 @@ export default function DashboardScreen({ navigation }) {
                             onPress={() => navigation.navigate('AddEvent')}
                             style={[
                                 tw`rounded-[26px] p-6 items-center justify-center`,
-                                {
-                                    borderWidth: 2,
-                                    borderColor: BRAND.primary,
-                                    borderStyle: 'dashed',
-                                    backgroundColor: BRAND.primaryFaint,
-                                    minHeight: 140,
-                                },
+                                { borderWidth: 2, borderColor: BRAND.primary, borderStyle: 'dashed', backgroundColor: BRAND.primaryFaint, minHeight: 140 },
                             ]}
                         >
                             <View style={[tw`w-14 h-14 rounded-full justify-center items-center mb-3`, { backgroundColor: BRAND.primaryMid }]}>
                                 <Ionicons name="add" size={28} color={BRAND.primary} />
                             </View>
-                            <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 16 }}>
-                                Plan Your First Event
-                            </CustomText>
-                            <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 13, marginTop: 3 }}>
-                                Tap to get started
-                            </CustomText>
+                            <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 16 }}>Plan Your First Event</CustomText>
+                            <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 13, marginTop: 3 }}>Tap to get started</CustomText>
+                        </TouchableOpacity>
+                    )}
+                </Animated.View>
+
+                {/* ── AR VENUE TOURS (DYNAMIC DUAL DISPLAY) ────────────────────────── */}
+                <Animated.View style={{ opacity: fadeAnim, marginBottom: 20 }}>
+                    <View style={tw`flex-row justify-between items-center mb-3`}>
+                        <View>
+                            <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>AR Venue Tours</CustomText>
+                            <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 11, marginTop: 1 }}>Walk through our AR Venue Viewing Feature</CustomText>
+                        </View>
+                        <TouchableOpacity onPress={() => navigation.navigate('Venues')}>
+                            <CustomText fontFamily="semibold" style={{ color: BRAND.primary, fontSize: 13 }}>View All</CustomText>
+                        </TouchableOpacity>
+                    </View>
+
+                    {arVenues.length > 0 ? (
+                        <ScrollView 
+                            horizontal 
+                            showsHorizontalScrollIndicator={false} 
+                            style={{ overflow: 'visible' }}
+                            contentContainerStyle={{ gap: 14 }}
+                        >
+                            {arVenues.map((venue) => (
+                                <TouchableOpacity
+                                    key={venue.id}
+                                    activeOpacity={0.88}
+                                    onPress={() => navigation.navigate('VenueDetails', { venue })}
+                                    style={[
+                                        tw`bg-white rounded-[22px] overflow-hidden`,
+                                        {
+                                            width: width * 0.68,
+                                            shadowColor: BRAND.primary,
+                                            shadowOffset: { width: 0, height: 6 },
+                                            shadowOpacity: 0.1,
+                                            shadowRadius: 12,
+                                            elevation: 4,
+                                        },
+                                    ]}
+                                >
+                                    <View style={tw`relative w-full h-32 bg-slate-200`}>
+                                        {venue.image && (
+                                            <Image source={{ uri: venue.image }} style={tw`w-full h-full absolute`} resizeMode="cover" />
+                                        )}
+                                        {venue.hasAR !== false && (
+                                            <View style={tw`absolute top-3 right-3 bg-[#00686F]/90 flex-row items-center px-2 py-1.5 rounded-full`}>
+                                                <Ionicons name="cube" size={12} color="#FFF" />
+                                                <CustomText fontFamily="bold" style={tw`text-white text-[10px] ml-1.5 uppercase tracking-wide`}>AR Ready</CustomText>
+                                            </View>
+                                        )}
+                                    </View>
+                                    <View style={tw`p-4`}>
+                                        <CustomText fontFamily="extrabold" style={tw`text-[16px] text-slate-800 mb-1.5`} numberOfLines={1}>
+                                            {venue.name}
+                                        </CustomText>
+                                        <View style={tw`flex-row items-center justify-between`}>
+                                            <View style={tw`flex-row items-center flex-1 mr-2`}>
+                                                <Ionicons name="location" size={12} color={BRAND.primary} />
+                                                <CustomText fontFamily="medium" style={tw`text-[11px] text-[#00686F] ml-1 flex-1`} numberOfLines={1}>
+                                                    {venue.location}
+                                                </CustomText>
+                                            </View>
+                                            <View style={tw`flex-row items-center bg-[#F0F9FA] px-2 py-1 rounded-lg border border-[#E0F2F3]`}>
+                                                <Ionicons name="people" size={11} color={BRAND.primary} />
+                                                <CustomText fontFamily="bold" style={tw`text-[10px] text-[#00686F] ml-1`}>
+                                                    {venue.capacity || 'N/A'}
+                                                </CustomText>
+                                            </View>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    ) : (
+                        /* Fallback strictly matching original static design just in case venues take a second to load or DB is empty */
+                        <TouchableOpacity
+                            activeOpacity={0.88}
+                            onPress={() => navigation.navigate('Venues')}
+                            style={[
+                                tw`rounded-[24px] overflow-hidden`,
+                                { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 6 },
+                            ]}
+                        >
+                            <View style={{ backgroundColor: BRAND.primaryDark, borderRadius: 24 }}>
+                                <View style={{ height: 4, backgroundColor: '#00868E', borderTopLeftRadius: 24, borderTopRightRadius: 24 }} />
+                                <View style={{ padding: 20 }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                                        <View style={{
+                                            flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.15)',
+                                            borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)'
+                                        }}>
+                                            <Ionicons name="cube-outline" size={13} color="#FFF" />
+                                            <CustomText fontFamily="bold" style={{ color: '#FFF', fontSize: 10, marginLeft: 5, letterSpacing: 1 }}>AR READY VENUES</CustomText>
+                                        </View>
+                                    </View>
+                                    <CustomText fontFamily="extrabold" style={{ color: '#FFF', fontSize: 22, lineHeight: 28, marginBottom: 6 }}>
+                                        Walk Through{'\n'}Before You Book
+                                    </CustomText>
+                                    <CustomText fontFamily="medium" style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 19, marginBottom: 20 }}>
+                                        Explore venues in augmented reality — see the space, feel the scale, all from your phone.
+                                    </CustomText>
+                                    <View style={{ flexDirection: 'row', gap: 8, marginBottom: 20 }}>
+                                        {[{ icon: 'walk-outline', label: 'Virtual Tour' }, { icon: 'people-outline', label: 'Capacity Info' }, { icon: 'location-outline', label: 'Map View' }]
+                                            .map((f) => (
+                                            <View key={f.label} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingHorizontal: 9, paddingVertical: 6 }}>
+                                                <Ionicons name={f.icon} size={12} color="rgba(255,255,255,0.85)" />
+                                                <CustomText fontFamily="semibold" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 11, marginLeft: 5 }}>{f.label}</CustomText>
+                                            </View>
+                                        ))}
+                                    </View>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', borderRadius: 16, paddingVertical: 13 }}>
+                                        <Ionicons name="cube" size={16} color={BRAND.primary} />
+                                        <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 14, marginLeft: 7 }}>Browse AR Venues</CustomText>
+                                        <Ionicons name="arrow-forward" size={15} color={BRAND.primary} style={{ marginLeft: 6 }} />
+                                    </View>
+                                </View>
+                            </View>
                         </TouchableOpacity>
                     )}
                 </Animated.View>
@@ -467,12 +550,7 @@ export default function DashboardScreen({ navigation }) {
                         upcomingEvents.length <= 1 && (
                             <View style={[
                                 tw`items-center py-6 rounded-[20px]`,
-                                {
-                                    backgroundColor: '#FFFFFF',
-                                    borderWidth: 1,
-                                    borderColor: '#E2E8F0',
-                                    borderStyle: 'dashed',
-                                },
+                                { borderWidth: 1, borderColor: '#E2E8F0', borderStyle: 'dashed', backgroundColor: '#FFFFFF' },
                             ]}>
                                 <Ionicons name="calendar-outline" size={28} color="#CBD5E1" style={{ marginBottom: 8 }} />
                                 <CustomText fontFamily="semibold" style={{ color: '#94A3B8', fontSize: 13 }}>
@@ -482,25 +560,92 @@ export default function DashboardScreen({ navigation }) {
                                     onPress={() => navigation.navigate('AddEvent')}
                                     style={[tw`mt-3 px-5 py-2 rounded-full`, { backgroundColor: BRAND.primaryMid }]}
                                 >
-                                    <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 12 }}>
-                                        + Add Event
-                                    </CustomText>
+                                    <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 12 }}>+ Add Event</CustomText>
                                 </TouchableOpacity>
                             </View>
                         )
                     )}
                 </Animated.View>
 
+                {/* ── RSVP SNEAK PEEK ─────────────────────────── */}
+                {nextEvent && (
+                    <Animated.View style={{ opacity: fadeAnim, marginTop: 20 }}>
+                        <View style={tw`flex-row justify-between items-center mb-3`}>
+                            <View>
+                                <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>Guest Tracker</CustomText>
+                                <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 11, marginTop: 1 }}>Track RSVPs for your upcoming event</CustomText>
+                            </View>
+                            <TouchableOpacity onPress={() => navigation.navigate('RSVPTrackerScreen', { eventId: nextEvent.id, eventTitle: nextEvent.title })}>
+                                <CustomText fontFamily="semibold" style={{ color: BRAND.primary, fontSize: 13 }}>Open</CustomText>
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity
+                            activeOpacity={0.88}
+                            onPress={() => navigation.navigate('RSVPTrackerScreen', { eventId: nextEvent.id, eventTitle: nextEvent.title })}
+                            style={[
+                                tw`bg-white rounded-[24px] overflow-hidden`,
+                                { shadowColor: '#64748B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 14, elevation: 4 },
+                            ]}
+                        >
+                            <View style={{ height: 4, backgroundColor: BRAND.primary }} />
+                            <View style={{ padding: 18 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                                    <View style={{
+                                        backgroundColor: BRAND.primaryBg, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 5, flexDirection: 'row', alignItems: 'center',
+                                    }}>
+                                        <Ionicons name="calendar-outline" size={12} color={BRAND.primary} />
+                                        <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 11, marginLeft: 5 }} numberOfLines={1}>
+                                            {nextEvent.title}
+                                        </CustomText>
+                                    </View>
+                                </View>
+
+                                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                                    {[
+                                        { icon: 'people',           label: 'Total Guests',  color: BRAND.primary,  bg: BRAND.primaryBg },
+                                        { icon: 'checkmark-circle', label: 'Attending',     color: '#10B981',      bg: '#D1FAE5' },
+                                        { icon: 'close-circle',     label: 'Declined',      color: '#EF4444',      bg: '#FEE2E2' },
+                                    ].map((s) => (
+                                        <View key={s.label} style={{ flex: 1, alignItems: 'center', backgroundColor: s.bg, borderRadius: 14, paddingVertical: 12 }}>
+                                            <Ionicons name={s.icon} size={20} color={s.color} />
+                                            <CustomText fontFamily="bold" style={{ color: s.color, fontSize: 10, marginTop: 5, textAlign: 'center' }}>{s.label}</CustomText>
+                                        </View>
+                                    ))}
+                                </View>
+
+                                {[
+                                    { icon: 'search-outline',   text: 'Search & filter guests by status' },
+                                    { icon: 'share-outline',    text: 'Export guest list as CSV' },
+                                    { icon: 'notifications-outline', text: 'Get notified on new RSVPs' },
+                                ].map((f) => (
+                                    <View key={f.text} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                        <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: BRAND.primaryFaint, alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                                            <Ionicons name={f.icon} size={13} color={BRAND.primary} />
+                                        </View>
+                                        <CustomText fontFamily="medium" style={{ color: '#475569', fontSize: 13 }}>{f.text}</CustomText>
+                                    </View>
+                                ))}
+
+                                <View style={{
+                                    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND.primaryBg,
+                                    borderRadius: 14, paddingVertical: 12, marginTop: 10, borderWidth: 1, borderColor: BRAND.primary + '30',
+                                }}>
+                                    <Ionicons name="list-outline" size={15} color={BRAND.primary} />
+                                    <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 13, marginLeft: 7 }}>View Full RSVP List</CustomText>
+                                    <Ionicons name="arrow-forward" size={14} color={BRAND.primary} style={{ marginLeft: 6 }} />
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    </Animated.View>
+                )}
+
                 {/* ── EXPLORE VENDORS ───────────────────────────── */}
-                <Animated.View style={{ opacity: fadeAnim, marginTop: 16 }}>
+                <Animated.View style={{ opacity: fadeAnim, marginTop: 20 }}>
                     <View style={tw`flex-row justify-between items-center mb-3`}>
-                        <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>
-                            Explore Vendors
-                        </CustomText>
+                        <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>Explore Vendors</CustomText>
                         <TouchableOpacity onPress={() => navigation.navigate('VendorScreen')}>
-                            <CustomText fontFamily="semibold" style={{ color: BRAND.primary, fontSize: 13 }}>
-                                View All
-                            </CustomText>
+                            <CustomText fontFamily="semibold" style={{ color: BRAND.primary, fontSize: 13 }}>View All</CustomText>
                         </TouchableOpacity>
                     </View>
 
@@ -509,77 +654,20 @@ export default function DashboardScreen({ navigation }) {
                         onPress={() => navigation.navigate('VendorScreen')}
                         style={[
                             tw`bg-white rounded-[22px] flex-row items-center p-4`,
-                            {
-                                shadowColor: BRAND.primary,
-                                shadowOffset: { width: 0, height: 4 },
-                                shadowOpacity: 0.09,
-                                shadowRadius: 12,
-                                elevation: 3,
-                            },
+                            { shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.09, shadowRadius: 12, elevation: 3 },
                         ]}
                     >
                         <View style={[tw`w-14 h-14 rounded-2xl justify-center items-center mr-4`, { backgroundColor: BRAND.primaryMid }]}>
                             <Ionicons name="storefront-outline" size={26} color={BRAND.primary} />
                         </View>
-                        
                         <View style={tw`flex-1`}>
-                            <CustomText fontFamily="bold" style={tw`text-[16px] text-slate-800`}>
-                                Vendor Directory
-                            </CustomText>
-                            <CustomText fontFamily="medium" style={tw`text-[12px] text-slate-500 mt-0.5`}>
-                                Find trusted vendors for your event needs
-                            </CustomText>
+                            <CustomText fontFamily="bold" style={tw`text-[16px] text-slate-800`}>Vendor Directory</CustomText>
+                            <CustomText fontFamily="medium" style={tw`text-[12px] text-slate-500 mt-0.5`}>Find trusted vendors for your event needs</CustomText>
                         </View>
-
                         <View style={[tw`w-8 h-8 rounded-full justify-center items-center`, { backgroundColor: BRAND.primaryBg }]}>
                             <Ionicons name="chevron-forward" size={16} color={BRAND.primary} />
                         </View>
                     </TouchableOpacity>
-                </Animated.View>
-
-                {/* ── CALENDAR ────────────────────────────────── */}
-                <Animated.View style={{ opacity: fadeAnim, marginTop: 16 }}>
-                    <View style={tw`flex-row justify-between items-center mb-3`}>
-                        <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 17 }}>
-                            Event Calendar
-                        </CustomText>
-                    </View>
-
-                    <View style={[
-                        tw`bg-white rounded-[24px] overflow-hidden`,
-                        {
-                            shadowColor: '#64748B',
-                            shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.07,
-                            shadowRadius: 12,
-                            elevation: 3,
-                        },
-                    ]}>
-                        <Calendar
-                            markingType="period"
-                            theme={calendarTheme}
-                            markedDates={markedDates}
-                        />
-
-                        {/* Color legend */}
-                        <View style={tw`px-4 pb-4`}>
-                            <View style={{ borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 10 }}>
-                                <CustomText fontFamily="semibold" style={{ color: '#94A3B8', fontSize: 10, letterSpacing: 0.8, marginBottom: 7 }}>
-                                    EVENT TYPES
-                                </CustomText>
-                                <View style={tw`flex-row flex-wrap`}>
-                                    {Object.entries(EVENT_COLORS).map(([type, color]) => (
-                                        <View key={type} style={tw`flex-row items-center mr-4 mb-1`}>
-                                            <View style={[tw`w-2 h-2 rounded-full mr-1.5`, { backgroundColor: color }]} />
-                                            <CustomText fontFamily="medium" style={{ color: '#64748B', fontSize: 11 }}>
-                                                {type}
-                                            </CustomText>
-                                        </View>
-                                    ))}
-                                </View>
-                            </View>
-                        </View>
-                    </View>
                 </Animated.View>
 
             </ScrollView>
@@ -594,90 +682,28 @@ export default function DashboardScreen({ navigation }) {
                 onRequestClose={() => !loggingOut && setLogoutModalVisible(false)}
             >
                 <TouchableWithoutFeedback onPress={() => !loggingOut && setLogoutModalVisible(false)}>
-                    <View style={{
-                        flex: 1,
-                        backgroundColor: 'rgba(15,23,42,0.6)',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        paddingHorizontal: 28,
-                    }}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 }}>
                         <TouchableWithoutFeedback>
-                            <View style={{
-                                width: '100%',
-                                backgroundColor: '#FFF',
-                                borderRadius: 28,
-                                overflow: 'hidden',
-                                shadowColor: '#000',
-                                shadowOffset: { width: 0, height: 24 },
-                                shadowOpacity: 0.18,
-                                shadowRadius: 40,
-                                elevation: 24,
-                            }}>
-
-                                {/* Top accent bar — split teal | red */}
+                            <View style={{ width: '100%', backgroundColor: '#FFF', borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.18, shadowRadius: 40, elevation: 24 }}>
                                 <View style={{ flexDirection: 'row', height: 5 }}>
                                     <View style={{ flex: 1, backgroundColor: BRAND.primary }} />
                                     <View style={{ flex: 1, backgroundColor: '#EF4444' }} />
                                 </View>
-
                                 <View style={{ paddingHorizontal: 28, paddingTop: 30, paddingBottom: 26, alignItems: 'center' }}>
-
-                                    {/* Icon circle */}
-                                    <View style={{
-                                        width: 76,
-                                        height: 76,
-                                        borderRadius: 24,
-                                        backgroundColor: '#FEF2F2',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        marginBottom: 22,
-                                        borderWidth: 1.5,
-                                        borderColor: '#FECACA',
-                                    }}>
+                                    <View style={{ width: 76, height: 76, borderRadius: 24, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginBottom: 22, borderWidth: 1.5, borderColor: '#FECACA' }}>
                                         <Ionicons name="log-out-outline" size={36} color="#EF4444" />
                                     </View>
-
-                                    {/* Title */}
-                                    <CustomText fontFamily="extrabold" style={{
-                                        fontSize: 23,
-                                        color: '#0F172A',
-                                        letterSpacing: -0.5,
-                                        marginBottom: 10,
-                                    }}>
-                                        Leaving so soon?
-                                    </CustomText>
-
-                                    {/* Body */}
-                                    <CustomText fontFamily="medium" style={{
-                                        fontSize: 14,
-                                        color: '#64748B',
-                                        textAlign: 'center',
-                                        lineHeight: 22,
-                                        marginBottom: 30,
-                                        paddingHorizontal: 4,
-                                    }}>
+                                    <CustomText fontFamily="extrabold" style={{ fontSize: 23, color: '#0F172A', letterSpacing: -0.5, marginBottom: 10 }}>Leaving so soon?</CustomText>
+                                    <CustomText fontFamily="medium" style={{ fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 30, paddingHorizontal: 4 }}>
                                         You'll need to sign in again to access your events and workspace.
                                     </CustomText>
-
-                                    {/* Confirm button */}
                                     <TouchableOpacity
                                         onPress={confirmLogout}
                                         disabled={loggingOut}
                                         activeOpacity={0.85}
                                         style={{
-                                            width: '100%',
-                                            height: 54,
-                                            borderRadius: 17,
-                                            backgroundColor: '#EF4444',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            marginBottom: 11,
-                                            shadowColor: '#EF4444',
-                                            shadowOffset: { width: 0, height: 8 },
-                                            shadowOpacity: 0.32,
-                                            shadowRadius: 14,
-                                            elevation: 8,
-                                            opacity: loggingOut ? 0.75 : 1,
+                                            width: '100%', height: 54, borderRadius: 17, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center',
+                                            marginBottom: 11, shadowColor: '#EF4444', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.32, shadowRadius: 14, elevation: 8, opacity: loggingOut ? 0.75 : 1,
                                         }}
                                     >
                                         {loggingOut ? (
@@ -685,34 +711,18 @@ export default function DashboardScreen({ navigation }) {
                                         ) : (
                                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                                 <Ionicons name="log-out-outline" size={19} color="#FFF" />
-                                                <CustomText fontFamily="extrabold" style={{ color: '#FFF', fontSize: 15, letterSpacing: 0.2 }}>
-                                                    Yes, Log Out
-                                                </CustomText>
+                                                <CustomText fontFamily="extrabold" style={{ color: '#FFF', fontSize: 15, letterSpacing: 0.2 }}>Yes, Log Out</CustomText>
                                             </View>
                                         )}
                                     </TouchableOpacity>
-
-                                    {/* Cancel button */}
                                     <TouchableOpacity
                                         onPress={() => setLogoutModalVisible(false)}
                                         disabled={loggingOut}
                                         activeOpacity={0.8}
-                                        style={{
-                                            width: '100%',
-                                            height: 54,
-                                            borderRadius: 17,
-                                            backgroundColor: BRAND.primaryBg,
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            borderWidth: 1.5,
-                                            borderColor: BRAND.primary + '35',
-                                        }}
+                                        style={{ width: '100%', height: 54, borderRadius: 17, backgroundColor: BRAND.primaryBg, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: BRAND.primary + '35' }}
                                     >
-                                        <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 15 }}>
-                                            Stay Signed In
-                                        </CustomText>
+                                        <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 15 }}>Stay Signed In</CustomText>
                                     </TouchableOpacity>
-
                                 </View>
                             </View>
                         </TouchableWithoutFeedback>
@@ -728,15 +738,7 @@ export default function DashboardScreen({ navigation }) {
                     </TouchableWithoutFeedback>
                     <Animated.View style={[
                         tw`absolute top-0 right-0 bottom-0 bg-white rounded-l-[32px] px-6 pt-16`,
-                        {
-                            width: width * 0.75,
-                            transform: [{ translateX: slideAnim }],
-                            shadowColor: '#000',
-                            shadowOffset: { width: -10, height: 0 },
-                            shadowOpacity: 0.1,
-                            shadowRadius: 20,
-                            marginRight: 20,
-                        },
+                        { width: width * 0.75, transform: [{ translateX: slideAnim }], shadowColor: '#000', shadowOffset: { width: -10, height: 0 }, shadowOpacity: 0.1, shadowRadius: 20, marginRight: 20 },
                     ]}>
                         <View style={tw`flex-row justify-between items-center pb-6 border-b border-slate-100`}>
                             <View>
@@ -748,24 +750,17 @@ export default function DashboardScreen({ navigation }) {
                             </TouchableOpacity>
                         </View>
                         <View style={tw`mt-6`}>
-                            <TouchableOpacity
-                                style={tw`flex-row items-center py-4`}
-                                onPress={() => { toggleMenu(false); navigation.navigate('Profile'); }}
-                            >
+                            <TouchableOpacity style={tw`flex-row items-center py-4`} onPress={() => { toggleMenu(false); navigation.navigate('Profile'); }}>
                                 <View style={[tw`w-12 h-12 rounded-2xl justify-center items-center mr-4`, { backgroundColor: BRAND.primaryMid }]}>
                                     <Ionicons name="person-outline" size={20} color={BRAND.primary} />
                                 </View>
-                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-slate-700`}>
-                                    Profile Settings
-                                </CustomText>
+                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-slate-700`}>Profile Settings</CustomText>
                             </TouchableOpacity>
                             <TouchableOpacity style={tw`flex-row items-center py-4`} onPress={handleLogout}>
                                 <View style={tw`w-12 h-12 rounded-2xl bg-red-50 justify-center items-center mr-4`}>
                                     <Ionicons name="log-out-outline" size={20} color="#EF4444" />
                                 </View>
-                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-red-500`}>
-                                    Log Out
-                                </CustomText>
+                                <CustomText fontFamily="semibold" style={tw`text-[16px] text-red-500`}>Log Out</CustomText>
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
@@ -797,10 +792,7 @@ const CountdownBadge = ({ date }) => {
 const UpcomingEventRow = ({ event, onPress, isLast }) => {
     const user = auth.currentUser;
     const isShared = event.userId !== user?.uid;
-    const accentColor = isShared
-        ? '#8B5CF6'
-        : EVENT_COLORS[event.eventType] || BRAND.primary;
-
+    const accentColor = isShared ? '#8B5CF6' : EVENT_COLORS[event.eventType] || BRAND.primary;
     const days = daysUntil(event.startDate);
     const startStr  = formatDateShort(event.startDate);
     const endStr    = event.isMultiDay && event.endDate ? formatDateShort(event.endDate) : null;
@@ -813,23 +805,11 @@ const UpcomingEventRow = ({ event, onPress, isLast }) => {
             style={[
                 tw`bg-white rounded-[18px] flex-row items-center overflow-hidden`,
                 !isLast && { marginBottom: 10 },
-                {
-                    shadowColor: '#64748B',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.06,
-                    shadowRadius: 8,
-                    elevation: 2,
-                },
+                { shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
             ]}
         >
-            {/* Left color bar */}
             <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
-
-            {/* Day countdown box */}
-            <View style={[
-                tw`items-center justify-center mx-4`,
-                { width: 44, height: 44, borderRadius: 12, backgroundColor: accentColor + '15' },
-            ]}>
+            <View style={[tw`items-center justify-center mx-4`, { width: 44, height: 44, borderRadius: 12, backgroundColor: accentColor + '15' }]}>
                 <CustomText fontFamily="extrabold" style={{ fontSize: 16, color: accentColor, lineHeight: 19 }}>
                     {days === 0 ? '🎉' : String(days)}
                 </CustomText>
@@ -839,39 +819,25 @@ const UpcomingEventRow = ({ event, onPress, isLast }) => {
                     </CustomText>
                 )}
             </View>
-
-            {/* Event info */}
             <View style={tw`flex-1 py-3.5 pr-3`}>
-                <CustomText
-                    fontFamily="bold"
-                    style={{ color: '#0F172A', fontSize: 14, marginBottom: 3 }}
-                    numberOfLines={1}
-                >
+                <CustomText fontFamily="bold" style={{ color: '#0F172A', fontSize: 14, marginBottom: 3 }} numberOfLines={1}>
                     {typeof event.title === 'string' ? event.title : ''}
                 </CustomText>
-
                 <View style={tw`flex-row items-center`}>
                     <Ionicons name="calendar-outline" size={11} color="#94A3B8" />
                     <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 11, marginLeft: 4 }}>
                         {dateLabel}
                     </CustomText>
                 </View>
-
                 {typeof event.location === 'string' && event.location && event.location !== 'To be decided' && (
                     <View style={tw`flex-row items-center mt-1`}>
                         <Ionicons name="location-outline" size={11} color="#94A3B8" />
-                        <CustomText
-                            fontFamily="medium"
-                            style={{ color: '#94A3B8', fontSize: 11, marginLeft: 4 }}
-                            numberOfLines={1}
-                        >
+                        <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 11, marginLeft: 4 }} numberOfLines={1}>
                             {event.location}
                         </CustomText>
                     </View>
                 )}
             </View>
-
-            {/* Right: type badge + shared label */}
             <View style={tw`items-end pr-4`}>
                 <View style={[tw`px-2.5 py-1 rounded-full mb-1.5`, { backgroundColor: accentColor + '15' }]}>
                     <CustomText fontFamily="bold" style={{ fontSize: 10, color: accentColor }}>
@@ -881,41 +847,11 @@ const UpcomingEventRow = ({ event, onPress, isLast }) => {
                 {isShared && (
                     <View style={tw`flex-row items-center`}>
                         <Ionicons name="people-outline" size={11} color="#8B5CF6" />
-                        <CustomText fontFamily="medium" style={{ fontSize: 10, color: '#8B5CF6', marginLeft: 3 }}>
-                            Shared
-                        </CustomText>
+                        <CustomText fontFamily="medium" style={{ fontSize: 10, color: '#8B5CF6', marginLeft: 3 }}>Shared</CustomText>
                     </View>
                 )}
             </View>
-
             <Ionicons name="chevron-forward" size={14} color="#CBD5E1" style={{ marginRight: 12 }} />
         </TouchableOpacity>
     );
-};
-
-// ── CALENDAR THEME ──────────────────────────────────────────
-const calendarTheme = {
-    calendarBackground:         '#ffffff',
-    todayTextColor:             BRAND.primary,
-    todayBackgroundColor:       BRAND.primaryMid,
-    dayTextColor:               '#334155',
-    monthTextColor:             '#0f172a',
-    arrowColor:                 BRAND.primary,
-    textDayFontFamily:          'Poppins-Medium',
-    textMonthFontFamily:        'Poppins-Bold',
-    textDayHeaderFontFamily:    'Poppins-SemiBold',
-    textMonthFontWeight:        'bold',
-    textDayHeaderFontWeight:    '600',
-    selectedDayBackgroundColor: BRAND.primary,
-    selectedDayTextColor:       '#ffffff',
-    'stylesheet.calendar.header': {
-        header: {
-            flexDirection:  'row',
-            justifyContent: 'space-between',
-            paddingLeft:    10,
-            paddingRight:   10,
-            marginTop:      6,
-            alignItems:     'center',
-        },
-    },
 };

@@ -34,7 +34,7 @@ export default function AdminDashboardScreen({ navigation }) {
     const [currentVenueId, setCurrentVenueId] = useState(null);
 
     // Filter State
-    const [selectedCategory, setSelectedCategory] = useState('All'); // New: Category filter state
+    const [selectedCategory, setSelectedCategory] = useState('All');
 
     // Venue Form State
     const [newName, setNewName] = useState('');
@@ -49,6 +49,10 @@ export default function AdminDashboardScreen({ navigation }) {
     const [igHandle, setIgHandle] = useState('');
     const [selectedModel, setSelectedModel] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // Amenities State
+    const [amenities, setAmenities] = useState([]);
+    const [currentAmenity, setCurrentAmenity] = useState('');
 
     // Vendor Form State
     const [vendorName, setVendorName] = useState('');
@@ -58,7 +62,7 @@ export default function AdminDashboardScreen({ navigation }) {
     const [vendorLocation, setVendorLocation] = useState('');
 
     const categories = ['Unassigned', 'Attire & Accessories', 'Beauty', 'Music & Show', 'Photo & Video', 'Accessories', 'Flower & Decor', "Catering"];
-    const filterCategories = ['All', ...categories]; // For the filter UI
+    const filterCategories = ['All', ...categories];
 
     const CLOUD_NAME = 'dgvbemrgw';
     const UPLOAD_PRESET = 'venues';
@@ -83,7 +87,6 @@ export default function AdminDashboardScreen({ navigation }) {
         };
     }, []);
 
-    // Logic to filter vendors based on selection
     const filteredVendors = selectedCategory === 'All'
         ? vendors
         : vendors.filter(v => v.category === selectedCategory);
@@ -92,6 +95,7 @@ export default function AdminDashboardScreen({ navigation }) {
         setNewName(''); setNewLocation(''); setNewCapacity(''); setNewPrice('');
         setNewDescription(''); setImageLink(''); setSelectedImage(null);
         setPhone(''); setFbPage(''); setIgHandle(''); setSelectedModel(null);
+        setAmenities([]); setCurrentAmenity('');
         setIsEditing(false); setCurrentVenueId(null);
     };
 
@@ -113,6 +117,7 @@ export default function AdminDashboardScreen({ navigation }) {
         setPhone(item.contact?.phone || '');
         setFbPage(item.contact?.facebook || '');
         setIgHandle(item.contact?.instagram || '');
+        setAmenities(item.amenities || []);
         setCurrentVenueId(item.id);
         setIsEditing(true);
         setModalVisible(true);
@@ -190,6 +195,18 @@ export default function AdminDashboardScreen({ navigation }) {
         return result.secure_url;
     };
 
+    const handleAddAmenity = () => {
+        const trimmed = currentAmenity.trim();
+        if (trimmed && !amenities.includes(trimmed)) {
+            setAmenities([...amenities, trimmed]);
+            setCurrentAmenity('');
+        }
+    };
+
+    const handleRemoveAmenity = (indexToRemove) => {
+        setAmenities(amenities.filter((_, index) => index !== indexToRemove));
+    };
+
     const handleSaveVenue = async () => {
         if (!newName.trim() || !newLocation.trim()) {
             Alert.alert("Required Fields", "Name and Location are required.");
@@ -215,6 +232,7 @@ export default function AdminDashboardScreen({ navigation }) {
                     facebook: fbPage || '',
                     instagram: igHandle || ''
                 },
+                amenities: amenities, // Storing array of amenities
                 image: finalImageUrl,
                 updatedAt: serverTimestamp(),
             };
@@ -313,6 +331,21 @@ export default function AdminDashboardScreen({ navigation }) {
                     </View>
                 </View>
 
+                {item.amenities && item.amenities.length > 0 && (
+                    <View style={tw`flex-row flex-wrap mb-4`}>
+                        {item.amenities.slice(0, 3).map((amenity, idx) => (
+                            <View key={idx} style={tw`bg-slate-100 rounded-md px-2 py-1 mr-2 mb-1`}>
+                                <CustomText style={tw`text-[10px] text-slate-500`}>{amenity}</CustomText>
+                            </View>
+                        ))}
+                        {item.amenities.length > 3 && (
+                            <View style={tw`bg-slate-100 rounded-md px-2 py-1 mr-2 mb-1`}>
+                                <CustomText style={tw`text-[10px] text-slate-500`}>+{item.amenities.length - 3} more</CustomText>
+                            </View>
+                        )}
+                    </View>
+                )}
+
                 <View style={tw`flex-row`}>
                     <TouchableOpacity
                         style={tw`flex-1 py-3.5 mr-3 rounded-2xl bg-slate-50 border border-slate-200 items-center justify-center`}
@@ -326,7 +359,7 @@ export default function AdminDashboardScreen({ navigation }) {
                         onPress={() => navigation.navigate('ARVenue', {
                             venueId: item.id,
                             venueName: item.name,
-                            modelUrl: item.modelUrl, // Critical: pass the real Cloudinary URL
+                            modelUrl: item.modelUrl,
                             price: item.price,
                             capacity: item.capacity,
                             location: item.location
@@ -387,7 +420,6 @@ export default function AdminDashboardScreen({ navigation }) {
                 </TouchableOpacity>
             </View>
 
-            {/* NEW: Vendor Category Filter Bar */}
             {activeTab === 'vendors' && (
                 <View style={tw`mb-2`}>
                     <ScrollView
@@ -466,12 +498,12 @@ export default function AdminDashboardScreen({ navigation }) {
             </Modal>
 
             <Modal visible={modalVisible} animationType="fade" transparent>
-                <View style={tw`flex-1 bg-black/50 justify-center items-center px-6`}>
+                <View style={tw`flex-1 bg-black/50 justify-center items-center px-6 py-10`}>
                     <KeyboardAvoidingView
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         style={tw`w-full`}
                     >
-                        <View style={tw`bg-white rounded-[32px] w-full max-h-[85%] overflow-hidden shadow-2xl`}>
+                        <View style={tw`bg-white rounded-[32px] w-full max-h-[90%] overflow-hidden shadow-2xl`}>
                             <ScrollView contentContainerStyle={tw`p-6 pb-12`}>
                                 <View style={tw`flex-row justify-between mb-6`}>
                                     <CustomText style={tw`text-xl font-bold`}>{isEditing ? "Edit Venue" : "New Venue"}</CustomText>
@@ -495,6 +527,37 @@ export default function AdminDashboardScreen({ navigation }) {
                                     value={newDescription}
                                     onChangeText={setNewDescription}
                                 />
+
+                                {/* AMENITIES SECTION */}
+                                <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Amenities</CustomText>
+                                <View style={tw`flex-row items-center`}>
+                                    <TextInput 
+                                        style={[styles.input, tw`flex-1 mr-2`]} 
+                                        placeholder="E.g., WiFi, Parking, Catering" 
+                                        value={currentAmenity} 
+                                        onChangeText={setCurrentAmenity}
+                                        onSubmitEditing={handleAddAmenity}
+                                    />
+                                    <TouchableOpacity 
+                                        style={tw`bg-[#00686F] w-12 h-12 rounded-xl items-center justify-center shadow-sm`}
+                                        onPress={handleAddAmenity}
+                                    >
+                                        <Ionicons name="add" size={24} color="#FFF" />
+                                    </TouchableOpacity>
+                                </View>
+
+                                {amenities.length > 0 && (
+                                    <View style={tw`flex-row flex-wrap mt-3`}>
+                                        {amenities.map((item, index) => (
+                                            <View key={index} style={tw`flex-row items-center bg-[#F0F9FA] px-3 py-1.5 rounded-full mr-2 mb-2 border border-[#E0F2F3]`}>
+                                                <CustomText style={tw`text-[#00686F] text-xs font-bold mr-1`}>{item}</CustomText>
+                                                <TouchableOpacity onPress={() => handleRemoveAmenity(index)}>
+                                                    <Ionicons name="close-circle" size={16} color="#00686F" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
 
                                 <CustomText style={tw`text-xs font-bold text-slate-400 mt-4 mb-2 uppercase`}>Contact Details</CustomText>
                                 <TextInput style={styles.input} placeholder="Contact Number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
