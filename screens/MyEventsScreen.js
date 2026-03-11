@@ -91,10 +91,14 @@ export default function MyEventsScreen({ navigation }) {
     const [refreshing, setRefreshing] = useState(false);
     const [activeFilter, setActiveFilter] = useState('all');
     const [search, setSearch] = useState('');
-    const [calendarVisible, setCalendarVisible] = useState(true);
+    
+    // 🔥 Calendar now starts collapsed (false)
+    const [calendarVisible, setCalendarVisible] = useState(false);
     const [calendarDate, setCalendarDate] = useState(new Date());
     const [selectedDay, setSelectedDay] = useState(null);
-    const calendarAnim = useRef(new Animated.Value(1)).current;
+    
+    // 🔥 Animation starts at 0 to hide the calendar initially
+    const calendarAnim = useRef(new Animated.Value(0)).current;
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     const toggleCalendar = () => {
@@ -448,18 +452,12 @@ export default function MyEventsScreen({ navigation }) {
 // --- SUB-COMPONENTS ---
 
 // ── EVENT CALENDAR ───────────────────────────────────────────
-const EventCalendar = ({ events: allEvents, eventsByDate, calendarDate, setCalendarDate, selectedDay, setSelectedDay }) => {
+const EventCalendar = ({ eventsByDate, calendarDate, setCalendarDate, selectedDay, setSelectedDay }) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const year  = calendarDate.getFullYear();
     const month = calendarDate.getMonth();
-
-    // Only upcoming events shown on calendar
-    const upcomingEvents = allEvents.filter(e => {
-        const end = parseDateToObj(e.endDate) || parseDateToObj(e.startDate);
-        return end && end.getTime() >= today.getTime();
-    });
 
     // Build grid
     const firstDayOfMonth = new Date(year, month, 1).getDay();
@@ -483,14 +481,11 @@ const EventCalendar = ({ events: allEvents, eventsByDate, calendarDate, setCalen
 
     const cellSize = Math.floor((SCREEN_WIDTH - 40 - 32) / 7);
 
-    // Upcoming events on selected day (for popup)
+    // Fetch ALL events (past & upcoming) on the selected day for the popup
     const selectedDayEvents = selectedDay
         ? (() => {
             const key = `${selectedDay.getFullYear()}-${selectedDay.getMonth()}-${selectedDay.getDate()}`;
-            return (eventsByDate[key] || []).filter(e => {
-                const end = parseDateToObj(e.endDate) || parseDateToObj(e.startDate);
-                return end && end.getTime() >= today.getTime();
-            });
+            return eventsByDate[key] || [];
         })()
         : [];
 
@@ -555,7 +550,7 @@ const EventCalendar = ({ events: allEvents, eventsByDate, calendarDate, setCalen
                 </View>
 
                 {/* Day-of-week headers */}
-                <View style={{ flexDirection: 'row', marginBottom: 6 }}>
+                <View style={{ flexDirection: 'row', marginBottom: 10 }}>
                     {DAYS_OF_WEEK.map(d => (
                         <View key={d} style={{ width: cellSize, alignItems: 'center' }}>
                             <CustomText fontFamily="bold" style={{ color: '#94A3B8', fontSize: 10, letterSpacing: 0.5 }}>
@@ -568,70 +563,14 @@ const EventCalendar = ({ events: allEvents, eventsByDate, calendarDate, setCalen
                 {/* Calendar grid — 6 rows × 7 cols */}
                 {Array.from({ length: 6 }).map((_, rowIdx) => {
                     const rowCells = cells.slice(rowIdx * 7, rowIdx * 7 + 7);
-
-                    // Only upcoming multi-day spans
-                    const multiDaySpans = [];
-                    const seenIds = new Set();
-
-                    upcomingEvents.forEach(e => {
-                        if (!e.isMultiDay || !e.endDate) return;
-                        const evStart = parseDateToObj(e.startDate);
-                        const evEnd   = parseDateToObj(e.endDate);
-                        if (!evStart || !evEnd) return;
-
-                        // Find which cols in this row this event occupies
-                        let colStart = -1, colEnd = -1;
-                        rowCells.forEach((cell, ci) => {
-                            if (cell.outside) return;
-                            if (cell.date >= evStart && cell.date <= evEnd) {
-                                if (colStart === -1) colStart = ci;
-                                colEnd = ci;
-                            }
-                        });
-                        if (colStart === -1) return;
-                        if (seenIds.has(e.id)) return;
-                        seenIds.add(e.id);
-
-                        // Is this the true first/last day of the event?
-                        const isFirstDay = rowCells[colStart]?.date?.getTime() === evStart.getTime();
-                        const isLastDay  = rowCells[colEnd]?.date?.getTime() === evEnd.getTime();
-
-                        multiDaySpans.push({
-                            id: e.id,
-                            color: getEventColor(e.eventType),
-                            colStart,
-                            colEnd,
-                            isFirstDay,
-                            isLastDay,
-                            title: e.title,
-                        });
-                    });
-
-                    const BAR_HEIGHT = 14;
-                    const BAR_GAP    = 2;
-                    const visibleSpans = multiDaySpans.slice(0, 2);
-                    const rowHasBars   = visibleSpans.length > 0;
-                    const barsHeight   = rowHasBars ? visibleSpans.length * (BAR_HEIGHT + BAR_GAP) + 4 : 0;
-
                     return (
-                        <View key={rowIdx} style={{ marginBottom: 2 }}>
-                            {/* Day number row */}
+                        <View key={rowIdx} style={{ marginBottom: 6 }}>
                             <View style={{ flexDirection: 'row' }}>
                                 {rowCells.map((cell, colIdx) => {
                                     const { date, outside } = cell;
                                     const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
                                     const eventsOnDay = eventsByDate[dateKey] || [];
                                     const isPastDay = !outside && date.getTime() < today.getTime();
-
-                                    // Only upcoming single-day events get dots
-                                    const upcomingOnDay = eventsOnDay.filter(e => {
-                                        const end = parseDateToObj(e.endDate) || parseDateToObj(e.startDate);
-                                        return end && end.getTime() >= today.getTime();
-                                    });
-                                    const singleDayUpcoming = upcomingOnDay.filter(e => !e.isMultiDay || !e.endDate);
-                                    const dotColors = [...new Map(
-                                        singleDayUpcoming.map(e => [e.eventType, getEventColor(e.eventType)])
-                                    ).values()].slice(0, 3);
 
                                     const isToday =
                                         date.getFullYear() === today.getFullYear() &&
@@ -643,110 +582,46 @@ const EventCalendar = ({ events: allEvents, eventsByDate, calendarDate, setCalen
                                         date.getMonth()    === selectedDay.getMonth() &&
                                         date.getDate()     === selectedDay.getDate();
 
+                                    const hasEvent = !outside && eventsOnDay.length > 0;
+
                                     return (
                                         <TouchableOpacity
                                             key={colIdx}
                                             onPress={() => !outside && setSelectedDay(date)}
                                             activeOpacity={outside ? 1 : 0.7}
-                                            style={{ width: cellSize, alignItems: 'center', paddingTop: 3, paddingBottom: 2 }}
+                                            style={{ width: cellSize, alignItems: 'center', paddingTop: 3, paddingBottom: 3 }}
                                         >
-                                            {/* Day number circle */}
                                             <View style={{
-                                                width: 28, height: 28, borderRadius: 14,
+                                                width: 32, height: 32, borderRadius: 16,
                                                 alignItems: 'center', justifyContent: 'center',
                                                 backgroundColor: isSelected ? BRAND.primary
-                                                    : isToday ? BRAND.primaryMid : 'transparent',
-                                                borderWidth: isToday && !isSelected ? 1.5 : 0,
-                                                borderColor: BRAND.primary,
+                                                    : isToday ? BRAND.primaryMid
+                                                    : hasEvent ? BRAND.primaryFaint : 'transparent',
+                                                borderWidth: isToday && !isSelected ? 1.5 : (hasEvent && !isSelected ? 1 : 0),
+                                                borderColor: isToday ? BRAND.primary : (hasEvent ? '#B2DEDE' : 'transparent'),
                                             }}>
                                                 <CustomText
-                                                    fontFamily={isToday || isSelected ? 'bold' : 'medium'}
+                                                    fontFamily={isToday || isSelected || hasEvent ? 'bold' : 'medium'}
                                                     style={{
-                                                        fontSize: 12,
+                                                        fontSize: 13,
                                                         color: isSelected ? '#FFF'
                                                             : outside ? '#CBD5E1'
-                                                            : isPastDay ? '#CBD5E1'
+                                                            : isPastDay && !hasEvent ? '#CBD5E1'
                                                             : isToday ? BRAND.primary
+                                                            : hasEvent ? BRAND.primaryDark
                                                             : '#334155',
                                                     }}
                                                 >
                                                     {date.getDate()}
                                                 </CustomText>
                                             </View>
-
-                                            {/* Upcoming event dots */}
-                                            {dotColors.length > 0 && !outside && (
-                                                <View style={{ flexDirection: 'row', marginTop: 2, gap: 2 }}>
-                                                    {dotColors.map((color, i) => (
-                                                        <View key={i} style={{
-                                                            width: isSelected ? 5 : 4,
-                                                            height: isSelected ? 5 : 4,
-                                                            borderRadius: 3,
-                                                            backgroundColor: isSelected ? '#FFF' : color,
-                                                        }} />
-                                                    ))}
-                                                </View>
-                                            )}
                                         </TouchableOpacity>
                                     );
                                 })}
                             </View>
-
-                            {/* Multi-day span bars */}
-                            {rowHasBars && (
-                                <View style={{ paddingHorizontal: 0, marginBottom: 2 }}>
-                                    {visibleSpans.map((span, laneIdx) => {
-                                        const barLeft  = span.colStart * cellSize;
-                                        const barWidth = (span.colEnd - span.colStart + 1) * cellSize;
-                                        const isFirst  = span.isFirstDay;
-                                        const isLast   = span.isLastDay;
-                                        const top      = laneIdx * (BAR_HEIGHT + BAR_GAP);
-
-                                        return (
-                                            <TouchableOpacity
-                                                key={span.id}
-                                                onPress={() => {
-                                                    const e = upcomingEvents.find(ev => ev.id === span.id);
-                                                    if (e) setSelectedDay(parseDateToObj(e.startDate));
-                                                }}
-                                                activeOpacity={0.75}
-                                                style={{
-                                                    position: 'absolute',
-                                                    top,
-                                                    left: barLeft + (isFirst ? 3 : 0),
-                                                    width: barWidth - (isFirst ? 3 : 0) - (isLast ? 3 : 0),
-                                                    height: BAR_HEIGHT,
-                                                    backgroundColor: span.color,
-                                                    borderTopLeftRadius:     isFirst ? 7 : 0,
-                                                    borderBottomLeftRadius:  isFirst ? 7 : 0,
-                                                    borderTopRightRadius:    isLast  ? 7 : 0,
-                                                    borderBottomRightRadius: isLast  ? 7 : 0,
-                                                    justifyContent: 'center',
-                                                    paddingHorizontal: 5,
-                                                    overflow: 'hidden',
-                                                    opacity: 0.88,
-                                                }}
-                                            >
-                                                {isFirst && (
-                                                    <CustomText
-                                                        fontFamily="bold"
-                                                        numberOfLines={1}
-                                                        style={{ color: '#FFF', fontSize: 8, letterSpacing: 0.2 }}
-                                                    >
-                                                        {span.title}
-                                                    </CustomText>
-                                                )}
-                                            </TouchableOpacity>
-                                        );
-                                    })}
-                                    {/* Spacer so bars don't overlap next row */}
-                                    <View style={{ height: barsHeight }} />
-                                </View>
-                            )}
                         </View>
                     );
                 })}
-
 
                 {/* ── SELECTED DAY EVENT POPUP ─────────────── */}
                 {selectedDay && selectedDayEvents.length > 0 && (
@@ -772,23 +647,39 @@ const EventCalendar = ({ events: allEvents, eventsByDate, calendarDate, setCalen
                                 </CustomText>
                             </View>
                         </View>
+                        
                         {selectedDayEvents.map((e, i) => {
                             const color = getEventColor(e.eventType);
+                            const timeLabel = typeof e.startTime === 'string' && e.startTime.trim() !== '' ? e.startTime : 'Time TBD';
+                            
                             return (
                                 <View key={e.id} style={{
                                     flexDirection: 'row', alignItems: 'center',
-                                    paddingHorizontal: 12, paddingVertical: 8,
+                                    paddingHorizontal: 12, paddingVertical: 10,
                                     borderTopWidth: i === 0 ? 0 : 1,
                                     borderTopColor: BRAND.primaryMid,
                                 }}>
                                     <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: color, marginRight: 10 }} />
-                                    <CustomText fontFamily="semibold" style={{ flex: 1, color: '#1E293B', fontSize: 12 }} numberOfLines={1}>
-                                        {e.title}
-                                    </CustomText>
+                                    
+                                    <View style={{ flex: 1 }}>
+                                        <CustomText fontFamily="semibold" style={{ color: '#1E293B', fontSize: 13 }} numberOfLines={1}>
+                                            {e.title}
+                                        </CustomText>
+                                        
+                                        {/* 🔥 Added Time Label inside the popup */}
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+                                            <Ionicons name="time-outline" size={11} color="#64748B" />
+                                            <CustomText fontFamily="medium" style={{ color: '#64748B', fontSize: 11, marginLeft: 3 }}>
+                                                {timeLabel}
+                                            </CustomText>
+                                        </View>
+                                    </View>
+                                    
                                     <View style={{
                                         backgroundColor: color + '20', borderRadius: 8,
                                         paddingHorizontal: 8, paddingVertical: 3,
                                         borderWidth: 1, borderColor: color + '40',
+                                        marginLeft: 10,
                                     }}>
                                         <CustomText fontFamily="bold" style={{ color, fontSize: 9 }}>
                                             {e.eventType || 'Event'}
@@ -799,45 +690,6 @@ const EventCalendar = ({ events: allEvents, eventsByDate, calendarDate, setCalen
                         })}
                     </View>
                 )}
-
-                {/* ── LEGEND ────────────────────────────────── */}
-                <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' }}>
-                    <CustomText fontFamily="bold" style={{ color: '#94A3B8', fontSize: 9, letterSpacing: 1.2, marginBottom: 8 }}>
-                        EVENT TYPES
-                    </CustomText>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                        {Object.entries(EVENT_TYPE_COLORS).map(([type, color]) => {
-                            const count = upcomingEvents.filter(e => getEventColor(e.eventType) === color).length;
-                            return (
-                                <View key={type} style={{
-                                    flexDirection: 'row', alignItems: 'center',
-                                    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-                                    backgroundColor: color + '14', borderWidth: 1, borderColor: color + '35',
-                                }}>
-                                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color, marginRight: 5 }} />
-                                    <CustomText fontFamily="semibold" style={{ color, fontSize: 11 }}>{type}</CustomText>
-                                    {count > 0 && (
-                                        <View style={{ marginLeft: 5, backgroundColor: color + '25', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 }}>
-                                            <CustomText fontFamily="bold" style={{ color, fontSize: 9 }}>{count}</CustomText>
-                                        </View>
-                                    )}
-                                </View>
-                            );
-                        })}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: '#64748B14', borderWidth: 1, borderColor: '#64748B35' }}>
-                            <View style={{ width: 16, height: 7, borderRadius: 4, backgroundColor: '#64748B', marginRight: 5 }} />
-                            <CustomText fontFamily="semibold" style={{ color: '#64748B', fontSize: 11 }}>Multi-day</CustomText>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: BRAND.primaryFaint, borderWidth: 1.5, borderColor: BRAND.primary }}>
-                            <View style={{ width: 7, height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: BRAND.primary, marginRight: 5 }} />
-                            <CustomText fontFamily="semibold" style={{ color: BRAND.primary, fontSize: 11 }}>Today</CustomText>
-                        </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, backgroundColor: BRAND.primary }}>
-                            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFF', marginRight: 5 }} />
-                            <CustomText fontFamily="semibold" style={{ color: '#FFF', fontSize: 11 }}>Selected</CustomText>
-                        </View>
-                    </View>
-                </View>
 
             </View>
         </View>

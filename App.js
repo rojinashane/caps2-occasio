@@ -22,6 +22,8 @@ import ProfileScreen from './screens/ProfileScreen';
 import RSVPTrackerScreen from './screens/RSVPTrackerScreen';
 import MyEventsScreen from './screens/MyEventsScreen';
 import VendorScreen from './screens/VendorScreen';
+import Vendorpicker from './components/Vendorpicker';
+
 
 // NEW: Services & AR Screens
 import NotificationService from './services/NotificationService';
@@ -100,6 +102,7 @@ export default function App() {
             <Stack.Screen name="VenueDetails" component={VenueDetailsScreen} />
             <Stack.Screen name="ARVenue" component={ARVenueScreen} />
             <Stack.Screen name="Venuepicker" component={Venuepicker} />
+            <Stack.Screen name="Vendorpicker" component={Vendorpicker} />
           </Stack.Navigator>
         </NavigationContainer>
       </GestureHandlerRootView>

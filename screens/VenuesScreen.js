@@ -369,39 +369,33 @@ export default function VenuesScreen({ navigation }) {
                     borderBottomColor: '#E8EEF4',
                 }}
             >
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                     <TouchableOpacity
                         onPress={() => navigation.goBack()}
                         style={{
-                            width: 40, height: 40, borderRadius: 14,
+                            width: 40, height: 40, borderRadius: 20,
                             backgroundColor: BRAND.primaryMid,
                             alignItems: 'center', justifyContent: 'center',
-                            marginRight: 12,
-                            borderWidth: 1, borderColor: BRAND.primary + '28',
+                            borderWidth: 1, borderColor: BRAND.primary + '30',
                         }}
                     >
                         <Ionicons name="chevron-back" size={20} color={BRAND.primary} />
                     </TouchableOpacity>
 
-                    <View style={{ flex: 1 }}>
-                        <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 10, letterSpacing: 2 }}>
+                    <View style={{ alignItems: 'center' }}>
+                        <CustomText fontFamily="extrabold" style={{ color: BRAND.primary, fontSize: 11, letterSpacing: 1.5 }}>
                             OCCASIO
                         </CustomText>
-                        <CustomText fontFamily="extrabold" style={{ color: '#0F172A', fontSize: 22, lineHeight: 26 }}>
+                        <CustomText fontFamily="extrabold" style={{ color: '#0F172A', fontSize: 18 }}>
                             Venues
                         </CustomText>
                     </View>
 
-                    {!loading && (
-                        <View style={{
-                            backgroundColor: BRAND.primaryDark,
-                            borderRadius: 12, paddingHorizontal: 12, paddingVertical: 6,
-                        }}>
-                            <CustomText fontFamily="extrabold" style={{ color: '#FFF', fontSize: 14 }}>
-                                {allVenues.length}
-                            </CustomText>
-                        </View>
-                    )}
+                    <View style={{ paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, backgroundColor: BRAND.primaryMid }}>
+                        <CustomText fontFamily="bold" style={{ color: BRAND.primary, fontSize: 13 }}>
+                            {venues.length}
+                        </CustomText>
+                    </View>
                 </View>
 
                 {/* Search */}

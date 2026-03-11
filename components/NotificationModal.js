@@ -8,7 +8,7 @@ import { db, auth } from '../firebase';
 import {
     collection, query, where, onSnapshot,
     doc, updateDoc, arrayUnion, deleteDoc,
-    addDoc, getDoc, getDocs, serverTimestamp, limit
+    addDoc, getDoc, getDocs, serverTimestamp, limit, writeBatch
 } from 'firebase/firestore';
 import CustomText from './CustomText';
 import tw from 'twrnc';
@@ -137,6 +137,31 @@ export default function NotificationModal({ visible, onClose }) {
 
         return () => unsubscribe();
     }, []); // Removed `visible` from dependency array so it listens in background 
+
+    // Mark all unviewed notifications as viewed when modal opens
+    useEffect(() => {
+        if (!visible || !auth.currentUser) return;
+        const markAllViewed = async () => {
+            try {
+                const uid = auth.currentUser.uid;
+                const snap = await getDocs(
+                    query(
+                        collection(db, 'notifications'),
+                        where('recipientId', '==', uid),
+                        where('status', '==', 'pending'),
+                        where('viewed', '==', false)
+                    )
+                );
+                if (snap.empty) return;
+                const batch = writeBatch(db);
+                snap.docs.forEach(d => batch.update(d.ref, { viewed: true }));
+                await batch.commit();
+            } catch (e) {
+                console.error('markAllViewed error:', e);
+            }
+        };
+        markAllViewed();
+    }, [visible]);
 
     const handleAccept = async (notif) => {
         try {

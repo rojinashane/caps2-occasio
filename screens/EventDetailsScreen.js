@@ -15,6 +15,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as DocumentPicker from 'expo-document-picker';
 import CustomText from '../components/CustomText';
 import CustomModal from '../components/CustomModal';
+import VendorPicker from '../components/Vendorpicker';
 import { useFocusEffect } from '@react-navigation/native';
 import { Swipeable, ScrollView } from 'react-native-gesture-handler';
 import tw from 'twrnc';
@@ -133,6 +134,16 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [pickerHour, setPickerHour]   = useState(new Date().getHours());
     const [pickerMinute, setPickerMinute] = useState(0);
 
+    // ── Vendor Picker State ────────────────────────────────────────────────────
+    const [pinnedVendors, setPinnedVendors] = useState([]);
+    const [vendorPickerVisible, setVendorPickerVisible] = useState(false);
+    const [pinnedVendorsModalVisible, setPinnedVendorsModalVisible] = useState(false);
+
+    // ── Occasio Suggests State ─────────────────────────────────────────────────
+    const [suggestionsVisible, setSuggestionsVisible] = useState(false);
+    const [suggestions, setSuggestions] = useState(null);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
     // ── Scroll navigation refs ─────────────────────────────────────────────────
     const mainScrollRef = useRef(null);
     const overviewRef   = useRef(null);
@@ -193,6 +204,7 @@ export default function EventDetailsScreen({ route, navigation }) {
                         setEventData(data);
                         if (data.columns) setColumns(data.columns);
                         if (data.invitationFile) setInvitationFile(data.invitationFile);
+                        if (data.pinnedVendors) setPinnedVendors(data.pinnedVendors);
                         // Fetch owner's display name
                         if (data.userId) {
                             try {
@@ -362,6 +374,110 @@ export default function EventDetailsScreen({ route, navigation }) {
         }
     };
 
+    // ── Vendor Helpers ─────────────────────────────────────────────────────────
+    const syncPinnedVendors = async (updated) => {
+        try {
+            await updateDoc(doc(db, 'events', eventId), { pinnedVendors: updated });
+        } catch (e) {
+            console.error('Vendor sync error:', e);
+        }
+    };
+
+    const pinVendor = async (vendor) => {
+        if (pinnedVendors.find(v => v.id === vendor.id)) return;
+        const updated = [...pinnedVendors, vendor];
+        setPinnedVendors(updated);
+        await syncPinnedVendors(updated);
+    };
+
+    const unpinVendor = async (vendorId) => {
+        const updated = pinnedVendors.filter(v => v.id !== vendorId);
+        setPinnedVendors(updated);
+        await syncPinnedVendors(updated);
+    };
+
+   // ── Occasio Suggests ───────────────────────────────────────────────────────
+// ── Occasio Suggests (Strict Sorsogon City Only) ───────────────────────────
+    const fetchSuggestions = async () => {
+        setLoadingSuggestions(true);
+        setSuggestions(null);
+        
+        try {
+            // Flatten your kanban columns to get the task names
+            const allTasks = columns.flatMap(c => (c.tasks || []).map(t => t.text || t.title)).filter(Boolean);
+            
+            // 🔥 The Strict Location + Factual Services Verification Prompt
+            const prompt = `You are an expert local event planning assistant for "Occasio", an app exclusively for planning events in Sorsogon City proper, Philippines.
+
+Based on this event, suggest specific vendors and venues located STRICTLY within the borders of Sorsogon City:
+
+Event: "${eventData?.title || 'Event'}"
+Type: ${eventData?.eventType || 'General event'}
+Date: ${formatDate(eventData?.startDate)}
+Location: Sorsogon City, Philippines (City proper ONLY)
+Theme: ${eventData?.theme || 'Not specified'}
+Description: ${eventData?.description || 'Not provided'}
+Planning tasks: ${allTasks.length > 0 ? allTasks.slice(0, 10).join(', ') : 'None yet'}
+
+Respond ONLY with a valid JSON object (no markdown, no backticks):
+{
+  "summary": "1-2 sentence overview of your Sorsogon City recommendations",
+  "categories": [
+    {
+      "name": "Category name (e.g. Catering, Photography, Venues)",
+      "icon": "restaurant-outline",
+      "tips": "2-3 sentence advice for this category for this event type",
+      "vendors": [
+        { "name": "Vendor/Venue Name", "why": "Short factual reason (1 sentence)", "note": "Practical tip based on their real services" }
+      ]
+    }
+  ]
+}
+
+Provide 4-5 categories, each with 2-3 vendor/venue suggestions. Use Ionicons icon names. 
+
+CRITICAL RULES:
+1. STRICT LOCATION: You MUST ONLY suggest real, existing businesses, venues, and vendors that are actually located strictly within Sorsogon City itself. DO NOT suggest vendors from other municipalities in Sorsogon Province (absolutely NO vendors from Gubat, Casiguran, Castilla, Bulan, Matnog, Donsol, Irosin, Juban, Magallanes, Pilar, etc.).
+2. FACTUAL SERVICES: You MUST accurately describe the true services offered by the vendor. Categorize them strictly according to their primary real-world business (e.g., do not put a hotel in the Photography category). Do not invent, guess, or exaggerate their services. If you are unsure of a business's exact services or location, DO NOT include them.`;
+
+            // 🛑 Insert your NEW, secure Groq API key here
+            const GROQ_API_KEY = '';
+
+            const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${GROQ_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'llama-3.3-70b-versatile', 
+                    messages: [{ role: 'user', content: prompt }],
+                    response_format: { type: "json_object" } 
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                console.error('Groq API error:', res.status, JSON.stringify(data));
+                setSuggestions({ error: true, message: data.error?.message || `Status ${res.status}` });
+                return;
+            }
+
+            // Extract the generated text and clean any potential markdown
+            const text = data.choices[0].message.content;
+            const clean = text.replace(/```json|```/g, '').trim();
+            
+            // Parse the JSON string into a JavaScript object and save it to state
+            setSuggestions(JSON.parse(clean));
+            
+        } catch (e) {
+            console.error('fetchSuggestions failed:', e);
+            setSuggestions({ error: true, message: e.message });
+        } finally {
+            setLoadingSuggestions(false);
+        }
+    };
     // ── Actions ────────────────────────────────────────────────────────────────
     const handleShareInvitation = async () => {
         const link = `https://occasio-866c3.web.app/index.html?id=${eventId}`;
@@ -892,30 +1008,6 @@ export default function EventDetailsScreen({ route, navigation }) {
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}
                         >
-                            {/* Overview tab */}
-                            <TouchableOpacity
-                                onPress={() => {
-                                    // scroll to overview — handled by ref below
-                                    overviewRef.current?.scrollTo({ y: 0, animated: true });
-                                    mainScrollRef.current?.scrollTo({ y: 0, animated: true });
-                                }}
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingHorizontal: 14,
-                                    paddingVertical: 7,
-                                    borderRadius: 20,
-                                    backgroundColor: '#00686F',
-                                    shadowColor: '#00686F',
-                                    shadowOpacity: 0.35,
-                                    shadowRadius: 6,
-                                    shadowOffset: { width: 0, height: 2 },
-                                    elevation: 4,
-                                }}
-                            >
-                                <Ionicons name="grid-outline" size={12} color="#FFF" />
-                                <CustomText style={{ color: '#FFF', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>Overview</CustomText>
-                            </TouchableOpacity>
 
                             {/* + New List tab */}
                             {isOwner && !isPastEvent && (
@@ -942,47 +1034,46 @@ export default function EventDetailsScreen({ route, navigation }) {
                                 </TouchableOpacity>
                             )}
 
-                            {/* List tabs */}
-                            {columns.map((col) => {
-                                const done = col.tasks?.filter(t => t.completed).length || 0;
-                                const tot  = col.tasks?.length || 0;
-                                const pct  = tot > 0 ? Math.round((done / tot) * 100) : 0;
-                                return (
-                                    <TouchableOpacity
-                                        key={col.id}
-                                        onPress={() => {
-                                            const idx = columns.indexOf(col);
-                                            sectionRefs.current[idx]?.scrollIntoView?.();
-                                            // RN equivalent: scroll main to that section
-                                            sectionOffsets.current[col.id] && mainScrollRef.current?.scrollTo({
-                                                y: sectionOffsets.current[col.id],
-                                                animated: true
-                                            });
-                                        }}
-                                        style={{
-                                            flexDirection: 'row',
-                                            alignItems: 'center',
-                                            paddingHorizontal: 14,
-                                            paddingVertical: 7,
-                                            borderRadius: 20,
-                                            backgroundColor: '#F4F6F9',
-                                            borderWidth: 1,
-                                            borderColor: '#E8ECF0',
-                                        }}
-                                    >
-                                        <CustomText style={{ color: '#475569', fontSize: 12, fontWeight: '700' }}>{col.title}</CustomText>
-                                        {tot > 0 && (
-                                            <View style={{ marginLeft: 6, backgroundColor: pct === 100 ? '#D1FAE5' : '#E8F5F5', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 }}>
-                                                <CustomText style={{ color: pct === 100 ? '#059669' : '#00686F', fontSize: 10, fontWeight: '800' }}>
-                                                    {pct}%
-                                                </CustomText>
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                );
-                            })}
+                            {/* Vendors tab */}
+                            <TouchableOpacity
+                                onPress={() => setPinnedVendorsModalVisible(true)}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 7,
+                                    borderRadius: 20,
+                                    backgroundColor: '#F0F9F9',
+                                    borderWidth: 1,
+                                    borderColor: '#99D6D9',
+                                }}
+                            >
+                                <Ionicons name="storefront-outline" size={12} color="#00686F" />
+                                <CustomText style={{ color: '#00686F', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>Vendors</CustomText>
+                                {pinnedVendors.length > 0 && (
+                                    <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#00686F', alignItems: 'center', justifyContent: 'center', marginLeft: 5 }}>
+                                        <CustomText style={{ color: '#FFF', fontSize: 9, fontWeight: '800' }}>{pinnedVendors.length}</CustomText>
+                                    </View>
+                                )}
+                            </TouchableOpacity>
 
-                            
+                            {/* Occasio Suggests tab */}
+                            <TouchableOpacity
+                                onPress={() => { setSuggestionsVisible(true); if (!suggestions) fetchSuggestions(); }}
+                                style={{
+                                    flexDirection: 'row',
+                                    alignItems: 'center',
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 7,
+                                    borderRadius: 20,
+                                    backgroundColor: '#FFF7ED',
+                                    borderWidth: 1,
+                                    borderColor: '#FED7AA',
+                                }}
+                            >
+                                <Ionicons name="sparkles" size={12} color="#F97316" />
+                                <CustomText style={{ color: '#F97316', fontSize: 12, fontWeight: '700', marginLeft: 5 }}>Occasio Suggests</CustomText>
+                            </TouchableOpacity>
                         </ScrollView>
                     </View>
                 </View>
@@ -1407,6 +1498,250 @@ export default function EventDetailsScreen({ route, navigation }) {
                     })}
 
                 </ScrollView>
+
+                {/* ═══════════════════════════════════════════════════════════════
+                    OCCASIO SUGGESTS BOTTOM SHEET
+                ═══════════════════════════════════════════════════════════════ */}
+                <Modal visible={suggestionsVisible} transparent animationType="slide" onRequestClose={() => setSuggestionsVisible(false)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+                        <View style={{ backgroundColor: '#FFF', borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '88%', paddingBottom: 36 }}>
+                            {/* Handle */}
+                            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#E2E8F0', alignSelf: 'center', marginTop: 12 }} />
+
+                            {/* Header */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#FEF3C7' }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <View style={{ width: 40, height: 40, borderRadius: 14, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                        <Ionicons name="sparkles" size={20} color="#F97316" />
+                                    </View>
+                                    <View>
+                                        <CustomText style={{ color: '#F97316', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 }}>AI POWERED</CustomText>
+                                        <CustomText style={{ color: '#0F172A', fontSize: 17, fontWeight: '800' }}>Occasio Suggests</CustomText>
+                                    </View>
+                                </View>
+                                <View style={{ flexDirection: 'row', gap: 8 }}>
+                                    <TouchableOpacity
+                                        onPress={fetchSuggestions}
+                                        style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center' }}
+                                    >
+                                        <Ionicons name="refresh-outline" size={16} color="#F97316" />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => setSuggestionsVisible(false)}
+                                        style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' }}
+                                    >
+                                        <Ionicons name="close" size={18} color="#64748B" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20 }}>
+                                {loadingSuggestions ? (
+                                    <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+                                        <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                                            <ActivityIndicator size="large" color="#F97316" />
+                                        </View>
+                                        <CustomText style={{ color: '#0F172A', fontSize: 15, fontWeight: '700', marginBottom: 6 }}>Curating suggestions…</CustomText>
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>Analyzing your event details and tasks</CustomText>
+                                    </View>
+                                ) : suggestions?.error ? (
+                                    <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                                        <Ionicons name="cloud-offline-outline" size={40} color="#CBD5E1" />
+                                        <CustomText style={{ color: '#64748B', fontSize: 14, fontWeight: '600', marginTop: 12, marginBottom: 4 }}>Couldn't load suggestions</CustomText>
+                                        {suggestions.message ? (
+                                            <CustomText style={{ color: '#94A3B8', fontSize: 11, marginBottom: 16, textAlign: 'center', paddingHorizontal: 20 }}>{suggestions.message}</CustomText>
+                                        ) : <View style={{ marginBottom: 16 }} />}
+                                        <TouchableOpacity
+                                            onPress={fetchSuggestions}
+                                            style={{ backgroundColor: '#F97316', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 16 }}
+                                        >
+                                            <CustomText style={{ color: '#FFF', fontWeight: '800', fontSize: 14 }}>Try Again</CustomText>
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : suggestions ? (
+                                    <>
+                                        {/* Summary pill */}
+                                        <View style={{ backgroundColor: '#FFF7ED', borderRadius: 16, padding: 14, marginBottom: 18, borderWidth: 1, borderColor: '#FED7AA' }}>
+                                            <CustomText style={{ color: '#92400E', fontSize: 13, fontWeight: '600', lineHeight: 20 }}>{suggestions.summary}</CustomText>
+                                        </View>
+
+                                        {/* Categories */}
+                                        {(suggestions.categories || []).map((cat, ci) => (
+                                            <View key={ci} style={{ marginBottom: 18 }}>
+                                                {/* Category header */}
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                                                    <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: '#FFF7ED', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                                                        <Ionicons name={cat.icon || 'star-outline'} size={16} color="#F97316" />
+                                                    </View>
+                                                    <CustomText style={{ color: '#0F172A', fontSize: 14, fontWeight: '800' }}>{cat.name}</CustomText>
+                                                </View>
+                                                {/* Tips */}
+                                                {cat.tips ? (
+                                                    <CustomText style={{ color: '#64748B', fontSize: 12, fontWeight: '500', lineHeight: 18, marginBottom: 10, paddingLeft: 42 }}>{cat.tips}</CustomText>
+                                                ) : null}
+                                                {/* Vendor cards */}
+                                                {(cat.vendors || []).map((v, vi) => (
+                                                    <View key={vi} style={{ backgroundColor: '#FAFAFA', borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: '#F1F5F9' }}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                                                            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#F97316', marginRight: 8 }} />
+                                                            <CustomText style={{ color: '#1E293B', fontSize: 14, fontWeight: '700', flex: 1 }}>{v.name}</CustomText>
+                                                        </View>
+                                                        <CustomText style={{ color: '#475569', fontSize: 12, fontWeight: '500', lineHeight: 18, marginBottom: 4 }}>{v.why}</CustomText>
+                                                        {v.note ? (
+                                                            <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#E8F5F5', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
+                                                                <Ionicons name="bulb-outline" size={11} color="#00686F" style={{ marginTop: 1, marginRight: 5 }} />
+                                                                <CustomText style={{ color: '#00686F', fontSize: 11, fontWeight: '600', flex: 1 }}>{v.note}</CustomText>
+                                                            </View>
+                                                        ) : null}
+                                                    </View>
+                                                ))}
+                                            </View>
+                                        ))}
+
+                                        <CustomText style={{ color: '#CBD5E1', fontSize: 11, textAlign: 'center', marginTop: 8 }}>
+                                            Suggestions generated by AI · Always verify availability
+                                        </CustomText>
+                                    </>
+                                ) : null}
+                            </ScrollView>
+                        </View>
+                    </View>
+                </Modal>
+
+                {/* ═══════════════════════════════════════════════════════════════
+                    VENDOR PICKER — standalone component
+                ═══════════════════════════════════════════════════════════════ */}
+                <VendorPicker
+                    visible={vendorPickerVisible}
+                    onClose={() => setVendorPickerVisible(false)}
+                    pinnedVendors={pinnedVendors}
+                    onPin={pinVendor}
+                    onUnpin={unpinVendor}
+                />
+
+                {/* ═══════════════════════════════════════════════════════════════
+                    PINNED VENDORS VIEW MODAL
+                ═══════════════════════════════════════════════════════════════ */}
+                <Modal visible={pinnedVendorsModalVisible} transparent animationType="slide" onRequestClose={() => setPinnedVendorsModalVisible(false)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' }}>
+                        <View style={{ backgroundColor: '#F0F4F8', borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '80%', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 20 }}>
+                            {/* Top accent */}
+                            <View style={{ height: 4, backgroundColor: '#00686F' }} />
+
+                            {/* Handle */}
+                            <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
+                                <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: '#CBD5E1' }} />
+                            </View>
+
+                            {/* Header */}
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14 }}>
+                                <View>
+                                    <CustomText style={{ color: '#00686F', fontSize: 11, fontWeight: '900', letterSpacing: 1.5 }}>OCCASIO</CustomText>
+                                    <CustomText style={{ color: '#0F172A', fontSize: 20, fontWeight: '800' }}>Pinned Vendors</CustomText>
+                                </View>
+                                <TouchableOpacity
+                                    onPress={() => setPinnedVendorsModalVisible(false)}
+                                    style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#E0F2F3', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#00686F30' }}
+                                >
+                                    <Ionicons name="close" size={18} color="#00686F" />
+                                </TouchableOpacity>
+                            </View>
+
+                            {/* Vendor list or empty */}
+                            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}>
+                                {pinnedVendors.length === 0 ? (
+                                    <View style={{ alignItems: 'center', paddingVertical: 48 }}>
+                                        <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: '#E0F2F3', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                                            <Ionicons name="storefront-outline" size={28} color="#00686F" />
+                                        </View>
+                                        <CustomText style={{ color: '#0F172A', fontSize: 15, fontWeight: '700', marginBottom: 6 }}>No vendors pinned yet</CustomText>
+                                        <CustomText style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center', marginBottom: 20 }}>
+                                            Browse the vendor directory and pin vendors to this event.
+                                        </CustomText>
+                                        {!isPastEvent && (
+                                            <TouchableOpacity
+                                                onPress={() => { setPinnedVendorsModalVisible(false); setVendorPickerVisible(true); }}
+                                                style={{ backgroundColor: '#00686F', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 18, flexDirection: 'row', alignItems: 'center' }}
+                                            >
+                                                <Ionicons name="storefront-outline" size={15} color="#FFF" style={{ marginRight: 7 }} />
+                                                <CustomText style={{ color: '#FFF', fontSize: 14, fontWeight: '700' }}>Browse Vendors</CustomText>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                ) : (
+                                    pinnedVendors.map((vendor) => {
+                                        const CATEGORY_ICONS_LOCAL = { 'Unassigned': 'help-circle-outline', 'Attire & Accessories': 'shirt-outline', 'Beauty': 'sparkles-outline', 'Music & Show': 'musical-notes-outline', 'Photo & Video': 'camera-outline', 'Accessories': 'diamond-outline', 'Flower & Decor': 'flower-outline', 'Catering': 'restaurant-outline', 'Custom': 'person-outline' };
+                                        const iconName = CATEGORY_ICONS_LOCAL[vendor.category] || 'storefront-outline';
+                                        return (
+                                            <View key={vendor.id} style={{ backgroundColor: '#FFF', borderRadius: 20, marginBottom: 10, overflow: 'hidden', borderWidth: 2, borderColor: '#E0F2F3', shadowColor: '#00686F', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 }}>
+                                                <View style={{ height: 3, backgroundColor: '#00686F' }} />
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 13 }}>
+                                                    <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#E0F2F3', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                                        <Ionicons name={iconName} size={22} color="#00686F" />
+                                                    </View>
+                                                    <View style={{ flex: 1 }}>
+                                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                                                            <CustomText style={{ color: '#0F172A', fontSize: 14, fontWeight: '800' }} numberOfLines={1}>{vendor.name}</CustomText>
+                                                            {vendor.isCustom && (
+                                                                <View style={{ backgroundColor: '#FFF7ED', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#FED7AA' }}>
+                                                                    <CustomText style={{ color: '#F97316', fontSize: 9, fontWeight: '800' }}>CUSTOM</CustomText>
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                                            <View style={{ backgroundColor: '#F0F9FA', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 1, borderColor: '#E0F2F3' }}>
+                                                                <CustomText style={{ color: '#00686F', fontSize: 10, fontWeight: '700' }}>{vendor.category || 'Vendor'}</CustomText>
+                                                            </View>
+                                                            {vendor.phone && (
+                                                                <TouchableOpacity
+                                                                    onPress={() => Linking.openURL(`tel:${vendor.phone}`)}
+                                                                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                                                                >
+                                                                    <Ionicons name="call" size={11} color="#00686F" />
+                                                                    <CustomText style={{ color: '#00686F', fontSize: 11, fontWeight: '600', marginLeft: 3 }}>{vendor.phone}</CustomText>
+                                                                </TouchableOpacity>
+                                                            )}
+                                                            {vendor.location && (
+                                                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                                                    <Ionicons name="location" size={11} color="#94A3B8" />
+                                                                    <CustomText style={{ color: '#94A3B8', fontSize: 11, fontWeight: '500', marginLeft: 3 }} numberOfLines={1}>{vendor.location}</CustomText>
+                                                                </View>
+                                                            )}
+                                                        </View>
+                                                    </View>
+                                                    {!isPastEvent && (
+                                                        <TouchableOpacity
+                                                            onPress={() => unpinVendor(vendor.id)}
+                                                            style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginLeft: 8 }}
+                                                        >
+                                                            <Ionicons name="close" size={16} color="#EF4444" />
+                                                        </TouchableOpacity>
+                                                    )}
+                                                </View>
+                                            </View>
+                                        );
+                                    })
+                                )}
+                            </ScrollView>
+
+                            {/* Footer */}
+                            {!isPastEvent && (
+                                <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 32, borderTopWidth: 1, borderTopColor: '#E8EEF4', backgroundColor: '#F0F4F8' }}>
+                                    <TouchableOpacity
+                                        onPress={() => { setPinnedVendorsModalVisible(false); setVendorPickerVisible(true); }}
+                                        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 15, borderRadius: 18, backgroundColor: '#00686F', shadowColor: '#004E54', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 10, elevation: 5 }}
+                                    >
+                                        <Ionicons name="storefront-outline" size={17} color="#FFF" style={{ marginRight: 8 }} />
+                                        <CustomText style={{ color: '#FFF', fontSize: 15, fontWeight: '700' }}>
+                                            {pinnedVendors.length > 0 ? 'Add More Vendors' : 'Browse Vendor Directory'}
+                                        </CustomText>
+                                        <Ionicons name="arrow-forward" size={16} color="rgba(255,255,255,0.7)" style={{ marginLeft: 8 }} />
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </Modal>
 
             </SafeAreaView>
 

@@ -29,7 +29,7 @@ import {
     onSnapshot,
     or,
     where,
-    limit, // Added limit
+    limit,
 } from 'firebase/firestore';
 
 import tw from 'twrnc';
@@ -120,7 +120,8 @@ export default function DashboardScreen({ navigation }) {
         const q = query(
             collection(db, 'notifications'),
             where('recipientId', '==', user.uid),
-            where('status', '==', 'pending')
+            where('status', '==', 'pending'),
+            where('viewed', '==', false)
         );
         const unsub = onSnapshot(q, (snap) => setUnreadCount(snap.size));
         return () => unsub();
