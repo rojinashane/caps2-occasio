@@ -503,7 +503,7 @@ CRITICAL RULES:
 1. STRICT LOCATION: You MUST ONLY suggest real, existing businesses, venues, and vendors that are actually located strictly within Sorsogon City itself. DO NOT suggest vendors from other municipalities in Sorsogon Province (absolutely NO vendors from Gubat, Casiguran, Castilla, Bulan, Matnog, Donsol, Irosin, Juban, Magallanes, Pilar, etc.).
 2. FACTUAL SERVICES: You MUST accurately describe the true services offered by the vendor. Categorize them strictly according to their primary real-world business (e.g., do not put a hotel in the Photography category). Do not invent, guess, or exaggerate their services. If you are unsure of a business's exact services or location, DO NOT include them.`;
 
-            // 🛑 Insert your NEW, secure Groq API key here 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
+            // 🛑 Insert your NEW, secure Groq API key here 
             const GROQ_API_KEY = '';
 
             const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
