@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 import CustomText from '../components/CustomText';
 import tw from 'twrnc';
 
@@ -42,9 +42,15 @@ export default function VenuesScreen({ navigation }) {
     const headerAnim = useRef(new Animated.Value(-20)).current;
 
     useEffect(() => {
-        const q = query(collection(db, 'venues'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'venues'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const venueList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const venueList = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .sort((a, b) => {
+                    const aMs = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0;
+                    const bMs = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0;
+                    return bMs - aMs;
+                });
             setVenues(venueList);
             setAllVenues(venueList);
             setLoading(false);

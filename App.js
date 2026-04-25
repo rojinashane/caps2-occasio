@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -56,8 +57,17 @@ export default function App() {
       if (user) {
         try {
           await user.reload();
-          // CHANGE 'Dashboard' TO 'DashboardScreen'
-          setInitialRoute(user.emailVerified ? 'DashboardScreen' : 'Landing');
+          if (!user.emailVerified) {
+            setInitialRoute('Landing');
+          } else {
+            const snap = await getDoc(doc(db, 'users', user.uid));
+            const role = snap.exists() ? snap.data().role : null;
+            if (role === 'owner') {
+              setInitialRoute('VenueOwnerScreen');
+            } else {
+              setInitialRoute('DashboardScreen');
+            }
+          }
         } catch (e) {
           console.log('Error reloading user:', e);
           setInitialRoute('Landing');
