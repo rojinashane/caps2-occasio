@@ -6,12 +6,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { db, auth, storage } from '../firebase';
+import { db, auth } from '../firebase';
 import {
     doc, getDoc, updateDoc, deleteDoc,
-    collection, query, where, getDocs, addDoc, serverTimestamp, limit
+    collection, query, where, getDocs, addDoc, serverTimestamp, limit,
+    onSnapshot, orderBy,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as DocumentPicker from 'expo-document-picker';
 import CustomText from '../components/CustomText';
 import CustomModal from '../components/CustomModal';
@@ -138,6 +138,7 @@ export default function EventDetailsScreen({ route, navigation }) {
     const [pinnedVendors, setPinnedVendors] = useState([]);
     const [vendorPickerVisible, setVendorPickerVisible] = useState(false);
     const [pinnedVendorsModalVisible, setPinnedVendorsModalVisible] = useState(false);
+    const [communityVendors, setCommunityVendors] = useState([]);
 
     // ── Occasio Suggests State ─────────────────────────────────────────────────
     const [suggestionsVisible, setSuggestionsVisible] = useState(false);
@@ -224,7 +225,21 @@ export default function EventDetailsScreen({ route, navigation }) {
                 }
             };
             fetchEvent();
-            return () => { isActive = false; };
+
+            // ── Subscribe to community vendors (contributed by all planners) ──
+            const communityUnsub = onSnapshot(
+                query(collection(db, 'community_vendors'), orderBy('contributedAt', 'desc')),
+                (snap) => {
+                    if (isActive) {
+                        setCommunityVendors(
+                            snap.docs.map(d => ({ id: d.id, ...d.data(), isCustom: true }))
+                        );
+                    }
+                },
+                (err) => console.warn('community_vendors snapshot error:', err)
+            );
+
+            return () => { isActive = false; communityUnsub(); };
         }, [eventId])
     );
 
@@ -322,13 +337,19 @@ export default function EventDetailsScreen({ route, navigation }) {
                 const userQ = query(collection(db, 'users'), where('email', '==', email), limit(1));
                 const snap = await getDocs(userQ);
                 if (!snap.empty) {
+                    let body;
+                    if (type === 'task_deadline_ended') {
+                        body = `Deadline passed for "${taskTitle}" in ${eventData?.title}. Was due ${deadlineStr}.`;
+                    } else if (type === 'task_deadline_tomorrow') {
+                        body = `\u23F0 Heads up! "${taskTitle}" in ${eventData?.title} is due tomorrow \u2014 ${deadlineStr}. Make sure it\u2019s ready in time!`;
+                    } else {
+                        body = `"${taskTitle}" in ${eventData?.title} is due on ${deadlineStr}.`;
+                    }
                     await addDoc(collection(db, 'notifications'), {
                         recipientId: snap.docs[0].id,
                         senderName: 'Occasio',
                         type,
-                        body: type === 'task_deadline_ended'
-                            ? `Deadline passed for "${taskTitle}" in ${eventData?.title}. Was due ${deadlineStr}.`
-                            : `"${taskTitle}" in ${eventData?.title} is due on ${deadlineStr}.`,
+                        body,
                         status: 'pending',
                         eventId,
                         eventTitle: eventData?.title || 'Workspace',
@@ -345,6 +366,17 @@ export default function EventDetailsScreen({ route, navigation }) {
     const scheduleDeadlineReminders = (taskTitle, assigneeEmail, deadlineMs) => {
         const now = Date.now();
         const msLeft = deadlineMs - now;
+
+        // ── Reminder 1 day (24 h) before deadline ─────────────────────────────
+        const oneDayMs = msLeft - 24 * 60 * 60 * 1000;
+        if (oneDayMs > 0) {
+            setTimeout(() => {
+                sendDeadlineNotification(taskTitle, assigneeEmail, deadlineMs, 'task_deadline_tomorrow').catch(console.error);
+            }, oneDayMs);
+        } else if (msLeft > 0 && msLeft <= 24 * 60 * 60 * 1000) {
+            // Deadline is already within the next 24 h — notify immediately
+            sendDeadlineNotification(taskTitle, assigneeEmail, deadlineMs, 'task_deadline_tomorrow').catch(console.error);
+        }
 
         // Reminder 30 min before deadline
         const thirtyMin = msLeft - 30 * 60 * 1000;
@@ -388,6 +420,37 @@ export default function EventDetailsScreen({ route, navigation }) {
         const updated = [...pinnedVendors, vendor];
         setPinnedVendors(updated);
         await syncPinnedVendors(updated);
+
+        // ── If this is a custom vendor, save it to the global community pool ──
+        // so all planners can discover and reuse vendors contributed by others.
+        if (vendor.isCustom) {
+            try {
+                // Check if a vendor with the same name already exists to avoid duplicates
+                const existing = await getDocs(
+                    query(
+                        collection(db, 'community_vendors'),
+                        where('nameLower', '==', vendor.name.trim().toLowerCase()),
+                        limit(1)
+                    )
+                );
+                if (existing.empty) {
+                    await addDoc(collection(db, 'community_vendors'), {
+                        name:        vendor.name.trim(),
+                        nameLower:   vendor.name.trim().toLowerCase(),
+                        category:    vendor.category  || 'Custom',
+                        phone:       vendor.phone     || '',
+                        facebook:    vendor.facebook  || '',
+                        location:    vendor.location  || '',
+                        isCustom:    true,
+                        contributedBy: auth.currentUser?.email || 'anonymous',
+                        contributedAt: serverTimestamp(),
+                    });
+                }
+            } catch (e) {
+                // Non-fatal — pinning still succeeds even if community write fails
+                console.warn('community_vendors write failed:', e);
+            }
+        }
     };
 
     const unpinVendor = async (vendorId) => {
@@ -440,7 +503,7 @@ CRITICAL RULES:
 1. STRICT LOCATION: You MUST ONLY suggest real, existing businesses, venues, and vendors that are actually located strictly within Sorsogon City itself. DO NOT suggest vendors from other municipalities in Sorsogon Province (absolutely NO vendors from Gubat, Casiguran, Castilla, Bulan, Matnog, Donsol, Irosin, Juban, Magallanes, Pilar, etc.).
 2. FACTUAL SERVICES: You MUST accurately describe the true services offered by the vendor. Categorize them strictly according to their primary real-world business (e.g., do not put a hotel in the Photography category). Do not invent, guess, or exaggerate their services. If you are unsure of a business's exact services or location, DO NOT include them.`;
 
-            // 🛑 Insert your NEW, secure Groq API key here
+            // 🛑 Insert your NEW, secure Groq API key here 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
             const GROQ_API_KEY = '';
 
             const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -677,22 +740,65 @@ CRITICAL RULES:
     };
 
     const handleFileUpload = async () => {
+        const CLOUDINARY_CLOUD_NAME    = 'dgvbemrgw';
+        const CLOUDINARY_UPLOAD_PRESET = 'invitation';
         try {
             const result = await DocumentPicker.getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
             if (result.canceled) return;
             setUploading(true);
+
             const file = result.assets[0];
-            const blob = await (await fetch(file.uri)).blob();
-            const fileRef = ref(storage, `event_files/${eventId}/${Date.now()}_${file.name}`);
-            await uploadBytes(fileRef, blob);
-            const downloadUrl = await getDownloadURL(fileRef);
-            setActiveTask({
-                ...activeTask,
-                attachments: [...(activeTask.attachments || []), { id: Date.now().toString(), url: downloadUrl, name: file.name, size: file.size }]
+            if (!file?.uri) throw new Error('No file URI returned from picker');
+
+            const formData = new FormData();
+            formData.append('file', {
+                uri:  file.uri,
+                name: file.name,
+                type: file.mimeType || 'application/octet-stream',
             });
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+            formData.append('folder', `occasio/task_attachments/${eventId}`);
+
+            const response = await fetch(
+                `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+                { method: 'POST', body: formData }
+            );
+
+            if (!response.ok) {
+                const errBody = await response.json().catch(() => ({}));
+                throw new Error(errBody?.error?.message || `Cloudinary error ${response.status}`);
+            }
+
+            const cloudData = await response.json();
+            const downloadUrl = cloudData.secure_url;
+
+            const newAttachment = {
+                id: Date.now().toString(),
+                url: downloadUrl,
+                name: file.name,
+                size: file.size,
+            };
+
+            const updatedTask = {
+                ...activeTask,
+                attachments: [...(activeTask.attachments || []), newAttachment],
+            };
+            setActiveTask(updatedTask);
+
+            // Persist immediately to Firestore so attachments are not lost if modal is dismissed
+            const updatedColumns = columns.map(col => {
+                if (col.id === activeColumnId) {
+                    return { ...col, tasks: col.tasks.map(t => t.id === activeTask.id ? updatedTask : t) };
+                }
+                return col;
+            });
+            setColumns(updatedColumns);
+            await syncToFirebase(updatedColumns);
+
             Alert.alert('Success', 'File uploaded successfully');
-        } catch {
-            Alert.alert('Error', 'Failed to upload file.');
+        } catch (error) {
+            console.error('Attachment upload error:', error);
+            Alert.alert('Upload Failed', error.message || 'Failed to upload file.');
         } finally {
             setUploading(false);
         }
@@ -792,6 +898,8 @@ CRITICAL RULES:
                                 description: '',
                                 subtasks: [],
                                 attachments: []
+
+                        
                             }]
                         };
                     }
@@ -1617,6 +1725,7 @@ CRITICAL RULES:
                     pinnedVendors={pinnedVendors}
                     onPin={pinVendor}
                     onUnpin={unpinVendor}
+                    communityVendors={communityVendors}
                 />
 
                 {/* ═══════════════════════════════════════════════════════════════

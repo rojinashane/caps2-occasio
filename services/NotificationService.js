@@ -5,7 +5,8 @@ import { Platform } from 'react-native';
 // Set up how notifications should be handled when the app is in the foreground
 Notifications.setNotificationHandler({
     handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: true,
         shouldSetBadge: false,
     }),
@@ -23,7 +24,7 @@ class NotificationService {
                 name: 'default',
                 importance: Notifications.AndroidImportance.MAX,
                 vibrationPattern: [0, 250, 250, 250],
-                lightColor: '#00686F', // Your app's accent color
+                lightColor: '#00686F', // Occasio app accent color
             });
         }
 
@@ -40,9 +41,8 @@ class NotificationService {
                 return null;
             }
 
-            // Uncomment the lines below if you integrate a backend for remote push notifications later:
+            // Remote push token (Uncomment when you're ready for cloud messaging)
             // token = (await Notifications.getExpoPushTokenAsync()).data;
-            // console.log("Expo Push Token:", token);
         } else {
             console.log('Must use a physical device for Push Notifications');
         }
@@ -54,17 +54,26 @@ class NotificationService {
      * Schedule a future notification (e.g., an event reminder)
      * @param {string} title 
      * @param {string} body 
-     * @param {Date} date - When the notification should fire
+     * @param {Date} date - Must be a JavaScript Date object in the future
      */
     static async scheduleEventReminder(title, body, date) {
         try {
+            // Safety check: ensure date is in the future
+            if (date <= new Date()) {
+                console.warn("Attempted to schedule notification in the past. Triggering immediately instead.");
+                return await this.sendImmediateNotification(title, body);
+            }
+
             const id = await Notifications.scheduleNotificationAsync({
                 content: {
                     title: title,
                     body: body,
                     sound: true,
                 },
-                trigger: date,
+                trigger: {
+                    date: date,
+                    channelId: 'default', // Matches the channel created in register function
+                },
             });
             return id;
         } catch (error) {
@@ -78,14 +87,26 @@ class NotificationService {
      * @param {string} body 
      */
     static async sendImmediateNotification(title, body) {
-        await Notifications.scheduleNotificationAsync({
-            content: {
-                title,
-                body,
-                sound: true,
-            },
-            trigger: null, // null means trigger immediately
-        });
+        try {
+            await Notifications.scheduleNotificationAsync({
+                content: {
+                    title,
+                    body,
+                    sound: true,
+                },
+                trigger: null, // null triggers immediately
+            });
+        } catch (error) {
+            console.error("Error sending immediate notification: ", error);
+        }
+    }
+
+    /**
+     * Cancel a specific scheduled notification (useful if an event is deleted)
+     * @param {string} id 
+     */
+    static async cancelNotification(id) {
+        await Notifications.cancelScheduledNotificationAsync(id);
     }
 }
 

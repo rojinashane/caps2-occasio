@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import CustomText from '../components/CustomText';
 import * as Notifications from 'expo-notifications';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -74,7 +74,20 @@ export default function RSVPTrackerScreen({ route, navigation }) {
         if (!selectedGuest || !eventId) return;
         try {
             setIsDeleting(true);
-            await deleteDoc(doc(db, 'events', eventId, 'rsvps', selectedGuest.id));
+
+            // Fetch the RSVP doc first to get the deviceId before deleting
+            const rsvpRef = doc(db, 'events', eventId, 'rsvps', selectedGuest.id);
+            const rsvpSnap = await getDoc(rsvpRef);
+            const deviceId = rsvpSnap.exists() ? rsvpSnap.data()?.deviceId : null;
+
+            // Delete the RSVP response
+            await deleteDoc(rsvpRef);
+
+            // Unblock the device so the guest can respond again
+            if (deviceId) {
+                await deleteDoc(doc(db, 'events', eventId, 'devices', deviceId));
+            }
+
             setModalVisible(false);
         } catch (e) {
             console.error(e);
@@ -89,9 +102,19 @@ export default function RSVPTrackerScreen({ route, navigation }) {
         try {
             const fileName = `RSVP_${eventTitle?.replace(/[^a-z0-9]/gi, '_') || 'List'}.csv`;
             const fileUri  = FileSystem.documentDirectory + fileName;
-            const csv = 'Guest Name,Status\n' + responses.map(r => {
+            const csv = 'Guest Name,Status,Date Responded,Time Responded\n' + responses.map(r => {
                 const s = r.status?.toLowerCase() === 'going' ? 'Attending' : 'Declined';
-                return `"${r.guestName}","${s}"`;
+
+                // Firestore serverTimestamp comes back as { seconds, nanoseconds }
+                let dateStr = '—';
+                let timeStr = '—';
+                if (r.timestamp?.seconds) {
+                    const d = new Date(r.timestamp.seconds * 1000);
+                    dateStr = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                    timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                }
+
+                return `"${r.guestName}","${s}","${dateStr}","${timeStr}"`;
             }).join('\n');
             await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: 'utf8' });
             await Sharing.shareAsync(fileUri);
@@ -445,7 +468,7 @@ export default function RSVPTrackerScreen({ route, navigation }) {
                                 <CustomText style={{ fontWeight: '700', color: '#334155' }}>
                                     {selectedGuest?.guestName}
                                 </CustomText>
-                                {' '}from the guest list.
+                                {' '}from the guest list and unblock their device so they can RSVP again.
                             </CustomText>
 
                             <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>

@@ -57,6 +57,10 @@ export default function AddEventScreen({ navigation }) {
     const [location, setLocation] = useState('');
     const [description, setDescription] = useState('');
     const [collaboratorEmail, setCollaboratorEmail] = useState('');
+    const [collaboratorSuggestions, setCollaboratorSuggestions] = useState([]);
+    const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const suggestionDebounce = useRef(null);
     const [selectedTheme, setSelectedTheme] = useState(null);
     const [customTheme, setCustomTheme] = useState('');
     const [venuePickerVisible, setVenuePickerVisible] = useState(false);
@@ -104,6 +108,60 @@ export default function AddEventScreen({ navigation }) {
 
     const isEmailValid = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
+    const searchUsers = async (text) => {
+        if (!text.trim() || text.trim().length < 2) {
+            setCollaboratorSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+        setLoadingSuggestions(true);
+        try {
+            const lowerText = text.trim().toLowerCase();
+            // Search by email prefix
+            const emailSnap = await getDocs(
+                query(
+                    collection(db, 'users'),
+                    where('email', '>=', lowerText),
+                    where('email', '<=', lowerText + '\uf8ff')
+                )
+            );
+            // Search by username prefix
+            const nameSnap = await getDocs(
+                query(
+                    collection(db, 'users'),
+                    where('username', '>=', lowerText),
+                    where('username', '<=', lowerText + '\uf8ff')
+                )
+            );
+            const currentUid = auth.currentUser?.uid;
+            const merged = new Map();
+            [...emailSnap.docs, ...nameSnap.docs].forEach((doc) => {
+                if (doc.id !== currentUid) {
+                    merged.set(doc.id, { id: doc.id, ...doc.data() });
+                }
+            });
+            const results = Array.from(merged.values()).slice(0, 5);
+            setCollaboratorSuggestions(results);
+            setShowSuggestions(results.length > 0);
+        } catch (e) {
+            console.warn('User search error:', e);
+        } finally {
+            setLoadingSuggestions(false);
+        }
+    };
+
+    const handleCollaboratorTextChange = (text) => {
+        setCollaboratorEmail(text);
+        if (suggestionDebounce.current) clearTimeout(suggestionDebounce.current);
+        suggestionDebounce.current = setTimeout(() => searchUsers(text), 300);
+    };
+
+    const handleSelectSuggestion = (user) => {
+        setCollaboratorEmail(user.email || '');
+        setCollaboratorSuggestions([]);
+        setShowSuggestions(false);
+    };
+
     const handleCreate = async () => {
         setSubmitted(true);
         const finalType = eventType?.key === 'Others' ? otherType.trim() : eventType?.key;
@@ -136,16 +194,25 @@ export default function AddEventScreen({ navigation }) {
                 const email = collaboratorEmail.trim().toLowerCase();
                 const snap = await getDocs(query(collection(db, 'users'), where('email', '==', email)));
                 if (!snap.empty) {
+                    const senderName = auth.currentUser.displayName || 'An organizer';
+                    const eventTitle = title.trim();
                     await addDoc(collection(db, 'notifications'), {
                         recipientId: snap.docs[0].id,
                         senderId: auth.currentUser.uid,
-                        senderName: auth.currentUser.displayName || 'An organizer',
+                        senderName,
                         eventId: eventRef.id,
-                        eventTitle: title.trim(),
+                        eventTitle,
                         status: 'pending',
-                        type: 'invitation',
+                        viewed: false,
+                        type: 'COLLAB_REQUEST',
+                        body: `${senderName} invited you to co-manage "${eventTitle}". Tap to accept or decline.`,
                         createdAt: serverTimestamp(),
                     });
+                    // Fire a local push notification so the invited user is alerted immediately
+                    await NotificationService.sendImmediateNotification(
+                        '🤝 Collaboration Invite',
+                        `${senderName} invited you to co-manage "${eventTitle}".`
+                    );
                 }
             }
 
@@ -665,42 +732,114 @@ export default function AddEventScreen({ navigation }) {
                             Co-manage this event with someone
                         </CustomText>
 
-                        <View style={[
-                            tw`flex-row items-center px-4 rounded-[14px]`,
-                            {
-                                backgroundColor: '#F8FAFC',
-                                borderWidth: 1.5,
-                                borderColor: submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
-                                    ? '#EF4444' : '#E8EEF4',
-                            },
-                        ]}>
+                        <View style={{ position: 'relative', zIndex: 10 }}>
                             <View style={[
-                                tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
+                                tw`flex-row items-center px-4 rounded-[14px]`,
                                 {
-                                    backgroundColor: submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
-                                        ? '#FEF2F2' : accentColor + '15',
+                                    backgroundColor: '#F8FAFC',
+                                    borderWidth: 1.5,
+                                    borderColor: submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
+                                        ? '#EF4444' : showSuggestions ? accentColor + '80' : '#E8EEF4',
                                 },
                             ]}>
-                                <Ionicons
-                                    name="person-add-outline"
-                                    size={16}
-                                    color={submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
-                                        ? '#EF4444' : accentColor}
+                                <View style={[
+                                    tw`w-8 h-8 rounded-full justify-center items-center mr-3`,
+                                    {
+                                        backgroundColor: submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
+                                            ? '#FEF2F2' : accentColor + '15',
+                                    },
+                                ]}>
+                                    {loadingSuggestions
+                                        ? <ActivityIndicator size="small" color={accentColor} />
+                                        : <Ionicons
+                                            name="person-add-outline"
+                                            size={16}
+                                            color={submitted && collaboratorEmail.trim() && !isEmailValid(collaboratorEmail.trim())
+                                                ? '#EF4444' : accentColor}
+                                        />
+                                    }
+                                </View>
+                                <TextInput
+                                    style={[tw`flex-1 py-3.5 text-[14px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
+                                    value={collaboratorEmail}
+                                    onChangeText={handleCollaboratorTextChange}
+                                    onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                                    onFocus={() => collaboratorSuggestions.length > 0 && setShowSuggestions(true)}
+                                    placeholder="Search by name or email..."
+                                    placeholderTextColor="#CBD5E1"
+                                    autoCapitalize="none"
+                                    keyboardType="email-address"
                                 />
+                                {collaboratorEmail.length > 0 && (
+                                    <TouchableOpacity onPress={() => {
+                                        setCollaboratorEmail('');
+                                        setCollaboratorSuggestions([]);
+                                        setShowSuggestions(false);
+                                    }}>
+                                        <Ionicons name="close-circle" size={18} color="#CBD5E1" />
+                                    </TouchableOpacity>
+                                )}
                             </View>
-                            <TextInput
-                                style={[tw`flex-1 py-3.5 text-[14px] text-slate-800`, { fontFamily: 'Poppins-Medium' }]}
-                                value={collaboratorEmail}
-                                onChangeText={setCollaboratorEmail}
-                                placeholder="Enter their email address"
-                                placeholderTextColor="#CBD5E1"
-                                autoCapitalize="none"
-                                keyboardType="email-address"
-                            />
-                            {collaboratorEmail.length > 0 && (
-                                <TouchableOpacity onPress={() => setCollaboratorEmail('')}>
-                                    <Ionicons name="close-circle" size={18} color="#CBD5E1" />
-                                </TouchableOpacity>
+
+                            {/* ── SUGGESTIONS DROPDOWN ── */}
+                            {showSuggestions && (
+                                <View style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    left: 0,
+                                    right: 0,
+                                    backgroundColor: '#FFFFFF',
+                                    borderRadius: 14,
+                                    borderWidth: 1.5,
+                                    borderColor: accentColor + '40',
+                                    marginTop: 4,
+                                    shadowColor: '#00686F',
+                                    shadowOffset: { width: 0, height: 4 },
+                                    shadowOpacity: 0.12,
+                                    shadowRadius: 12,
+                                    elevation: 8,
+                                    overflow: 'hidden',
+                                }}>
+                                    {collaboratorSuggestions.map((user, index) => (
+                                        <TouchableOpacity
+                                            key={user.id}
+                                            onPress={() => handleSelectSuggestion(user)}
+                                            activeOpacity={0.75}
+                                            style={{
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                paddingHorizontal: 14,
+                                                paddingVertical: 10,
+                                                borderBottomWidth: index < collaboratorSuggestions.length - 1 ? 1 : 0,
+                                                borderBottomColor: '#F1F5F9',
+                                            }}
+                                        >
+                                            <View style={{
+                                                width: 36, height: 36, borderRadius: 18,
+                                                backgroundColor: accentColor + '18',
+                                                justifyContent: 'center', alignItems: 'center', marginRight: 10,
+                                            }}>
+                                                {user.photoURL
+                                                    ? <View style={{ width: 36, height: 36, borderRadius: 18, overflow: 'hidden' }}>
+                                                        <View style={{ flex: 1, backgroundColor: accentColor + '30', justifyContent: 'center', alignItems: 'center' }}>
+                                                            <Ionicons name="person" size={18} color={accentColor} />
+                                                        </View>
+                                                    </View>
+                                                    : <Ionicons name="person" size={18} color={accentColor} />
+                                                }
+                                            </View>
+                                            <View style={{ flex: 1 }}>
+                                                <CustomText fontFamily="semibold" style={{ fontSize: 13, color: '#0F172A' }}>
+                                                    {user.username || user.email}
+                                                </CustomText>
+                                                <CustomText fontFamily="medium" style={{ fontSize: 11, color: '#94A3B8' }}>
+                                                    {user.email}
+                                                </CustomText>
+                                            </View>
+                                            <Ionicons name="arrow-forward-circle-outline" size={18} color={accentColor + '80'} />
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
                             )}
                         </View>
 

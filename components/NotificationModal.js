@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import {
     collection, query, where, onSnapshot,
     doc, updateDoc, arrayUnion, deleteDoc,
@@ -66,77 +67,95 @@ export default function NotificationModal({ visible, onClose }) {
     const isInitialLoad = useRef(true);
 
     useEffect(() => {
-        if (!auth.currentUser) return; // Keep listening in the background even if modal isn't visible
+        let unsubscribeSnapshot = null;
 
-        setLoading(true);
-        const uid = auth.currentUser.uid;
-
-        const q = query(
-            collection(db, 'notifications'),
-            where('recipientId', '==', uid),
-            where('status', '==', 'pending')
-        );
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            // Check for new notifications added to the collection
-            if (isInitialLoad.current) {
-                isInitialLoad.current = false;
-            } else {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === "added") {
-                        const data = change.doc.data();
-
-                        // Set up content based on type
-                        let notifTitle = "New Notification";
-                        let notifBody = "You have a new update.";
-
-                        if (data.type === 'checklist_done') {
-                            notifTitle = "Checklist Update";
-                            notifBody = `${data.senderName || 'Someone'} completed an item in ${data.eventTitle || 'a workspace'}.`;
-                        } else if (data.type === 'checklist_added') {
-                            notifTitle = "Checklist Added";
-                            notifBody = `${data.senderName || 'Someone'} added an item to ${data.eventTitle || 'a workspace'}.`;
-                        } else if (data.type === 'task_assigned') {
-                            notifTitle = "Task Assigned";
-                            notifBody = data.body || `You've been assigned a task in ${data.eventTitle || 'a workspace'}.`;
-                        } else if (data.type === 'task_deadline') {
-                            notifTitle = "⏰ Deadline Approaching";
-                            notifBody = data.body || `A task deadline is approaching in ${data.eventTitle || 'a workspace'}.`;
-                        } else if (data.type === 'task_deadline_ended') {
-                            notifTitle = "🔴 Deadline Passed";
-                            notifBody = data.body || `A task deadline has passed in ${data.eventTitle || 'a workspace'}.`;
-                        } else if (data.type === 'COLLAB_REQUEST') {
-                            notifTitle = "🤝 Collaboration Invite";
-                            notifBody = data.body || `${data.senderName || 'Someone'} invited you to work on ${data.eventTitle || 'an event'}.`;
-                        } else if (data.type === 'collab_accepted') {
-                            notifTitle = "🎉 Collaborator Joined";
-                        } else {
-                            notifTitle = "New Notification";
-                        }
-
-                        // Fire local push alert immediately
-                        NotificationService.sendImmediateNotification(notifTitle, notifBody);
-                    }
-                });
+        // Wait for Firebase auth to be ready before attaching the Firestore listener.
+        // This prevents permission-denied errors that fire when the listener attaches
+        // before the auth token is available.
+        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+                unsubscribeSnapshot = null;
             }
 
-            // Sync visual list — newest first
-            const list = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() }))
-                .sort((a, b) => {
-                    const aMs = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0);
-                    const bMs = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0);
-                    return bMs - aMs;
-                });
-            setNotifications(list);
-            setLoading(false);
-        }, (error) => {
-            console.error("Firestore Subscription Error:", error);
-            setLoading(false);
+            if (!user) {
+                setNotifications([]);
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            isInitialLoad.current = true;
+
+            const q = query(
+                collection(db, 'notifications'),
+                where('recipientId', '==', user.uid),
+                where('status', '==', 'pending')
+            );
+
+            unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+                if (isInitialLoad.current) {
+                    isInitialLoad.current = false;
+                } else {
+                    snapshot.docChanges().forEach((change) => {
+                        if (change.type === "added") {
+                            const data = change.doc.data();
+
+                            let notifTitle = "New Notification";
+                            let notifBody = "You have a new update.";
+
+                            if (data.type === 'checklist_done') {
+                                notifTitle = "Checklist Update";
+                                notifBody = `${data.senderName || 'Someone'} completed an item in ${data.eventTitle || 'a workspace'}.`;
+                            } else if (data.type === 'checklist_added') {
+                                notifTitle = "Checklist Added";
+                                notifBody = `${data.senderName || 'Someone'} added an item to ${data.eventTitle || 'a workspace'}.`;
+                            } else if (data.type === 'task_assigned') {
+                                notifTitle = "Task Assigned";
+                                notifBody = data.body || `You've been assigned a task in ${data.eventTitle || 'a workspace'}.`;
+                            } else if (data.type === 'task_deadline_tomorrow') {
+                                notifTitle = "\uD83D\uDCC5 Deadline Tomorrow";
+                                notifBody = data.body || `A task deadline is tomorrow in ${data.eventTitle || 'a workspace'}.`;
+                            } else if (data.type === 'task_deadline') {
+                                notifTitle = "\u23f0 Deadline Approaching";
+                                notifBody = data.body || `A task deadline is approaching in ${data.eventTitle || 'a workspace'}.`;
+                            } else if (data.type === 'task_deadline_ended') {
+                                notifTitle = "\ud83d\udd34 Deadline Passed";
+                                notifBody = data.body || `A task deadline has passed in ${data.eventTitle || 'a workspace'}.`;
+                            } else if (data.type === 'COLLAB_REQUEST' || data.type === 'invitation') {
+                                notifTitle = "\ud83e\udd1d Collaboration Invite";
+                                notifBody = data.body || `${data.senderName || 'Someone'} invited you to work on ${data.eventTitle || 'an event'}.`;
+                            } else if (data.type === 'collab_accepted') {
+                                notifTitle = "\ud83c\udf89 Collaborator Joined";
+                            }
+
+                            NotificationService.sendImmediateNotification(notifTitle, notifBody);
+                        }
+                    });
+                }
+
+                const list = snapshot.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .sort((a, b) => {
+                        const aMs = a.createdAt?.seconds ? a.createdAt.seconds * 1000 : (a.createdAt || 0);
+                        const bMs = b.createdAt?.seconds ? b.createdAt.seconds * 1000 : (b.createdAt || 0);
+                        return bMs - aMs;
+                    });
+                setNotifications(list);
+                setLoading(false);
+            }, (error) => {
+                console.error("Firestore Subscription Error:", error);
+                setLoading(false);
+            });
         });
 
-        return () => unsubscribe();
-    }, []); // Removed `visible` from dependency array so it listens in background 
+        return () => {
+            unsubscribeAuth();
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+        };
+    }, []); // onAuthStateChanged handles re-subscription automatically
+
+
 
     // Mark all unviewed notifications as viewed when modal opens
     useEffect(() => {
@@ -260,6 +279,33 @@ export default function NotificationModal({ visible, onClose }) {
         }
     };
 
+    const handleDeleteAll = () => {
+        if (notifications.length === 0) return;
+        Alert.alert(
+            "Clear All Notifications",
+            "Are you sure you want to delete all notifications? This cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete All",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            const batch = writeBatch(db);
+                            notifications.forEach(n => {
+                                batch.delete(doc(db, 'notifications', n.id));
+                            });
+                            await batch.commit();
+                        } catch (error) {
+                            console.error("Delete All Error:", error);
+                            Alert.alert("Error", "Failed to clear notifications.");
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     return (
         <Modal
             visible={visible}
@@ -284,12 +330,28 @@ export default function NotificationModal({ visible, onClose }) {
                         <CustomText fontFamily="extrabold" style={tw`text-2xl text-slate-800 tracking-tight`}>
                             Notifications
                         </CustomText>
-                        <TouchableOpacity
-                            onPress={onClose}
-                            style={tw`w-8 h-8 bg-slate-100 rounded-full justify-center items-center`}
-                        >
-                            <Ionicons name="close" size={18} color="#64748B" />
-                        </TouchableOpacity>
+                        <View style={tw`flex-row items-center gap-2`}>
+                            {notifications.length > 0 && (
+                                <TouchableOpacity
+                                    onPress={handleDeleteAll}
+                                    style={[
+                                        tw`flex-row items-center px-3 py-1.5 rounded-full`,
+                                        { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
+                                    ]}
+                                >
+                                    <Ionicons name="trash-outline" size={13} color="#EF4444" />
+                                    <CustomText fontFamily="bold" style={{ color: '#EF4444', fontSize: 12, marginLeft: 4 }}>
+                                        Clear All
+                                    </CustomText>
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                onPress={onClose}
+                                style={tw`w-8 h-8 bg-slate-100 rounded-full justify-center items-center`}
+                            >
+                                <Ionicons name="close" size={18} color="#64748B" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
                     {loading ? (
@@ -311,8 +373,8 @@ export default function NotificationModal({ visible, onClose }) {
                                 const isChecklistAdded = notif.type === 'checklist_added';
                                 const isChecklist = isChecklistDone || isChecklistAdded;
                                 const isTaskAssigned = notif.type === 'task_assigned';
-                                const isTaskDeadline = notif.type === 'task_deadline' || notif.type === 'task_deadline_ended';
-                                const isCollabRequest = notif.type === 'COLLAB_REQUEST';
+                                const isTaskDeadline = notif.type === 'task_deadline' || notif.type === 'task_deadline_ended' || notif.type === 'task_deadline_tomorrow';
+                                const isCollabRequest = notif.type === 'COLLAB_REQUEST' || notif.type === 'invitation';
                                 const expired = isCollabRequest && isInviteExpired(notif.createdAt);
                                 const minsLeft = isCollabRequest && !expired ? getExpiryMinutesLeft(notif.createdAt) : 0;
 
@@ -324,7 +386,11 @@ export default function NotificationModal({ visible, onClose }) {
                                 else if (notif.type === 'card_added')   { typeLabel = 'Task Added';           typeIcon = 'add-circle-outline'; }
                                 else if (notif.type === 'list_added')   { typeLabel = 'List Added';           typeIcon = 'list-outline'; }
                                 else if (isTaskAssigned)                { typeLabel = 'Task Assigned';        typeIcon = 'person-add'; }
-                                else if (isTaskDeadline)                { typeLabel = notif.type === 'task_deadline_ended' ? 'Deadline Passed' : 'Deadline Soon'; typeIcon = 'alarm'; }
+                                else if (isTaskDeadline) {
+                                    if (notif.type === 'task_deadline_ended')    { typeLabel = 'Deadline Passed';    typeIcon = 'alarm'; }
+                                    else if (notif.type === 'task_deadline_tomorrow') { typeLabel = 'Deadline Tomorrow'; typeIcon = 'calendar'; }
+                                    else                                          { typeLabel = 'Deadline Soon';      typeIcon = 'alarm'; }
+                                }
                                 else if (notif.type === 'collab_accepted') { typeLabel = 'Collaborator Joined'; typeIcon = 'people-circle'; }
 
                                 const isCollabAccepted = notif.type === 'collab_accepted';

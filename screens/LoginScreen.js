@@ -16,22 +16,27 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CustomText from '../components/CustomText';
 import { Ionicons } from '@expo/vector-icons';
-import { auth } from '../firebase';
+import { auth, db } from '../firebase'; // Ensure db is exported from your firebase.js
 import {
     signInWithEmailAndPassword,
     reload,
     signOut,
     sendPasswordResetEmail
 } from 'firebase/auth';
-import { saveToken } from '../services/storage';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function LoginScreen({ navigation }) {
-    // --- ANIMATION VALUES --- (unchanged)
+    // --- ANIMATION VALUES ---
     const fadeAnim  = useRef(new Animated.Value(0)).current;
     const slideUpAnim = useRef(new Animated.Value(30)).current;
     const logoScale = useRef(new Animated.Value(0)).current;
     const logoRotate = useRef(new Animated.Value(0)).current;
     const floatAnim = useRef(new Animated.Value(0)).current;
+
+    const [email, setEmail]               = useState('');
+    const [password, setPassword]         = useState('');
+    const [loading, setLoading]           = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     useEffect(() => {
         Animated.parallel([
@@ -79,44 +84,67 @@ export default function LoginScreen({ navigation }) {
         ).start();
     }, []);
 
-    const [email, setEmail]               = useState('');
-    const [password, setPassword]         = useState('');
-    const [loading, setLoading]           = useState(false);
-    const [showPassword, setShowPassword] = useState(false);
-
     const rotation = logoRotate.interpolate({
         inputRange: [0, 1],
         outputRange: ['0deg', '360deg'],
     });
 
-    // --- ALL LOGIC UNCHANGED ---
     const handleLogin = () => {
         if (!email || !password) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
         setLoading(true);
+
         signInWithEmailAndPassword(auth, email, password)
             .then(async (userCredential) => {
                 const user = userCredential.user;
                 await reload(user);
+
                 if (user.emailVerified) {
+                    // 1. Check for Admin Access
                     if (user.email.toLowerCase() === 'rojinashaneecohabana@gmail.com') {
                         navigation.replace('AdminDashboard');
-                    } else {
-                        navigation.replace('Dashboard');
+                        return;
+                    }
+
+                    // 2. Fetch User Role from Firestore
+                    try {
+                        const userDoc = await getDoc(doc(db, 'users', user.uid));
+                        
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data();
+                            const userRole = userData.role;
+
+                            // 3. Role-Based Redirection
+                            if (userRole === 'owner') {
+                                navigation.replace('VenueOwnerScreen');
+                            } else if (userRole === 'planner') {
+                                // Explicitly redirect to DashboardScreen for planners
+                                navigation.replace('DashboardScreen');
+                            } else {
+                                // Fallback to DashboardScreen
+                                navigation.replace('DashboardScreen');
+                            }
+                        } else {
+                            Alert.alert('Error', 'User profile not found in database.');
+                            await signOut(auth);
+                        }
+                    } catch (dbError) {
+                        console.error("Firestore Error:", dbError);
+                        Alert.alert('Login Error', 'Failed to retrieve account type.');
                     }
                 } else {
                     Alert.alert(
                         'Email Not Verified',
-                        'Please verify your email before logging in. Check your inbox for the verification link.',
+                        'Please verify your email before logging in. Check your inbox.',
                         [{ text: 'OK', onPress: () => signOut(auth) }]
                     );
                 }
             })
             .catch((error) => {
                 let errorMessage = 'An error occurred. Please try again.';
-                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                if (error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
                     errorMessage = 'Invalid email or password.';
                 } else if (error.code === 'auth/invalid-email') {
                     errorMessage = 'The email address is not valid.';
@@ -142,11 +170,9 @@ export default function LoginScreen({ navigation }) {
 
     return (
         <SafeAreaView style={styles.container}>
-            {/* Purely decorative — no interaction */}
             <View style={styles.blobTR} pointerEvents="none" />
             <View style={styles.blobBL} pointerEvents="none" />
 
-            {/* BUG FIX: KAV must wrap ScrollView, not be inside it */}
             <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -156,7 +182,6 @@ export default function LoginScreen({ navigation }) {
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {/* Logo */}
                     <Animated.View
                         style={[
                             styles.logoContainer,
@@ -179,7 +204,6 @@ export default function LoginScreen({ navigation }) {
                         </View>
                     </Animated.View>
 
-                    {/* Card */}
                     <Animated.View
                         style={[
                             styles.card,
@@ -199,7 +223,6 @@ export default function LoginScreen({ navigation }) {
 
                             <View style={styles.divider} />
 
-                            {/* Email */}
                             <View style={styles.fieldGroup}>
                                 <CustomText style={styles.label}>Email Address</CustomText>
                                 <View style={styles.inputRow}>
@@ -218,7 +241,6 @@ export default function LoginScreen({ navigation }) {
                                 </View>
                             </View>
 
-                            {/* Password */}
                             <View style={styles.fieldGroup}>
                                 <CustomText style={styles.label}>Password</CustomText>
                                 <View style={styles.inputRow}>
@@ -246,16 +268,13 @@ export default function LoginScreen({ navigation }) {
                                 </View>
                             </View>
 
-                            {/* Forgot */}
                             <TouchableOpacity
                                 style={styles.forgotBtn}
                                 onPress={handleForgotPassword}
-                                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                             >
                                 <CustomText style={styles.forgotText}>Forgot Password?</CustomText>
                             </TouchableOpacity>
 
-                            {/* Login button */}
                             <TouchableOpacity
                                 style={[styles.loginButton, loading && styles.loginButtonDisabled]}
                                 onPress={handleLogin}
@@ -269,18 +288,15 @@ export default function LoginScreen({ navigation }) {
                                 )}
                             </TouchableOpacity>
 
-                            {/* Divider row */}
                             <View style={styles.orRow}>
                                 <View style={styles.orLine} />
                                 <CustomText style={styles.orLabel}>New to Occasio?</CustomText>
                                 <View style={styles.orLine} />
                             </View>
 
-                            {/* Sign-up button */}
                             <TouchableOpacity
                                 style={styles.signupButton}
                                 onPress={() => navigation.navigate('Signup')}
-                                activeOpacity={0.8}
                             >
                                 <CustomText style={styles.signupButtonText}>Create an Account</CustomText>
                             </TouchableOpacity>
@@ -296,212 +312,32 @@ const TEAL      = '#00686F';
 const TEAL_SOFT = 'rgba(0,104,111,0.09)';
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#EEF4F4',
-    },
-
-    /* Background blobs */
-    blobTR: {
-        position: 'absolute',
-        width: 320,
-        height: 320,
-        borderRadius: 160,
-        backgroundColor: TEAL,
-        opacity: 0.07,
-        top: -110,
-        right: -90,
-    },
-    blobBL: {
-        position: 'absolute',
-        width: 220,
-        height: 220,
-        borderRadius: 110,
-        backgroundColor: TEAL,
-        opacity: 0.05,
-        bottom: 50,
-        left: -65,
-    },
-
-    scrollContent: {
-        flexGrow: 1,
-        justifyContent: 'center',
-        paddingHorizontal: 24,
-        paddingVertical: 36,
-    },
-
-    /* Logo */
-    logoContainer: {
-        alignItems: 'center',
-        marginBottom: 26,
-    },
-    logoRing: {
-        width: 112,
-        height: 112,
-        borderRadius: 34,
-        backgroundColor: '#FFFFFF',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: TEAL,
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.2,
-        shadowRadius: 20,
-        elevation: 10,
-        borderWidth: 1.5,
-        borderColor: TEAL_SOFT,
-    },
-    logo: {
-        width: 74,
-        height: 74,
-    },
-
-    /* Card */
-    card: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 28,
-        overflow: 'hidden',
-        shadowColor: '#000D1A',
-        shadowOffset: { width: 0, height: 14 },
-        shadowOpacity: 0.08,
-        shadowRadius: 28,
-        elevation: 8,
-        borderWidth: 1,
-        borderColor: TEAL_SOFT,
-    },
-    cardStripe: {
-        height: 4,
-        backgroundColor: TEAL,
-    },
-    cardBody: {
-        padding: 28,
-    },
-
-    /* Headings */
-    title: {
-        fontSize: 26,
-        fontWeight: '800',
-        color: '#0D1B2A',
-        textAlign: 'center',
-        letterSpacing: -0.4,
-        marginBottom: 6,
-    },
-    subtitle: {
-        fontSize: 14,
-        color: '#6B7280',
-        textAlign: 'center',
-        lineHeight: 20,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#F0F0F0',
-        marginVertical: 22,
-    },
-
-    /* Fields */
-    fieldGroup: {
-        marginBottom: 16,
-    },
-    label: {
-        fontSize: 11,
-        fontWeight: '700',
-        color: '#4B5563',
-        marginBottom: 8,
-        letterSpacing: 0.8,
-        textTransform: 'uppercase',
-    },
-    inputRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F7FAFA',
-        borderRadius: 14,
-        paddingHorizontal: 12,
-        height: 52,
-        borderWidth: 1.5,
-        borderColor: '#E2ECEC',
-    },
-    iconWrap: {
-        width: 30,
-        height: 30,
-        borderRadius: 8,
-        backgroundColor: TEAL_SOFT,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 10,
-    },
-    textInput: {
-        flex: 1,
-        fontSize: 15,
-        color: '#0D1B2A',
-        fontWeight: '500',
-    },
-
-    /* Forgot */
-    forgotBtn: {
-        alignSelf: 'flex-end',
-        marginTop: 2,
-        marginBottom: 22,
-    },
-    forgotText: {
-        color: TEAL,
-        fontWeight: '700',
-        fontSize: 13,
-    },
-
-    /* Primary CTA */
-    loginButton: {
-        backgroundColor: TEAL,
-        borderRadius: 14,
-        height: 54,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: TEAL,
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.32,
-        shadowRadius: 14,
-        elevation: 7,
-    },
-    loginButtonDisabled: {
-        opacity: 0.65,
-    },
-    loginButtonText: {
-        color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: '800',
-        letterSpacing: 0.3,
-    },
-
-    /* "Or" divider row */
-    orRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 24,
-        marginBottom: 14,
-        gap: 10,
-    },
-    orLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#E5E7EB',
-    },
-    orLabel: {
-        color: '#9CA3AF',
-        fontSize: 12,
-        fontWeight: '600',
-    },
-
-    /* Secondary CTA */
-    signupButton: {
-        height: 50,
-        borderRadius: 14,
-        borderWidth: 2,
-        borderColor: TEAL,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: TEAL_SOFT,
-    },
-    signupButtonText: {
-        color: TEAL,
-        fontSize: 15,
-        fontWeight: '800',
-    },
+    container: { flex: 1, backgroundColor: '#EEF4F4' },
+    blobTR: { position: 'absolute', width: 320, height: 320, borderRadius: 160, backgroundColor: TEAL, opacity: 0.07, top: -110, right: -90 },
+    blobBL: { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: TEAL, opacity: 0.05, bottom: 50, left: -65 },
+    scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 36 },
+    logoContainer: { alignItems: 'center', marginBottom: 26 },
+    logoRing: { width: 112, height: 112, borderRadius: 34, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', elevation: 10, borderWidth: 1.5, borderColor: TEAL_SOFT },
+    logo: { width: 74, height: 74 },
+    card: { backgroundColor: '#FFFFFF', borderRadius: 28, overflow: 'hidden', elevation: 8, borderWidth: 1, borderColor: TEAL_SOFT },
+    cardStripe: { height: 4, backgroundColor: TEAL },
+    cardBody: { padding: 28 },
+    title: { fontSize: 26, fontWeight: '800', color: '#0D1B2A', textAlign: 'center' },
+    subtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', marginTop: 6 },
+    divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 22 },
+    fieldGroup: { marginBottom: 16 },
+    label: { fontSize: 11, fontWeight: '700', color: '#4B5563', marginBottom: 8, textTransform: 'uppercase' },
+    inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F7FAFA', borderRadius: 14, paddingHorizontal: 12, height: 52, borderWidth: 1.5, borderColor: '#E2ECEC' },
+    iconWrap: { width: 30, height: 30, borderRadius: 8, backgroundColor: TEAL_SOFT, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+    textInput: { flex: 1, fontSize: 15, color: '#0D1B2A', fontWeight: '500' },
+    forgotBtn: { alignSelf: 'flex-end', marginBottom: 22 },
+    forgotText: { color: TEAL, fontWeight: '700', fontSize: 13 },
+    loginButton: { backgroundColor: TEAL, borderRadius: 14, height: 54, justifyContent: 'center', alignItems: 'center' },
+    loginButtonDisabled: { opacity: 0.65 },
+    loginButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+    orRow: { flexDirection: 'row', alignItems: 'center', marginTop: 24, marginBottom: 14, gap: 10 },
+    orLine: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
+    orLabel: { color: '#9CA3AF', fontSize: 12, fontWeight: '600' },
+    signupButton: { height: 50, borderRadius: 14, borderWidth: 2, borderColor: TEAL, alignItems: 'center', justifyContent: 'center', backgroundColor: TEAL_SOFT },
+    signupButtonText: { color: TEAL, fontSize: 15, fontWeight: '800' },
 });

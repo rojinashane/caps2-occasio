@@ -14,7 +14,8 @@ import {
     KeyboardAvoidingView,
     Platform,
     Dimensions,
-    Pressable
+    Pressable,
+    Text
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +46,7 @@ export default function ProfileScreen({ navigation }) {
     const [lastName, setLastName] = useState('');
     const [username, setUsername] = useState('');
     const [selectedAvatar, setSelectedAvatar] = useState(null);
+    const [contactNumber, setContactNumber] = useState('');
 
     // Original values for cancel functionality
     const [originalData, setOriginalData] = useState({});
@@ -54,6 +56,11 @@ export default function ProfileScreen({ navigation }) {
     const handleMiddleNameChange = useCallback((v) => setMiddleName(v), []);
     const handleLastNameChange = useCallback((v) => setLastName(v), []);
     const handleUsernameChange = useCallback((v) => setUsername(v), []);
+    const handleContactNumberChange = useCallback((v) => {
+        // Only allow digits
+        const digitsOnly = v.replace(/[^0-9]/g, '');
+        setContactNumber(digitsOnly);
+    }, []);
 
     // Entrance animations
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -122,12 +129,14 @@ export default function ProfileScreen({ navigation }) {
                         lastName: data.lastName || '',
                         username: data.username || '',
                         avatar: data.avatar || null,
+                        contactNumber: data.contactNumber ? String(data.contactNumber) : '',
                     };
                     setFirstName(userData.firstName);
                     setMiddleName(userData.middleName);
                     setLastName(userData.lastName);
                     setUsername(userData.username);
                     setSelectedAvatar(userData.avatar);
+                    setContactNumber(userData.contactNumber);
                     setOriginalData(userData);
                 }
             }
@@ -145,6 +154,7 @@ export default function ProfileScreen({ navigation }) {
         setLastName(originalData.lastName);
         setUsername(originalData.username);
         setSelectedAvatar(originalData.avatar);
+        setContactNumber(originalData.contactNumber || '');
         setIsEditing(false);
     };
 
@@ -161,6 +171,12 @@ export default function ProfileScreen({ navigation }) {
             return;
         }
 
+        // Contact number validation (optional but must be digits-only if provided)
+        if (contactNumber && (contactNumber.length < 7 || contactNumber.length > 15)) {
+            Alert.alert('Invalid Contact Number', 'Contact number must be between 7 and 15 digits.');
+            return;
+        }
+
         try {
             setIsSaving(true);
             const userRef = doc(db, 'users', auth.currentUser.uid);
@@ -169,10 +185,12 @@ export default function ProfileScreen({ navigation }) {
                 middleName: middleName.trim(),
                 lastName: lastName.trim(),
                 username: username.trim().toLowerCase(),
-                avatar: selectedAvatar
+                avatar: selectedAvatar,
+                contactNumber: contactNumber ? Number(contactNumber) : null,
             };
             await updateDoc(userRef, updatedData);
-            setOriginalData(updatedData);
+            // Keep contactNumber as string in local state for display
+            setOriginalData({ ...updatedData, contactNumber: contactNumber });
             setIsEditing(false);
             setShowSuccess(true);
         } catch (error) {
@@ -225,10 +243,11 @@ export default function ProfileScreen({ navigation }) {
                         disabled={isSaving}
                     >
                         <View style={[styles.headerBtnInner, styles.headerSaveBtnInner]}>
-                            {isSaving
-                                ? <ActivityIndicator size="save" color="#FFF" />
-                                : <CustomText style={styles.headerSaveText}>Save</CustomText>
-                            }
+                            // Line ~246 — inside the header Save button
+                                {isSaving
+                                    ? <ActivityIndicator size="small" color="#FFF" />   // ✅ was "save"
+                                    : <CustomText style={styles.headerSaveText}>Save</CustomText>
+                                }
                         </View>
                     </TouchableOpacity>
                 ) : (
@@ -388,6 +407,29 @@ export default function ProfileScreen({ navigation }) {
                                     />
                                 </View>
 
+                                {/* Divider */}
+                                <View style={styles.formDivider} />
+
+                                {/* Contact info fields */}
+                                <View style={styles.formBlock}>
+                                    <View style={styles.formBlockHeader}>
+                                        <View style={styles.formBlockIconWrap}>
+                                            <Ionicons name="call-outline" size={16} color="#00686F" />
+                                        </View>
+                                        <CustomText style={styles.formBlockTitle}>Contact Information</CustomText>
+                                    </View>
+
+                                    <InputField
+                                        label="Contact Number"
+                                        value={contactNumber}
+                                        onChange={handleContactNumberChange}
+                                        icon="call-outline"
+                                        autoCapitalize="none"
+                                        keyboardType="phone-pad"
+                                        hint="Digits only (7–15 digits)"
+                                    />
+                                </View>
+
                                 {/* Action buttons */}
                                 <View style={styles.editActions}>
                                     <TouchableOpacity
@@ -435,6 +477,13 @@ export default function ProfileScreen({ navigation }) {
                                             icon="mail-outline"
                                             label="Email Address"
                                             subtitle={auth.currentUser?.email}
+                                            isLocked
+                                        />
+                                        <View style={styles.optionDivider} />
+                                        <ProfileOption
+                                            icon="call-outline"
+                                            label="Contact Number"
+                                            subtitle={originalData.contactNumber ? String(originalData.contactNumber) : 'Not set'}
                                             isLocked
                                         />
                                     </View>
@@ -512,7 +561,7 @@ const AvatarOption = ({ source, isSelected, onPress, isNone }) => {
     );
 };
 
-const InputField = ({ label, value, onChange, icon, autoCapitalize = "words", required, hint }) => {
+const InputField = ({ label, value, onChange, icon, autoCapitalize = "words", required, hint, keyboardType = "default" }) => {
     const [isFocused, setIsFocused] = useState(false);
 
     return (
@@ -540,6 +589,7 @@ const InputField = ({ label, value, onChange, icon, autoCapitalize = "words", re
                     autoCapitalize={autoCapitalize}
                     autoCorrect={false}
                     spellCheck={false}
+                    keyboardType={keyboardType}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
                 />

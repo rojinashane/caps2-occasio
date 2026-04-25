@@ -117,13 +117,18 @@ export default function DashboardScreen({ navigation }) {
     useEffect(() => {
         const user = auth.currentUser;
         if (!user) return;
+        // Query all pending notifications — the 'viewed' field may be missing
+        // on newly created docs, so filtering where('viewed','==',false) in
+        // Firestore misses them. We fetch all pending and filter client-side.
         const q = query(
             collection(db, 'notifications'),
             where('recipientId', '==', user.uid),
-            where('status', '==', 'pending'),
-            where('viewed', '==', false)
+            where('status', '==', 'pending')
         );
-        const unsub = onSnapshot(q, (snap) => setUnreadCount(snap.size));
+        const unsub = onSnapshot(q, (snap) => {
+            const count = snap.docs.filter(d => !d.data().viewed).length;
+            setUnreadCount(count);
+        });
         return () => unsub();
     }, []);
 

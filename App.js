@@ -12,7 +12,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import LandingScreen from './screens/LandingScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
-import AdminDashboard from './screens/AdminDashboardScreen';
 import DashboardScreen from './screens/DashboardScreen';
 import AddEvent from './components/AddEvent';
 import EventDetailsScreen from './screens/EventDetailsScreen';
@@ -23,7 +22,11 @@ import RSVPTrackerScreen from './screens/RSVPTrackerScreen';
 import MyEventsScreen from './screens/MyEventsScreen';
 import VendorScreen from './screens/VendorScreen';
 import Vendorpicker from './components/Vendorpicker';
-
+import VenueOwner from './screens/VenueOwnerScreen';
+import VenueOwnerProfile from './screens/VenueOwnerProfileScreen';
+import AddVenue from './components/AddVenue';
+import GuideModal from './components/GuideModal';
+import AddVendor from './components/AddVendor';
 
 // NEW: Services & AR Screens
 import NotificationService from './services/NotificationService';
@@ -47,14 +50,14 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Initialize Notifications on Mount
     NotificationService.registerForPushNotificationsAsync();
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
           await user.reload();
-          setInitialRoute(user.emailVerified ? 'Dashboard' : 'Landing');
+          // CHANGE 'Dashboard' TO 'DashboardScreen'
+          setInitialRoute(user.emailVerified ? 'DashboardScreen' : 'Landing');
         } catch (e) {
           console.log('Error reloading user:', e);
           setInitialRoute('Landing');
@@ -89,8 +92,7 @@ export default function App() {
             <Stack.Screen name="Landing" component={LandingScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Signup" component={SignupScreen} />
-            <Stack.Screen name="AdminDashboard" component={AdminDashboard} />
-            <Stack.Screen name="Dashboard" component={DashboardScreen} />
+            <Stack.Screen name="DashboardScreen" component={DashboardScreen} />
             <Stack.Screen name="AddEvent" component={AddEvent} />
             <Stack.Screen name="EventDetails" component={EventDetailsScreen} />
             <Stack.Screen name="UpdateEvent" component={UpdateEvent} />
@@ -103,6 +105,14 @@ export default function App() {
             <Stack.Screen name="ARVenue" component={ARVenueScreen} />
             <Stack.Screen name="Venuepicker" component={Venuepicker} />
             <Stack.Screen name="Vendorpicker" component={Vendorpicker} />
+            <Stack.Screen name="VenueOwnerScreen" component={VenueOwner} />
+            <Stack.Screen name="AddVenue" component={AddVenue} />
+            <Stack.Screen name="GuideModal" component={GuideModal} />
+            <Stack.Screen name="AddVendor" component={AddVendor} />
+            
+            {/* CHANGED NAME TO MATCH YOUR NAVIGATION CALL */}
+            <Stack.Screen name="VenueOwnerProfile" component={VenueOwnerProfile} />
+            
           </Stack.Navigator>
         </NavigationContainer>
       </GestureHandlerRootView>
