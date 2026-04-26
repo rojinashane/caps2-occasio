@@ -65,8 +65,8 @@ const CUSTOM_VENDOR_CATEGORIES = [
     'Catering',
 ];
 
-export default function VendorPicker({ visible, onClose, pinnedVendors = [], onPin, onUnpin }) {
-    const [vendors, setVendors]         = useState([]);
+export default function VendorPicker({ visible, onClose, pinnedVendors = [], onPin, onUnpin, communityVendors = [] }) {
+    const [vendorOwnerList, setVendorOwnerList] = useState([]);
     const [loading, setLoading]         = useState(true);
     const [search, setSearch]           = useState('');
     const [tab, setTab]                 = useState('browse'); // 'browse' | 'pinned' | 'custom'
@@ -99,9 +99,10 @@ export default function VendorPicker({ visible, onClose, pinnedVendors = [], onP
 
     // ── Load vendors from Firestore ───────────────────────────────────────────
     useEffect(() => {
+        // Load venue-owner vendors from /vendors
         const q = query(collection(db, 'vendors'), orderBy('name', 'asc'));
         const unsub = onSnapshot(q, (snap) => {
-            setVendors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            setVendorOwnerList(snap.docs.map(d => ({ id: d.id, ...d.data(), fromCommunity: false })));
             setLoading(false);
         }, () => setLoading(false));
         return () => unsub();
@@ -128,17 +129,26 @@ export default function VendorPicker({ visible, onClose, pinnedVendors = [], onP
         }
     };
 
-    const handleSaveCustom = () => {
+    const handleSaveCustom = async () => {
         if (!customName.trim()) return;
         setSavingCustom(true);
+        // isCustom: true  → tells pinVendor to save to community_vendors
+        // fromCommunity: false → tells pinVendor this is new (not yet in Firestore)
         const newVendor = {
             id: `custom_${Date.now()}`,
             name: customName.trim(),
             category: customCategory.trim() || 'Unassigned',
-            phone: customPhone.trim() || null,
+            phone: customPhone.trim() || '',
+            facebook: '',
+            location: '',
             isCustom: true,
+            fromCommunity: false,
         };
-        onPin(newVendor);
+        try {
+            await onPin(newVendor); // waits for community_vendors write to finish
+        } catch (e) {
+            console.warn('Pin failed:', e);
+        }
         setCustomName('');
         setCustomCategory('');
         setCustomPhone('');
@@ -148,7 +158,15 @@ export default function VendorPicker({ visible, onClose, pinnedVendors = [], onP
     };
 
     // ── Filtered list ─────────────────────────────────────────────────────────
-    const filtered = vendors.filter(v => {
+    // Merge venue-owner vendors with planner-contributed community vendors.
+    // Deduplicate by id so venue-owner entries mirrored to community_vendors
+    // don't appear twice (community copy takes precedence since it has fromCommunity: true).
+    const allVendors = [
+        ...vendorOwnerList,
+        ...communityVendors.filter(cv => !vendorOwnerList.some(v => v.id === cv.id)),
+    ];
+
+    const filtered = allVendors.filter(v => {
         const matchesSearch = !search ||
             v.name?.toLowerCase().includes(search.toLowerCase()) ||
             v.category?.toLowerCase().includes(search.toLowerCase()) ||
@@ -632,7 +650,7 @@ export default function VendorPicker({ visible, onClose, pinnedVendors = [], onP
                                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', backgroundColor: BRAND.primaryFaint, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: BRAND.primaryMid, marginBottom: 20 }}>
                                         <Ionicons name="information-circle-outline" size={15} color={BRAND.primary} style={{ marginTop: 1 }} />
                                         <CustomText fontFamily="medium" style={{ color: BRAND.primary + 'BB', fontSize: 12, marginLeft: 8, flex: 1, lineHeight: 17 }}>
-                                            Custom vendors are saved only to this event and won't appear in the main directory.
+                                            Custom vendors are pinned to this event and shared to the vendor directory so other planners can discover them too.
                                         </CustomText>
                                     </View>
 

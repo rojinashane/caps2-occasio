@@ -68,19 +68,22 @@ export default function SignupScreen({ navigation }) {
     }).start();
   }, []);
 
-  const animateStep = (direction) => {
-    Animated.sequence([
-      Animated.timing(slideAnim, {
-        toValue: direction === 'forward' ? -20 : 20,
-        duration: 150,
-        useNativeDriver: true,
-      }),
+  const animateStep = (direction, onMidpoint) => {
+    const outVal = direction === 'forward' ? -30 : 30;
+    Animated.timing(slideAnim, {
+      toValue: outVal,
+      duration: 150,
+      useNativeDriver: true,
+    }).start(() => {
+      // Swap content while the card is off-screen
+      onMidpoint();
+      slideAnim.setValue(-outVal);
       Animated.timing(slideAnim, {
         toValue: 0,
         duration: 150,
         useNativeDriver: true,
-      }),
-    ]).start();
+      }).start();
+    });
   };
 
   // ── Step 1 → 2: Role must be chosen ─────────────────────────────
@@ -89,8 +92,7 @@ export default function SignupScreen({ navigation }) {
       Alert.alert('Role Required', 'Please select a role to continue.');
       return;
     }
-    animateStep('forward');
-    setStep(2);
+    animateStep('forward', () => setStep(2));
   };
 
   // ── Step 2 → 3: Validate fields by role ─────────────────────────
@@ -107,8 +109,7 @@ export default function SignupScreen({ navigation }) {
       Alert.alert('Missing Fields', 'Venue Name is required for Venue Owners.');
       return;
     }
-    animateStep('forward');
-    setStep(3);
+    animateStep('forward', () => setStep(3));
   };
 
   // ── Step 3: Create account ───────────────────────────────────────
@@ -183,7 +184,7 @@ export default function SignupScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <Animated.View style={{ opacity: fadeAnim }}>
+          <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
 
             {/* ── Header ── */}
             <View style={styles.header}>
@@ -333,7 +334,7 @@ export default function SignupScreen({ navigation }) {
 
                     <View style={styles.stepBtnRow}>
                       <TouchableOpacity
-                        onPress={() => { animateStep('back'); setStep(1); }}
+                        onPress={() => animateStep('back', () => setStep(1))}
                         style={styles.backBtn}
                         activeOpacity={0.85}
                       >
@@ -399,7 +400,7 @@ export default function SignupScreen({ navigation }) {
 
                     <View style={styles.stepBtnRow}>
                       <TouchableOpacity
-                        onPress={() => { animateStep('back'); setStep(2); }}
+                        onPress={() => animateStep('back', () => setStep(2))}
                         style={styles.backBtn}
                         activeOpacity={0.85}
                       >

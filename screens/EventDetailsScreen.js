@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../firebase';
 import {
-    doc, getDoc, updateDoc, deleteDoc,
+    doc, getDoc, updateDoc, deleteDoc, setDoc,
     collection, query, where, getDocs, addDoc, serverTimestamp, limit,
     onSnapshot, orderBy,
 } from 'firebase/firestore';
@@ -232,7 +232,12 @@ export default function EventDetailsScreen({ route, navigation }) {
                 (snap) => {
                     if (isActive) {
                         setCommunityVendors(
-                            snap.docs.map(d => ({ id: d.id, ...d.data(), isCustom: true }))
+                            snap.docs.map(d => ({
+                                id: d.id,
+                                ...d.data(),
+                                isCustom:      true,
+                                fromCommunity: true,  // already in Firestore — no re-save needed on pin
+                            }))
                         );
                     }
                 },
@@ -417,40 +422,63 @@ export default function EventDetailsScreen({ route, navigation }) {
 
     const pinVendor = async (vendor) => {
         if (pinnedVendors.find(v => v.id === vendor.id)) return;
-        const updated = [...pinnedVendors, vendor];
-        setPinnedVendors(updated);
-        await syncPinnedVendors(updated);
 
-        // ── If this is a custom vendor, save it to the global community pool ──
-        // so all planners can discover and reuse vendors contributed by others.
-        if (vendor.isCustom) {
+        let vendorToPin = vendor;
+
+        // ── If this is a brand-new custom vendor (created locally in VendorPicker),
+        //    save it to community_vendors FIRST so it gets a stable Firestore ID
+        //    and is immediately discoverable by all other planners.
+        //
+        //    We distinguish "already in Firestore" from "locally created" by checking
+        //    whether vendor.fromCommunity is set (community docs loaded via onSnapshot
+        //    already have a real Firestore ID and don't need re-saving).
+        if (vendor.isCustom && !vendor.fromCommunity) {
             try {
-                // Check if a vendor with the same name already exists to avoid duplicates
+                const nameLower = vendor.name.trim().toLowerCase();
+
+                // Check for an existing community entry with the same name
                 const existing = await getDocs(
                     query(
                         collection(db, 'community_vendors'),
-                        where('nameLower', '==', vendor.name.trim().toLowerCase()),
+                        where('nameLower', '==', nameLower),
                         limit(1)
                     )
                 );
-                if (existing.empty) {
-                    await addDoc(collection(db, 'community_vendors'), {
-                        name:        vendor.name.trim(),
-                        nameLower:   vendor.name.trim().toLowerCase(),
-                        category:    vendor.category  || 'Custom',
-                        phone:       vendor.phone     || '',
-                        facebook:    vendor.facebook  || '',
-                        location:    vendor.location  || '',
-                        isCustom:    true,
+
+                let communityId;
+                if (!existing.empty) {
+                    // Vendor already exists in the directory — reuse its ID
+                    communityId = existing.docs[0].id;
+                } else {
+                    // New vendor — write to community_vendors and get back the Firestore ID
+                    const communityRef = await addDoc(collection(db, 'community_vendors'), {
+                        name:          vendor.name.trim(),
+                        nameLower,
+                        category:      vendor.category  || 'Custom',
+                        phone:         vendor.phone     || '',
+                        facebook:      vendor.facebook  || '',
+                        location:      vendor.location  || '',
+                        isCustom:      true,
                         contributedBy: auth.currentUser?.email || 'anonymous',
                         contributedAt: serverTimestamp(),
+                        updatedAt:     serverTimestamp(),
                     });
+                    communityId = communityRef.id;
                 }
+
+                // Replace the locally-generated ID with the stable Firestore ID
+                // so the pinned copy and the directory entry are in sync
+                vendorToPin = { ...vendor, id: communityId, fromCommunity: true };
+
             } catch (e) {
-                // Non-fatal — pinning still succeeds even if community write fails
+                // Non-fatal — pin the vendor with its local ID if the write fails
                 console.warn('community_vendors write failed:', e);
             }
         }
+
+        const updated = [...pinnedVendors, vendorToPin];
+        setPinnedVendors(updated);
+        await syncPinnedVendors(updated);
     };
 
     const unpinVendor = async (vendorId) => {
@@ -504,7 +532,7 @@ CRITICAL RULES:
 2. FACTUAL SERVICES: You MUST accurately describe the true services offered by the vendor. Categorize them strictly according to their primary real-world business (e.g., do not put a hotel in the Photography category). Do not invent, guess, or exaggerate their services. If you are unsure of a business's exact services or location, DO NOT include them.`;
 
             // 🛑 Insert your NEW, secure Groq API key here 
-            const GROQ_API_KEY = '';
+            const GROQ_API_KEY = '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';
 
             const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',

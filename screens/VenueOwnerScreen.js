@@ -23,7 +23,7 @@ import { signOut } from 'firebase/auth';
 import {
     collection, onSnapshot, query, addDoc,
     updateDoc, deleteDoc, doc, serverTimestamp,
-    where, getDoc,
+    where, getDoc, setDoc,
 } from 'firebase/firestore';
 import CustomText from '../components/CustomText';
 import tw from 'twrnc';
@@ -80,6 +80,9 @@ export default function VenueOwnerScreen({ navigation }) {
     const [isEditingVendor, setIsEditingVendor]     = useState(false);
     const [currentVendorId, setCurrentVendorId]     = useState(null);
     const [vendorForm, setVendorForm]               = useState(emptyVendorForm());
+
+    // Venue detail modal
+    const [detailVenue, setDetailVenue] = useState(null);
 
     // Guide modal
     const [guideModalVisible, setGuideModalVisible] = useState(false);
@@ -288,13 +291,18 @@ export default function VenueOwnerScreen({ navigation }) {
     };
 
     const handleDeleteVendor = (id) => {
-        Alert.alert('Delete Vendor', 'Remove this vendor?', [
+        Alert.alert('Delete Vendor', 'Remove this vendor? It will no longer be visible to event planners.', [
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Delete', style: 'destructive',
                 onPress: async () => {
-                    try { await deleteDoc(doc(db, 'vendors', id)); }
-                    catch (err) { Alert.alert('Error', err.message); }
+                    try {
+                        await deleteDoc(doc(db, 'vendors', id));
+                        // Best-effort removal of the community_vendors mirror
+                        deleteDoc(doc(db, 'community_vendors', id)).catch(() => {});
+                    } catch (err) {
+                        Alert.alert('Error', err.message);
+                    }
                 },
             },
         ]);
@@ -303,23 +311,60 @@ export default function VenueOwnerScreen({ navigation }) {
     const handleSaveVendor = async (form) => {
         setIsSubmitting(true);
         try {
-            const data = {
-                name:     form.name.trim(),
-                category: form.category,
-                phone:    form.phone.trim(),
-                facebook: form.facebook.trim(),
-                location: form.location.trim(),
+            const uid   = auth.currentUser?.uid;
+            const email = auth.currentUser?.email || 'anonymous';
+
+            // ── Primary write: /vendors (the owner's private list) ────────────
+            const vendorData = {
+                name:      form.name.trim(),
+                category:  form.category,
+                phone:     form.phone.trim(),
+                facebook:  form.facebook.trim(),
+                location:  form.location.trim(),
+                userId:    uid,
                 updatedAt: serverTimestamp(),
-                userId: auth.currentUser?.uid,
             };
+
+            let vendorDocId;
             if (isEditingVendor) {
-                await updateDoc(doc(db, 'vendors', currentVendorId), data);
+                await updateDoc(doc(db, 'vendors', currentVendorId), vendorData);
+                vendorDocId = currentVendorId;
             } else {
-                await addDoc(collection(db, 'vendors'), { ...data, createdAt: serverTimestamp() });
+                const ref = await addDoc(collection(db, 'vendors'), {
+                    ...vendorData,
+                    createdAt: serverTimestamp(),
+                });
+                vendorDocId = ref.id;
             }
+
+            // ── Mirror write: /community_vendors (visible to all planners) ────
+            // Same doc ID as /vendors so updates overwrite instead of duplicate.
+            const mirrorData = {
+                name:          form.name.trim(),
+                nameLower:     form.name.trim().toLowerCase(),
+                category:      form.category,
+                phone:         form.phone.trim(),
+                facebook:      form.facebook.trim(),
+                location:      form.location.trim(),
+                isCustom:      false,
+                ownerUid:      uid,
+                contributedBy: email,
+                updatedAt:     serverTimestamp(),
+            };
+            try {
+                await setDoc(
+                    doc(db, 'community_vendors', vendorDocId),
+                    { ...mirrorData, contributedAt: serverTimestamp() },
+                    { merge: true }
+                );
+            } catch (mirrorErr) {
+                // Mirror failure is non-fatal — vendor is saved in /vendors
+                console.warn('community_vendors mirror failed:', mirrorErr);
+            }
+
             setVendorModalVisible(false);
             resetVendorForm();
-            Alert.alert('Success', isEditingVendor ? 'Vendor updated!' : 'Vendor added!');
+            Alert.alert('Success', isEditingVendor ? 'Vendor updated!' : 'Vendor added! It\'s now visible to all event planners.');
         } catch (err) {
             Alert.alert('Error', err.message || 'Something went wrong.');
         } finally {
@@ -405,19 +450,28 @@ export default function VenueOwnerScreen({ navigation }) {
                 )}
 
                 <View style={tw`flex-row gap-2`}>
+                    {/* View button */}
                     <TouchableOpacity
-                        style={[tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl gap-1.5`, { backgroundColor: TEAL_LIGHT, borderWidth: 1, borderColor: TEAL_BORDER }]}
+                        style={[tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl gap-1.5`, { backgroundColor: TEAL, shadowColor: TEAL_DARK, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 4 }]}
+                        onPress={() => setDetailVenue(item)}
+                    >
+                        <Ionicons name="eye-outline" size={14} color="#FFF" />
+                        <CustomText style={{ color: '#FFF', fontSize: 13, fontWeight: '700' }}>View</CustomText>
+                    </TouchableOpacity>
+                    {/* Edit button */}
+                    <TouchableOpacity
+                        style={[tw`flex-row items-center justify-center py-2.5 rounded-xl gap-1`, { paddingHorizontal: 14, backgroundColor: TEAL_LIGHT, borderWidth: 1, borderColor: TEAL_BORDER }]}
                         onPress={() => handleEditVenuePress(item)}
                     >
                         <Ionicons name="create-outline" size={14} color={TEAL} />
                         <CustomText style={{ color: TEAL, fontSize: 13, fontWeight: '700' }}>Edit</CustomText>
                     </TouchableOpacity>
+                    {/* Delete button */}
                     <TouchableOpacity
-                        style={tw`flex-1 flex-row items-center justify-center py-2.5 rounded-xl gap-1.5 bg-red-50 border border-red-100`}
+                        style={[tw`flex-row items-center justify-center py-2.5 rounded-xl gap-1`, { paddingHorizontal: 12, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' }]}
                         onPress={() => handleDeleteVenue(item.id)}
                     >
                         <Ionicons name="trash-outline" size={14} color="#EF4444" />
-                        <CustomText style={tw`text-red-500 text-[13px] font-bold`}>Delete</CustomText>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -438,6 +492,10 @@ export default function VenueOwnerScreen({ navigation }) {
                     <View style={tw`flex-row items-center flex-wrap gap-1.5 mb-1`}>
                         <View style={[tw`px-2.5 py-0.5 rounded-lg`, { backgroundColor: TEAL + '15' }]}>
                             <CustomText style={{ fontSize: 10, color: TEAL, fontWeight: '700', textTransform: 'uppercase' }}>{item.category}</CustomText>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0FDF4', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: '#BBF7D0' }}>
+                            <Ionicons name="globe-outline" size={9} color="#16A34A" />
+                            <CustomText style={{ fontSize: 9, color: '#16A34A', fontWeight: '800', marginLeft: 3 }}>VISIBLE TO PLANNERS</CustomText>
                         </View>
                     </View>
                     {item.phone && (
@@ -719,6 +777,161 @@ export default function VenueOwnerScreen({ navigation }) {
                     </Animated.View>
                 </View>
             )}
+
+
+            {/* ── VENUE DETAIL MODAL ───────────────────────────────────────── */}
+            <Modal
+                visible={!!detailVenue}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setDetailVenue(null)}
+            >
+                <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' }}>
+                    <View style={{ backgroundColor: '#F0F4F8', borderTopLeftRadius: 32, borderTopRightRadius: 32, maxHeight: '88%', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.12, shadowRadius: 20, elevation: 20 }}>
+                        {/* Top accent bar */}
+                        <View style={{ height: 4, backgroundColor: TEAL }} />
+
+                        {/* Drag handle */}
+                        <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
+                            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: '#CBD5E1' }} />
+                        </View>
+
+                        <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
+                            {/* Hero image */}
+                            {detailVenue?.image ? (
+                                <View style={{ marginHorizontal: 16, marginTop: 8, borderRadius: 22, overflow: 'hidden', height: 200 }}>
+                                    <Image source={{ uri: detailVenue.image }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                                    {detailVenue.hasAR && (
+                                        <View style={{ position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,104,111,0.9)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 }}>
+                                            <Ionicons name="cube-outline" size={12} color="#FFF" />
+                                            <CustomText style={{ color: '#FFF', fontSize: 10, fontWeight: '800', marginLeft: 4, letterSpacing: 0.5 }}>AR READY</CustomText>
+                                        </View>
+                                    )}
+                                </View>
+                            ) : (
+                                <View style={{ marginHorizontal: 16, marginTop: 8, borderRadius: 22, overflow: 'hidden', height: 140, backgroundColor: TEAL_MID, alignItems: 'center', justifyContent: 'center' }}>
+                                    <Ionicons name="business-outline" size={48} color={TEAL + '60'} />
+                                </View>
+                            )}
+
+                            {/* Name + location */}
+                            <View style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 4 }}>
+                                <CustomText style={{ fontSize: 22, fontWeight: '800', color: '#0F172A', marginBottom: 4 }}>{detailVenue?.name}</CustomText>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <Ionicons name="location-outline" size={13} color="#94A3B8" />
+                                    <CustomText style={{ fontSize: 13, color: '#64748B', fontWeight: '500', marginLeft: 4 }}>{detailVenue?.location}</CustomText>
+                                </View>
+                            </View>
+
+                            {/* Stats row */}
+                            <View style={{ flexDirection: 'row', gap: 10, marginHorizontal: 16, marginTop: 14 }}>
+                                <View style={{ flex: 1, backgroundColor: '#FFF', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: TEAL_BORDER }}>
+                                    <Ionicons name="people-outline" size={18} color={TEAL} />
+                                    <CustomText style={{ fontSize: 13, fontWeight: '800', color: '#0F172A', marginTop: 4 }}>{detailVenue?.capacity}</CustomText>
+                                    <CustomText style={{ fontSize: 10, color: '#94A3B8', fontWeight: '600', marginTop: 1 }}>CAPACITY</CustomText>
+                                </View>
+                                <View style={{ flex: 1, backgroundColor: '#FFF', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#FDE68A' }}>
+                                    <Ionicons name="pricetag-outline" size={18} color="#D97706" />
+                                    <CustomText style={{ fontSize: 13, fontWeight: '800', color: '#0F172A', marginTop: 4 }}>{detailVenue?.price}</CustomText>
+                                    <CustomText style={{ fontSize: 10, color: '#94A3B8', fontWeight: '600', marginTop: 1 }}>PRICE</CustomText>
+                                </View>
+                            </View>
+
+                            {/* Description */}
+                            {detailVenue?.description ? (
+                                <View style={{ marginHorizontal: 16, marginTop: 14, backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E8EEF4' }}>
+                                    <CustomText style={{ fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, marginBottom: 6 }}>DESCRIPTION</CustomText>
+                                    <CustomText style={{ fontSize: 13, color: '#475569', lineHeight: 20, fontWeight: '500' }}>{detailVenue.description}</CustomText>
+                                </View>
+                            ) : null}
+
+                            {/* Amenities */}
+                            {detailVenue?.amenities?.length > 0 && (
+                                <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E8EEF4' }}>
+                                    <CustomText style={{ fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, marginBottom: 10 }}>AMENITIES</CustomText>
+                                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                                        {detailVenue.amenities.map((a, i) => (
+                                            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: TEAL_LIGHT, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: TEAL_BORDER }}>
+                                                <Ionicons name="checkmark-circle" size={12} color={TEAL} />
+                                                <CustomText style={{ fontSize: 11, color: TEAL, fontWeight: '700', marginLeft: 5 }}>{a}</CustomText>
+                                            </View>
+                                        ))}
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* Contact */}
+                            {(detailVenue?.contact?.phone || detailVenue?.contact?.facebook || detailVenue?.contact?.instagram) && (
+                                <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E8EEF4' }}>
+                                    <CustomText style={{ fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, marginBottom: 10 }}>CONTACT</CustomText>
+                                    {detailVenue.contact.phone ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                            <Ionicons name="call-outline" size={14} color={TEAL} />
+                                            <CustomText style={{ fontSize: 13, color: '#334155', fontWeight: '600', marginLeft: 8 }}>{detailVenue.contact.phone}</CustomText>
+                                        </View>
+                                    ) : null}
+                                    {detailVenue.contact.facebook ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                                            <Ionicons name="logo-facebook" size={14} color="#1D4ED8" />
+                                            <CustomText style={{ fontSize: 13, color: '#334155', fontWeight: '600', marginLeft: 8 }}>{detailVenue.contact.facebook}</CustomText>
+                                        </View>
+                                    ) : null}
+                                    {detailVenue.contact.instagram ? (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                            <Ionicons name="logo-instagram" size={14} color="#EC4899" />
+                                            <CustomText style={{ fontSize: 13, color: '#334155', fontWeight: '600', marginLeft: 8 }}>{detailVenue.contact.instagram}</CustomText>
+                                        </View>
+                                    ) : null}
+                                </View>
+                            )}
+
+                            {/* Bottom padding */}
+                            <View style={{ height: 24 }} />
+                        </ScrollView>
+
+                        {/* Footer action buttons */}
+                        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: Platform.OS === 'ios' ? 34 : 20, borderTopWidth: 1, borderTopColor: '#E8EEF4', backgroundColor: '#F0F4F8', gap: 10 }}>
+                            {/* AR button — only shown when model exists */}
+                            {detailVenue?.hasAR && detailVenue?.modelUrl ? (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setDetailVenue(null);
+                                        navigation.navigate('ARVenue', {
+                                            venueId:   detailVenue.id,
+                                            venueName: detailVenue.name,
+                                            modelUrl:  detailVenue.modelUrl,
+                                            price:     detailVenue.price,
+                                            capacity:  detailVenue.capacity,
+                                            location:  detailVenue.location,
+                                        });
+                                    }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 54, borderRadius: 18, backgroundColor: TEAL, gap: 8, shadowColor: TEAL_DARK, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 }}
+                                >
+                                    <Ionicons name="walk" size={18} color="#FFF" />
+                                    <CustomText style={{ color: '#FFF', fontSize: 15, fontWeight: '800' }}>Walk in AR</CustomText>
+                                </TouchableOpacity>
+                            ) : null}
+
+                            <View style={{ flexDirection: 'row', gap: 10 }}>
+                                <TouchableOpacity
+                                    onPress={() => { setDetailVenue(null); handleEditVenuePress(detailVenue); }}
+                                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 16, backgroundColor: TEAL_LIGHT, borderWidth: 1.5, borderColor: TEAL_BORDER, gap: 6 }}
+                                >
+                                    <Ionicons name="create-outline" size={16} color={TEAL} />
+                                    <CustomText style={{ color: TEAL, fontSize: 14, fontWeight: '800' }}>Edit Venue</CustomText>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    onPress={() => setDetailVenue(null)}
+                                    style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 16, backgroundColor: '#F1F5F9', gap: 6 }}
+                                >
+                                    <Ionicons name="close-outline" size={16} color="#64748B" />
+                                    <CustomText style={{ color: '#64748B', fontSize: 14, fontWeight: '700' }}>Close</CustomText>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* ── SCANIVERSE GUIDE MODAL ───────────────────────────────────── */}
             <GuideModal visible={guideModalVisible} onClose={() => setGuideModalVisible(false)} />
