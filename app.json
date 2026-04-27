@@ -23,6 +23,12 @@
         "foregroundImage": "./assets/logoo.png",
         "backgroundColor": "#FFFFFF"
       }
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2681dffa-fdb8-4819-a9ad-7cc831a1cd68"
+      }
+    },
+    "owner": "inshaneity"
   }
 }
