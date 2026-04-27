@@ -15,6 +15,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+
+// ── SOURCE BADGE COLOURS ──────────────────────────────────────
+const SOURCE_META = {
+    admin:     { label: 'Official',  color: '#00686F', bg: '#E0F2F3' },
+    community: { label: 'Community', color: '#7C3AED', bg: '#EDE9FE' },
+};
 import CustomText from '../components/CustomText';
 import tw from 'twrnc';
 
@@ -74,7 +80,8 @@ const VendorCard = ({ item, onPress, index }) => {
         ]).start();
     }, []);
 
-    const iconName = CATEGORY_ICONS[item.category] || 'business-outline';
+    const iconName  = CATEGORY_ICONS[item.category] || 'business-outline';
+    const srcMeta   = SOURCE_META[item._source] || SOURCE_META.admin;
 
     return (
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
@@ -112,11 +119,18 @@ const VendorCard = ({ item, onPress, index }) => {
                     >
                         {item.name}
                     </CustomText>
-                    <View style={tw`flex-row items-center`}>
-                        <View style={[tw`w-1.5 h-1.5 rounded-full mr-1.5`, { backgroundColor: BRAND.primary }]} />
-                        <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12 }}>
-                            {item.category || 'Vendor'}
-                        </CustomText>
+                    <View style={tw`flex-row items-center flex-wrap gap-1`}>
+                        <View style={tw`flex-row items-center`}>
+                            <View style={[tw`w-1.5 h-1.5 rounded-full mr-1.5`, { backgroundColor: BRAND.primary }]} />
+                            <CustomText fontFamily="medium" style={{ color: '#94A3B8', fontSize: 12 }}>
+                                {item.category || 'Vendor'}
+                            </CustomText>
+                        </View>
+                        <View style={[tw`px-2 py-0.5 rounded-full ml-1`, { backgroundColor: srcMeta.bg }]}>
+                            <CustomText fontFamily="bold" style={{ color: srcMeta.color, fontSize: 9, letterSpacing: 0.4 }}>
+                                {srcMeta.label}
+                            </CustomText>
+                        </View>
                     </View>
                 </View>
 
@@ -205,16 +219,52 @@ export default function VendorScreen({ navigation }) {
     const modalSlide = useRef(new Animated.Value(400)).current;
     const modalFade  = useRef(new Animated.Value(0)).current;
 
-    // ── FIREBASE ──
+    // ── FIREBASE — merge vendors + community_vendors ──────────────────────────
     useEffect(() => {
-        const q = query(collection(db, 'vendors'), orderBy('name', 'asc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setVendors(data);
-            setFilteredVendors(data);
+        let officialData   = [];
+        let communityData  = [];
+        let officialReady  = false;
+        let communityReady = false;
+
+        const merge = () => {
+            if (!officialReady || !communityReady) return;
+
+            // Deduplicate: if a community vendor shares a nameLower with an official
+            // vendor, skip the community copy (official entry wins).
+            const officialNamesLower = new Set(
+                officialData.map(v => (v.nameLower || v.name?.toLowerCase() || ''))
+            );
+
+            const uniqueCommunity = communityData.filter(
+                v => !officialNamesLower.has(v.nameLower || v.name?.toLowerCase() || '')
+            );
+
+            // Tag source so the card can show a badge
+            const tagged = [
+                ...officialData.map(v  => ({ ...v,  _source: 'admin'     })),
+                ...uniqueCommunity.map(v => ({ ...v, _source: 'community' })),
+            ].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+            setVendors(tagged);
+            setFilteredVendors(tagged);
             setLoading(false);
-        });
-        return () => unsubscribe();
+        };
+
+        const qOfficial = query(collection(db, 'vendors'), orderBy('name', 'asc'));
+        const unsubOfficial = onSnapshot(qOfficial, (snap) => {
+            officialData  = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            officialReady = true;
+            merge();
+        }, (err) => { console.warn('vendors snapshot error:', err); setLoading(false); });
+
+        const qCommunity = query(collection(db, 'community_vendors'), orderBy('name', 'asc'));
+        const unsubCommunity = onSnapshot(qCommunity, (snap) => {
+            communityData  = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            communityReady = true;
+            merge();
+        }, (err) => { console.warn('community_vendors snapshot error:', err); });
+
+        return () => { unsubOfficial(); unsubCommunity(); };
     }, []);
 
     // ── FILTER ──

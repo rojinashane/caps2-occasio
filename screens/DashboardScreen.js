@@ -135,9 +135,9 @@ export default function DashboardScreen({ navigation }) {
     useFocusEffect(useCallback(() => {
         fetchUserData();
         const h = new Date().getHours();
-        if (h < 12) { setGreeting('Good morning');   setEmoji('☀️'); }
-        else if (h < 18) { setGreeting('Good afternoon'); setEmoji('👋'); }
-        else { setGreeting('Good evening');  setEmoji('🌙'); }
+        if (h < 12) { setGreeting('Good morning'); }
+        else if (h < 18) { setGreeting('Good afternoon'); }
+        else { setGreeting('Good evening');}
     }, []));
 
     useEffect(() => {

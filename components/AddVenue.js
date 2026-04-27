@@ -11,6 +11,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     Linking,
+    SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import CustomText from './CustomText';
@@ -132,7 +133,7 @@ function RequiredLabel({ label }) {
     );
 }
 
-// ─── FormField — plain text input with optional required badge ────────────────
+// ─── FormField ────────────────────────────────────────────────────────────────
 function FormField({ label, placeholder, value, onChangeText, keyboardType, multiline, required, isInvalid }) {
     const [isFocused, setIsFocused] = useState(false);
     const borderColor = isInvalid ? '#EF4444' : isFocused ? TEAL : '#E8EEF4';
@@ -421,8 +422,6 @@ function Step2({ form, setForm }) {
     );
 }
 
-// ─── [ScaniverseTutorialModal removed — now using GuideModal component] ──────
-
 // ─── Step 3 — 3D Scan ─────────────────────────────────────────────────────────
 function Step3({ form, setForm, onSkip }) {
     const [guideVisible, setGuideVisible] = useState(false);
@@ -544,7 +543,7 @@ function Step4({ form, goToStep }) {
     );
 }
 
-// ─── Main AddVenue component (used as a Modal from VenueOwnerScreen) ──────────
+// ─── Main AddVenue component ──────────────────────────────────────────────────
 export default function AddVenue({
     visible,
     onClose,
@@ -577,10 +576,9 @@ export default function AddVenue({
         if (step === 1) {
             const newTouched = { name: true, location: true, capacity: true, price: true };
             setTouched(prev => ({ ...prev, ...newTouched }));
-            if (!form.name.trim())     { Alert.alert('Required field', 'Please fill in the venue name.');     return false; }
-            if (!form.location.trim()) { Alert.alert('Required field', 'Please fill in the location.');       return false; }
-            if (!form.capacity.trim()) { Alert.alert('Required field', 'Please fill in the capacity.');       return false; }
-            if (!form.price.trim())    { Alert.alert('Required field', 'Please fill in the price.');          return false; }
+            if (!form.name.trim() || !form.location.trim() || !form.capacity.trim() || !form.price.trim()) {
+                return false;
+            }
         }
         return true;
     };
@@ -597,151 +595,142 @@ export default function AddVenue({
 
     const meta    = STEP_HEADER_META[step - 1];
     const isLast  = step === TOTAL_STEPS;
-    const btnLabel = isLast ? (isEditing ? 'Update Venue' : 'Publish Venue 🎉') : 'Continue';
+    const btnLabel = isLast ? (isEditing ? 'Update Venue' : 'Publish Venue') : 'Continue';
 
     return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.55)', justifyContent: 'flex-end' }}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <Modal visible={visible} animationType="slide" transparent={false} statusBarTranslucent>
+            <SafeAreaView style={{ flex: 1, backgroundColor: '#F0F4F8' }}>
+                <KeyboardAvoidingView
+                    style={{ flex: 1 }}
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                >
+                    {/* Required-fields legend */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#FFF8F0', borderBottomWidth: 1, borderBottomColor: '#FDEBD0' }}>
+                        <CustomText style={{ color: '#EF4444', fontWeight: '700', fontSize: 13, marginRight: 4 }}>*</CustomText>
+                        <CustomText style={{ color: '#92400E', fontSize: 12, fontWeight: '500' }}>
+                            Fields marked REQUIRED must be filled before continuing
+                        </CustomText>
+                    </View>
+
+                    {/* Header card */}
                     <View style={{
-                        backgroundColor: '#F0F4F8',
-                        borderTopLeftRadius: 32, borderTopRightRadius: 32,
-                        maxHeight: '92%', overflow: 'hidden',
-                        shadowColor: '#000', shadowOffset: { width: 0, height: -8 },
-                        shadowOpacity: 0.15, shadowRadius: 24, elevation: 20,
+                        marginHorizontal: 16, marginTop: 12, marginBottom: 8,
+                        backgroundColor: '#fff', borderRadius: 24, padding: 18,
+                        borderWidth: 1.5, borderColor: meta.color + '25',
+                        shadowColor: meta.color, shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.12, shadowRadius: 12, elevation: 4,
                     }}>
-                        {/* Drag handle */}
-                        <View style={{ alignItems: 'center', paddingTop: 10, paddingBottom: 4 }}>
-                            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: '#CBD5E1' }} />
-                        </View>
-
-                        {/* Required-fields legend */}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#FFF8F0', borderBottomWidth: 1, borderBottomColor: '#FDEBD0', marginHorizontal: 16, borderRadius: 12, marginBottom: 4 }}>
-                            <CustomText style={{ color: '#EF4444', fontWeight: '700', fontSize: 13, marginRight: 4 }}>*</CustomText>
-                            <CustomText style={{ color: '#92400E', fontSize: 12, fontWeight: '500' }}>
-                                Fields marked REQUIRED must be filled before continuing
-                            </CustomText>
-                        </View>
-
-                        {/* Header card */}
-                        <View style={{
-                            marginHorizontal: 16, marginBottom: 8,
-                            backgroundColor: '#fff', borderRadius: 24, padding: 18,
-                            borderWidth: 1.5, borderColor: meta.color + '25',
-                            shadowColor: meta.color, shadowOffset: { width: 0, height: 4 },
-                            shadowOpacity: 0.12, shadowRadius: 12, elevation: 4,
-                        }}>
-                            {/* Title row */}
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                                    <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: meta.color + '18', alignItems: 'center', justifyContent: 'center' }}>
-                                        <Ionicons name={meta.icon} size={19} color={meta.color} />
-                                    </View>
-                                    <View>
-                                        <CustomText style={{ fontSize: 11, color: '#94A3B8', fontWeight: '600', letterSpacing: 0.8 }}>
-                                            STEP {step} OF {TOTAL_STEPS}
-                                        </CustomText>
-                                        <CustomText style={{ fontSize: 16, fontWeight: '800', color: '#0F172A' }}>
-                                            {isEditing ? 'Edit: ' : ''}{meta.label}
-                                        </CustomText>
-                                    </View>
+                        {/* Title row */}
+                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: meta.color + '18', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Ionicons name={meta.icon} size={19} color={meta.color} />
                                 </View>
-                                <TouchableOpacity
-                                    onPress={onClose}
-                                    style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E8EEF4', alignItems: 'center', justifyContent: 'center' }}
-                                >
-                                    <Ionicons name="close" size={18} color="#94A3B8" />
-                                </TouchableOpacity>
+                                <View>
+                                    <CustomText style={{ fontSize: 11, color: '#94A3B8', fontWeight: '600', letterSpacing: 0.8 }}>
+                                        STEP {step} OF {TOTAL_STEPS}
+                                    </CustomText>
+                                    <CustomText style={{ fontSize: 16, fontWeight: '800', color: '#0F172A' }}>
+                                        {isEditing ? 'Edit: ' : ''}{meta.label}
+                                    </CustomText>
+                                </View>
                             </View>
-
-                            {/* Progress bar */}
-                            <View style={{ height: 6, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
-                                <View style={{ width: `${(step / TOTAL_STEPS) * 100}%`, height: '100%', backgroundColor: meta.color, borderRadius: 3 }} />
-                            </View>
-
-                            {/* Step pills */}
-                            <View style={{ flexDirection: 'row', marginTop: 10, gap: 6 }}>
-                                {STEP_META.map((s, i) => {
-                                    const n      = i + 1;
-                                    const done   = n < step;
-                                    const active = n === step;
-                                    return (
-                                        <View key={n} style={{
-                                            flex: 1, paddingVertical: 5, borderRadius: 8, alignItems: 'center',
-                                            backgroundColor: done ? meta.color + '15' : active ? meta.color + '10' : '#F8FAFC',
-                                            borderWidth: 1,
-                                            borderColor: done || active ? meta.color + '30' : '#E8EEF4',
-                                        }}>
-                                            {done
-                                                ? <Ionicons name="checkmark" size={12} color={meta.color} />
-                                                : <CustomText style={{ fontSize: 9, fontWeight: '800', color: active ? meta.color : '#CBD5E1' }}>
-                                                    {s.label.replace('\n', ' ')}
-                                                  </CustomText>
-                                            }
-                                        </View>
-                                    );
-                                })}
-                            </View>
+                            <TouchableOpacity
+                                onPress={onClose}
+                                style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E8EEF4', alignItems: 'center', justifyContent: 'center' }}
+                            >
+                                <Ionicons name="close" size={18} color="#94A3B8" />
+                            </TouchableOpacity>
                         </View>
 
-                        {/* Form content */}
-                        <ScrollView
-                            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
-                            keyboardShouldPersistTaps="handled"
-                            showsVerticalScrollIndicator={false}
-                        >
-                            <Animated.View style={{
-                                transform: [{ translateX: slideAnim }],
-                                backgroundColor: '#fff', borderRadius: 24, padding: 20,
-                                borderWidth: 1, borderColor: '#EEF2F7',
-                                shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 3 },
-                                shadowOpacity: 0.07, shadowRadius: 10, elevation: 2,
-                            }}>
-                                {step === 1 && <Step1 form={form} setForm={setForm} touched={touched} />}
-                                {step === 2 && <Step2 form={form} setForm={setForm} />}
-                                {step === 3 && <Step3 form={form} setForm={setForm} onSkip={() => setStep(4)} />}
-                                {step === 4 && <Step4 form={form} goToStep={setStep} />}
-                            </Animated.View>
-                        </ScrollView>
+                        {/* Progress bar */}
+                        <View style={{ height: 6, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden' }}>
+                            <View style={{ width: `${(step / TOTAL_STEPS) * 100}%`, height: '100%', backgroundColor: meta.color, borderRadius: 3 }} />
+                        </View>
 
-                        {/* Footer buttons */}
-                        <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 34 : 20, gap: 10 }}>
-                            <TouchableOpacity
-                                onPress={next}
-                                disabled={isSubmitting}
-                                activeOpacity={0.85}
-                                style={{
-                                    height: 56, borderRadius: 18,
-                                    backgroundColor: isLast ? (isEditing ? '#10B981' : TEAL) : meta.color,
-                                    alignItems: 'center', justifyContent: 'center',
-                                    flexDirection: 'row', gap: 8,
-                                    shadowColor: meta.color, shadowOffset: { width: 0, height: 6 },
-                                    shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
-                                    opacity: isSubmitting ? 0.75 : 1,
-                                }}
-                            >
-                                {isSubmitting
-                                    ? <ActivityIndicator color="#fff" />
-                                    : <>
-                                        <CustomText style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>{btnLabel}</CustomText>
-                                        {!isLast && <Ionicons name="arrow-forward" size={16} color="#fff" />}
-                                      </>
-                                }
-                            </TouchableOpacity>
-
-                            {step > 1 && (
-                                <TouchableOpacity
-                                    onPress={back}
-                                    style={{ height: 46, borderRadius: 14, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 }}
-                                >
-                                    <Ionicons name="arrow-back" size={15} color="#64748B" />
-                                    <CustomText style={{ color: '#64748B', fontSize: 14, fontWeight: '700' }}>Back</CustomText>
-                                </TouchableOpacity>
-                            )}
+                        {/* Step pills */}
+                        <View style={{ flexDirection: 'row', marginTop: 10, gap: 6 }}>
+                            {STEP_META.map((s, i) => {
+                                const n      = i + 1;
+                                const done   = n < step;
+                                const active = n === step;
+                                return (
+                                    <View key={n} style={{
+                                        flex: 1, paddingVertical: 5, borderRadius: 8, alignItems: 'center',
+                                        backgroundColor: done ? meta.color + '15' : active ? meta.color + '10' : '#F8FAFC',
+                                        borderWidth: 1,
+                                        borderColor: done || active ? meta.color + '30' : '#E8EEF4',
+                                    }}>
+                                        {done
+                                            ? <Ionicons name="checkmark" size={12} color={meta.color} />
+                                            : <CustomText style={{ fontSize: 9, fontWeight: '800', color: active ? meta.color : '#CBD5E1' }}>
+                                                {s.label.replace('\n', ' ')}
+                                              </CustomText>
+                                        }
+                                    </View>
+                                );
+                            })}
                         </View>
                     </View>
+
+                    {/* Form content */}
+                    <ScrollView
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8 }}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <Animated.View style={{
+                            transform: [{ translateX: slideAnim }],
+                            backgroundColor: '#fff', borderRadius: 24, padding: 20,
+                            borderWidth: 1, borderColor: '#EEF2F7',
+                            shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 3 },
+                            shadowOpacity: 0.07, shadowRadius: 10, elevation: 2,
+                        }}>
+                            {step === 1 && <Step1 form={form} setForm={setForm} touched={touched} />}
+                            {step === 2 && <Step2 form={form} setForm={setForm} />}
+                            {step === 3 && <Step3 form={form} setForm={setForm} onSkip={() => setStep(4)} />}
+                            {step === 4 && <Step4 form={form} goToStep={setStep} />}
+                        </Animated.View>
+                    </ScrollView>
+
+                    {/* Footer buttons */}
+                    <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: Platform.OS === 'ios' ? 34 : 20, gap: 10, borderTopWidth: 1, borderTopColor: '#E8EEF4', backgroundColor: '#F0F4F8' }}>
+                        <TouchableOpacity
+                            onPress={next}
+                            disabled={isSubmitting}
+                            activeOpacity={0.85}
+                            style={{
+                                height: 56, borderRadius: 18,
+                                backgroundColor: isLast ? (isEditing ? '#10B981' : TEAL) : meta.color,
+                                alignItems: 'center', justifyContent: 'center',
+                                flexDirection: 'row', gap: 8,
+                                shadowColor: meta.color, shadowOffset: { width: 0, height: 6 },
+                                shadowOpacity: 0.3, shadowRadius: 12, elevation: 6,
+                                opacity: isSubmitting ? 0.75 : 1,
+                            }}
+                        >
+                            {isSubmitting
+                                ? <ActivityIndicator color="#fff" />
+                                : <>
+                                    <CustomText style={{ color: '#fff', fontSize: 15, fontWeight: '800' }}>{btnLabel}</CustomText>
+                                    {!isLast && <Ionicons name="arrow-forward" size={16} color="#fff" />}
+                                  </>
+                            }
+                        </TouchableOpacity>
+
+                        {step > 1 && (
+                            <TouchableOpacity
+                                onPress={back}
+                                style={{ height: 46, borderRadius: 14, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6 }}
+                            >
+                                <Ionicons name="arrow-back" size={15} color="#64748B" />
+                                <CustomText style={{ color: '#64748B', fontSize: 14, fontWeight: '700' }}>Back</CustomText>
+                            </TouchableOpacity>
+                        )}
+                    </View>
                 </KeyboardAvoidingView>
-            </View>
+            </SafeAreaView>
         </Modal>
     );
 }

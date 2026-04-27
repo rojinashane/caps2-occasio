@@ -24,7 +24,6 @@ import MyEventsScreen from './screens/MyEventsScreen';
 import VendorScreen from './screens/VendorScreen';
 import Vendorpicker from './components/Vendorpicker';
 import VenueOwner from './screens/VenueOwnerScreen';
-import VenueOwnerProfile from './screens/VenueOwnerProfileScreen';
 import AddVenue from './components/AddVenue';
 import GuideModal from './components/GuideModal';
 import AddVendor from './components/AddVendor';
@@ -119,9 +118,6 @@ export default function App() {
             <Stack.Screen name="AddVenue" component={AddVenue} />
             <Stack.Screen name="GuideModal" component={GuideModal} />
             <Stack.Screen name="AddVendor" component={AddVendor} />
-            
-            {/* CHANGED NAME TO MATCH YOUR NAVIGATION CALL */}
-            <Stack.Screen name="VenueOwnerProfile" component={VenueOwnerProfile} />
             
           </Stack.Navigator>
         </NavigationContainer>

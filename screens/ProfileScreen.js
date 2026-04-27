@@ -243,11 +243,10 @@ export default function ProfileScreen({ navigation }) {
                         disabled={isSaving}
                     >
                         <View style={[styles.headerBtnInner, styles.headerSaveBtnInner]}>
-                            // Line ~246 — inside the header Save button
-                                {isSaving
-                                    ? <ActivityIndicator size="small" color="#FFF" />   // ✅ was "save"
-                                    : <CustomText style={styles.headerSaveText}>Save</CustomText>
-                                }
+                            {isSaving
+                                ? <ActivityIndicator size="small" color="#FFF" />
+                                : <CustomText style={styles.headerSaveText}>Save</CustomText>
+                            }
                         </View>
                     </TouchableOpacity>
                 ) : (
@@ -497,7 +496,7 @@ export default function ProfileScreen({ navigation }) {
                                             icon="home-outline"
                                             label="Back to Dashboard"
                                             subtitle="Return to your events overview"
-                                            onPress={() => navigation.navigate('Dashboard')}
+                                            onPress={() => navigation.navigate('DashboardScreen')}
                                             showChevron
                                         />
                                     </View>

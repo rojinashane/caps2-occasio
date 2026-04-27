@@ -96,6 +96,12 @@ export default function VenueOwnerScreen({ navigation }) {
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
     const [loggingOut, setLoggingOut] = useState(false);
 
+    // Confirmation / success modals
+    const [confirmModal, setConfirmModal] = useState(null);
+    // confirmModal shape: { type: 'deleteVenue'|'deleteVendor'|'successVenue'|'successVendor', id?: string, isEditing?: bool }
+    const [successModal, setSuccessModal] = useState(null);
+    // successModal shape: { type: 'venue'|'vendor', isEditing: bool }
+
     // Animations
     const fadeAnim   = useRef(new Animated.Value(0)).current;
     const slideAnim  = useRef(new Animated.Value(width)).current;
@@ -229,7 +235,7 @@ export default function VenueOwnerScreen({ navigation }) {
             }
 
             setVenueModalVisible(false);
-            Alert.alert('Success', isEditing ? 'Venue updated!' : 'Venue published!');
+            setSuccessModal({ type: 'venue', isEditing });
         } catch (err) {
             Alert.alert('Error', err.message || 'Something went wrong.');
         } finally {
@@ -259,16 +265,13 @@ export default function VenueOwnerScreen({ navigation }) {
     };
 
     const handleDeleteVenue = (id) => {
-        Alert.alert('Delete Venue', 'Remove this venue permanently?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete', style: 'destructive',
-                onPress: async () => {
-                    try { await deleteDoc(doc(db, 'venues', id)); }
-                    catch (err) { Alert.alert('Error', err.message); }
-                },
-            },
-        ]);
+        setConfirmModal({ type: 'deleteVenue', id });
+    };
+
+    const confirmDeleteVenue = async (id) => {
+        try { await deleteDoc(doc(db, 'venues', id)); }
+        catch (err) { Alert.alert('Error', err.message); }
+        finally { setConfirmModal(null); }
     };
 
     // ── Vendor helpers ────────────────────────────────────────────────────────
@@ -291,21 +294,18 @@ export default function VenueOwnerScreen({ navigation }) {
     };
 
     const handleDeleteVendor = (id) => {
-        Alert.alert('Delete Vendor', 'Remove this vendor? It will no longer be visible to event planners.', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete', style: 'destructive',
-                onPress: async () => {
-                    try {
-                        await deleteDoc(doc(db, 'vendors', id));
-                        // Best-effort removal of the community_vendors mirror
-                        deleteDoc(doc(db, 'community_vendors', id)).catch(() => {});
-                    } catch (err) {
-                        Alert.alert('Error', err.message);
-                    }
-                },
-            },
-        ]);
+        setConfirmModal({ type: 'deleteVendor', id });
+    };
+
+    const confirmDeleteVendor = async (id) => {
+        try {
+            await deleteDoc(doc(db, 'vendors', id));
+            deleteDoc(doc(db, 'community_vendors', id)).catch(() => {});
+        } catch (err) {
+            Alert.alert('Error', err.message);
+        } finally {
+            setConfirmModal(null);
+        }
     };
 
     const handleSaveVendor = async (form) => {
@@ -364,7 +364,7 @@ export default function VenueOwnerScreen({ navigation }) {
 
             setVendorModalVisible(false);
             resetVendorForm();
-            Alert.alert('Success', isEditingVendor ? 'Vendor updated!' : 'Vendor added! It\'s now visible to all event planners.');
+            setSuccessModal({ type: 'vendor', isEditing: isEditingVendor });
         } catch (err) {
             Alert.alert('Error', err.message || 'Something went wrong.');
         } finally {
@@ -735,19 +735,6 @@ export default function VenueOwnerScreen({ navigation }) {
                             </TouchableOpacity>
                         </View>
                         <View style={tw`mt-6`}>
-                            <TouchableOpacity style={tw`flex-row items-center py-4`} onPress={() => { toggleMenu(false); navigation.navigate('VenueOwnerProfile'); }}>
-                                <View style={[tw`w-12 h-12 rounded-2xl justify-center items-center mr-4`, { backgroundColor: TEAL_MID }]}>
-                                    <Ionicons name="person-outline" size={20} color={TEAL} />
-                                </View>
-                                <View>
-                                    <CustomText style={tw`text-[16px] font-bold text-slate-700`}>Profile Settings</CustomText>
-                                    <CustomText style={{ fontSize: 11, color: '#94A3B8', fontWeight: '500', marginTop: 1 }}>Manage your account</CustomText>
-                                </View>
-                            </TouchableOpacity>
-
-                            {/* Divider */}
-                            <View style={{ height: 1, backgroundColor: '#F1F5F9', marginVertical: 4 }} />
-
                             <TouchableOpacity
                                 style={tw`flex-row items-center py-4`}
                                 onPress={() => { toggleMenu(false); setTimeout(() => setGuideModalVisible(true), 300); }}
@@ -935,6 +922,144 @@ export default function VenueOwnerScreen({ navigation }) {
 
             {/* ── SCANIVERSE GUIDE MODAL ───────────────────────────────────── */}
             <GuideModal visible={guideModalVisible} onClose={() => setGuideModalVisible(false)} />
+
+            {/* ── DELETE VENUE CONFIRMATION ─────────────────────────────────── */}
+            <Modal
+                visible={confirmModal?.type === 'deleteVenue'}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setConfirmModal(null)}
+            >
+                <TouchableWithoutFeedback onPress={() => setConfirmModal(null)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 }}>
+                        <TouchableWithoutFeedback>
+                            <View style={{ width: '100%', backgroundColor: '#FFF', borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.18, shadowRadius: 40, elevation: 24 }}>
+                                <View style={{ height: 5, backgroundColor: '#EF4444' }} />
+                                <View style={{ paddingHorizontal: 28, paddingTop: 30, paddingBottom: 26, alignItems: 'center' }}>
+                                    <View style={{ width: 72, height: 72, borderRadius: 22, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginBottom: 18, borderWidth: 1.5, borderColor: '#FECACA' }}>
+                                        <Ionicons name="trash-outline" size={32} color="#EF4444" />
+                                    </View>
+                                    <CustomText style={{ fontSize: 21, fontWeight: '800', color: '#0F172A', marginBottom: 10 }}>Delete Venue?</CustomText>
+                                    <CustomText style={{ fontSize: 14, fontWeight: '500', color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 28 }}>
+                                        This venue will be permanently removed and can't be undone.
+                                    </CustomText>
+                                    <TouchableOpacity
+                                        onPress={() => confirmDeleteVenue(confirmModal?.id)}
+                                        activeOpacity={0.85}
+                                        style={{ width: '100%', height: 54, borderRadius: 17, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', marginBottom: 11, shadowColor: '#EF4444', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 8 }}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <Ionicons name="trash-outline" size={18} color="#FFF" />
+                                            <CustomText style={{ color: '#FFF', fontSize: 15, fontWeight: '800' }}>Yes, Delete Venue</CustomText>
+                                        </View>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => setConfirmModal(null)}
+                                        activeOpacity={0.8}
+                                        style={{ width: '100%', height: 54, borderRadius: 17, backgroundColor: TEAL_LIGHT, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: TEAL + '35' }}
+                                    >
+                                        <CustomText style={{ color: TEAL, fontSize: 15, fontWeight: '800' }}>Keep Venue</CustomText>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* ── DELETE VENDOR CONFIRMATION ─────────────────────────────────── */}
+            <Modal
+                visible={confirmModal?.type === 'deleteVendor'}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setConfirmModal(null)}
+            >
+                <TouchableWithoutFeedback onPress={() => setConfirmModal(null)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 }}>
+                        <TouchableWithoutFeedback>
+                            <View style={{ width: '100%', backgroundColor: '#FFF', borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.18, shadowRadius: 40, elevation: 24 }}>
+                                <View style={{ height: 5, backgroundColor: '#EF4444' }} />
+                                <View style={{ paddingHorizontal: 28, paddingTop: 30, paddingBottom: 26, alignItems: 'center' }}>
+                                    <View style={{ width: 72, height: 72, borderRadius: 22, backgroundColor: '#FEF2F2', alignItems: 'center', justifyContent: 'center', marginBottom: 18, borderWidth: 1.5, borderColor: '#FECACA' }}>
+                                        <Ionicons name="person-remove-outline" size={32} color="#EF4444" />
+                                    </View>
+                                    <CustomText style={{ fontSize: 21, fontWeight: '800', color: '#0F172A', marginBottom: 10 }}>Remove Vendor?</CustomText>
+                                    <CustomText style={{ fontSize: 14, fontWeight: '500', color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 28 }}>
+                                        This vendor will be removed and will no longer be visible to event planners.
+                                    </CustomText>
+                                    <TouchableOpacity
+                                        onPress={() => confirmDeleteVendor(confirmModal?.id)}
+                                        activeOpacity={0.85}
+                                        style={{ width: '100%', height: 54, borderRadius: 17, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', marginBottom: 11, shadowColor: '#EF4444', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 8 }}
+                                    >
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <Ionicons name="person-remove-outline" size={18} color="#FFF" />
+                                            <CustomText style={{ color: '#FFF', fontSize: 15, fontWeight: '800' }}>Yes, Remove Vendor</CustomText>
+                                        </View>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => setConfirmModal(null)}
+                                        activeOpacity={0.8}
+                                        style={{ width: '100%', height: 54, borderRadius: 17, backgroundColor: TEAL_LIGHT, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: TEAL + '35' }}
+                                    >
+                                        <CustomText style={{ color: TEAL, fontSize: 15, fontWeight: '800' }}>Keep Vendor</CustomText>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
+
+            {/* ── SUCCESS MODAL (venue added / updated / vendor added / updated) ─ */}
+            <Modal
+                visible={!!successModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setSuccessModal(null)}
+            >
+                <TouchableWithoutFeedback onPress={() => setSuccessModal(null)}>
+                    <View style={{ flex: 1, backgroundColor: 'rgba(15,23,42,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28 }}>
+                        <TouchableWithoutFeedback>
+                            <View style={{ width: '100%', backgroundColor: '#FFF', borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 24 }, shadowOpacity: 0.18, shadowRadius: 40, elevation: 24 }}>
+                                <View style={{ height: 5, backgroundColor: successModal?.isEditing ? '#10B981' : TEAL }} />
+                                <View style={{ paddingHorizontal: 28, paddingTop: 30, paddingBottom: 26, alignItems: 'center' }}>
+                                    <View style={{ width: 72, height: 72, borderRadius: 22, backgroundColor: successModal?.isEditing ? '#F0FDF4' : TEAL_LIGHT, alignItems: 'center', justifyContent: 'center', marginBottom: 18, borderWidth: 1.5, borderColor: successModal?.isEditing ? '#BBF7D0' : TEAL_BORDER }}>
+                                        <Ionicons
+                                            name={successModal?.isEditing ? 'checkmark-circle-outline' : (successModal?.type === 'venue' ? 'business-outline' : 'people-outline')}
+                                            size={34}
+                                            color={successModal?.isEditing ? '#10B981' : TEAL}
+                                        />
+                                    </View>
+                                    <CustomText style={{ fontSize: 21, fontWeight: '800', color: '#0F172A', marginBottom: 10, textAlign: 'center' }}>
+                                        {successModal?.isEditing
+                                            ? (successModal?.type === 'venue' ? 'Venue Updated!' : 'Vendor Updated!')
+                                            : (successModal?.type === 'venue' ? 'Venue Published! 🎉' : 'Vendor Added! 🎉')
+                                        }
+                                    </CustomText>
+                                    <CustomText style={{ fontSize: 14, fontWeight: '500', color: '#64748B', textAlign: 'center', lineHeight: 22, marginBottom: 28 }}>
+                                        {successModal?.isEditing
+                                            ? (successModal?.type === 'venue'
+                                                ? 'Your venue details have been updated successfully.'
+                                                : 'Vendor details have been updated successfully.')
+                                            : (successModal?.type === 'venue'
+                                                ? 'Your venue is now live and visible to event planners.'
+                                                : 'This vendor is now visible to all event planners.')
+                                        }
+                                    </CustomText>
+                                    <TouchableOpacity
+                                        onPress={() => setSuccessModal(null)}
+                                        activeOpacity={0.85}
+                                        style={{ width: '100%', height: 54, borderRadius: 17, backgroundColor: successModal?.isEditing ? '#10B981' : TEAL, alignItems: 'center', justifyContent: 'center', shadowColor: successModal?.isEditing ? '#10B981' : TEAL_DARK, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 14, elevation: 8 }}
+                                    >
+                                        <CustomText style={{ color: '#FFF', fontSize: 15, fontWeight: '800' }}>Got it!</CustomText>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
 
             {/* ── LOGOUT CONFIRMATION MODAL ─────────────────────────────────── */}
             <Modal
