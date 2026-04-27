@@ -41,6 +41,14 @@ const THEMES = [
 const fmt     = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+// Returns midnight of tomorrow
+const getTomorrow = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 1);
+    return d;
+};
+
 const parseTime = (timeStr) => {
     if (!timeStr || typeof timeStr !== 'string') return new Date();
     try {
@@ -77,12 +85,14 @@ export default function UpdateEvent({ route, navigation }) {
     const [title, setTitle]             = useState(eventData?.title || '');
     const [eventType, setEventType]     = useState(matchedType || (isOther ? EVENT_TYPES.find(t => t.key === 'Others') : null));
     const [otherType, setOtherType]     = useState(isOther ? savedType : '');
-    const [startDate, setStartDate]     = useState(
-        eventData?.startDate?.seconds ? new Date(eventData.startDate.seconds * 1000) : new Date()
-    );
-    const [endDate, setEndDate]         = useState(
-        eventData?.endDate?.seconds ? new Date(eventData.endDate.seconds * 1000) : new Date()
-    );
+    const [startDate, setStartDate]     = useState(() => {
+        const d = eventData?.startDate?.seconds ? new Date(eventData.startDate.seconds * 1000) : getTomorrow();
+        return d < getTomorrow() ? getTomorrow() : d;
+    });
+    const [endDate, setEndDate]         = useState(() => {
+        const d = eventData?.endDate?.seconds ? new Date(eventData.endDate.seconds * 1000) : getTomorrow();
+        return d < getTomorrow() ? getTomorrow() : d;
+    });
     const [startTime, setStartTime]     = useState(parseTime(eventData?.startTime));
     const [isMultiDay, setIsMultiDay]   = useState(eventData?.isMultiDay || false);
     const [location, setLocation]       = useState(eventData?.location || '');
@@ -137,6 +147,17 @@ export default function UpdateEvent({ route, navigation }) {
         const finalType = eventType?.key === 'Others' ? otherType.trim() : eventType?.key;
         if (!title.trim() || !finalType) return;
 
+        // Guard: start date must be at least tomorrow
+        const tomorrow = getTomorrow();
+        if (startDate < tomorrow) {
+            Alert.alert('Invalid Date', 'The event start date must be at least tomorrow.');
+            return;
+        }
+        if (isMultiDay && endDate < tomorrow) {
+            Alert.alert('Invalid Date', 'The event end date must be at least tomorrow.');
+            return;
+        }
+
         setLoading(true);
         try {
             const themeValue = customTheme.trim() || selectedTheme?.name || null;
@@ -164,7 +185,9 @@ export default function UpdateEvent({ route, navigation }) {
     };
 
     const openDatePicker = (target, date) => {
-        const base = date || new Date();
+        const tomorrow = getTomorrow();
+        // Use the existing date if it's valid (>= tomorrow), otherwise default to tomorrow
+        const base = (date && date >= tomorrow) ? date : tomorrow;
         setPickerMonth(base.getMonth());
         setPickerDay(base.getDate() - 1);
         setPickerYear(YEAR_OPTIONS.indexOf(base.getFullYear()) !== -1 ? YEAR_OPTIONS.indexOf(base.getFullYear()) : 0);
@@ -176,11 +199,17 @@ export default function UpdateEvent({ route, navigation }) {
         const daysInMonth = new Date(YEAR_OPTIONS[pickerYear], pickerMonth + 1, 0).getDate();
         const day = Math.min(pickerDay, daysInMonth - 1) + 1;
         const picked = new Date(YEAR_OPTIONS[pickerYear], pickerMonth, day);
+        const tomorrow = getTomorrow();
+
+        // Enforce minimum: date must be at least tomorrow
+        const clamped = picked < tomorrow ? tomorrow : picked;
+
         if (datePickerTarget === 'start') {
-            setStartDate(picked);
-            if (picked > endDate) setEndDate(picked);
+            setStartDate(clamped);
+            if (clamped > endDate) setEndDate(clamped);
         } else {
-            setEndDate(picked);
+            // End date must also be >= start date and >= tomorrow
+            setEndDate(clamped < startDate ? startDate : clamped);
         }
         setShowStartPicker(false);
     };

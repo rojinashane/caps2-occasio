@@ -45,13 +45,21 @@ const THEMES = [
 const fmt = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+// Returns midnight of tomorrow — the earliest allowed event date
+const getTomorrow = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 1);
+    return d;
+};
+
 // ── SCREEN ──────────────────────────────────────────────────
 export default function AddEventScreen({ navigation }) {
     const [title, setTitle] = useState('');
     const [eventType, setEventType] = useState(null);
     const [otherType, setOtherType] = useState('');
-    const [startDate, setStartDate] = useState(new Date());
-    const [endDate, setEndDate] = useState(new Date());
+    const [startDate, setStartDate] = useState(getTomorrow());
+    const [endDate, setEndDate] = useState(getTomorrow());
     const [startTime, setStartTime] = useState(new Date());
     const [isMultiDay, setIsMultiDay] = useState(false);
     const [location, setLocation] = useState('');
@@ -74,8 +82,9 @@ export default function AddEventScreen({ navigation }) {
 
     // Scroll-wheel picker state
     const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + i);
-    const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
-    const [pickerDay,   setPickerDay]   = useState(new Date().getDate() - 1);
+    const _tomorrow = getTomorrow();
+    const [pickerMonth, setPickerMonth] = useState(_tomorrow.getMonth());
+    const [pickerDay,   setPickerDay]   = useState(_tomorrow.getDate() - 1);
     const [pickerYear,  setPickerYear]  = useState(0);
     const [pickerHour,  setPickerHour]  = useState(new Date().getHours());
     const [pickerMinute, setPickerMinute] = useState(0);
@@ -169,6 +178,17 @@ export default function AddEventScreen({ navigation }) {
 
         if (!title.trim() || !finalType || emailInvalid) return;
 
+        // Guard: start date must be at least tomorrow
+        const tomorrow = getTomorrow();
+        if (startDate < tomorrow) {
+            Alert.alert('Invalid Date', 'The event start date must be at least tomorrow.');
+            return;
+        }
+        if (isMultiDay && endDate < tomorrow) {
+            Alert.alert('Invalid Date', 'The event end date must be at least tomorrow.');
+            return;
+        }
+
         setLoading(true);
         try {
             const themeValue = customTheme.trim() || selectedTheme?.name || null;
@@ -248,7 +268,9 @@ export default function AddEventScreen({ navigation }) {
     };
 
     const openDatePicker = (target, date) => {
-        const base = date || new Date();
+        const tomorrow = getTomorrow();
+        // Use the existing date only if it's already in the future, otherwise default to tomorrow
+        const base = (date && date >= tomorrow) ? date : tomorrow;
         setPickerMonth(base.getMonth());
         setPickerDay(base.getDate() - 1);
         setPickerYear(YEAR_OPTIONS.indexOf(base.getFullYear()) !== -1 ? YEAR_OPTIONS.indexOf(base.getFullYear()) : 0);
@@ -260,11 +282,17 @@ export default function AddEventScreen({ navigation }) {
         const daysInMonth = new Date(YEAR_OPTIONS[pickerYear], pickerMonth + 1, 0).getDate();
         const day = Math.min(pickerDay, daysInMonth - 1) + 1;
         const picked = new Date(YEAR_OPTIONS[pickerYear], pickerMonth, day);
+        const tomorrow = getTomorrow();
+
+        // Enforce minimum: event date must be at least tomorrow
+        const clamped = picked < tomorrow ? tomorrow : picked;
+
         if (datePickerTarget === 'start') {
-            setStartDate(picked);
-            if (picked > endDate) setEndDate(picked);
+            setStartDate(clamped);
+            if (clamped > endDate) setEndDate(clamped);
         } else {
-            setEndDate(picked);
+            // End date must also be >= start date
+            setEndDate(clamped < startDate ? startDate : clamped);
         }
         setShowStartPicker(false);
     };
