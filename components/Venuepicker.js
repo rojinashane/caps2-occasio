@@ -136,7 +136,8 @@ export default function VenuePicker({ visible, onClose, onSelect, currentValue }
 
             {/* Sheet */}
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
+                keyboardVerticalOffset={Platform.OS === 'android' ? -500 : 0}
                 style={{ flex: 1, justifyContent: 'flex-end' }}
                 pointerEvents="box-none"
             >

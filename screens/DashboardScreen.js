@@ -113,6 +113,11 @@ export default function DashboardScreen({ navigation }) {
     const slideAnim  = useRef(new Animated.Value(width)).current;
     const heroSlide  = useRef(new Animated.Value(24)).current;
 
+    // Keep refs to active Firestore listeners so we can tear them down before signOut
+    const unsubEventsRef = useRef(null);
+    const unsubVenuesRef = useRef(null);
+    const unsubNotifsRef = useRef(null);
+
     // ── Listen for unread notification count ──
     useEffect(() => {
         const user = auth.currentUser;
@@ -129,6 +134,7 @@ export default function DashboardScreen({ navigation }) {
             const count = snap.docs.filter(d => !d.data().viewed).length;
             setUnreadCount(count);
         });
+        unsubNotifsRef.current = unsub;
         return () => unsub();
     }, []);
 
@@ -162,6 +168,7 @@ export default function DashboardScreen({ navigation }) {
                 Animated.spring(heroSlide, { toValue: 0, tension: 55, friction: 9, useNativeDriver: true }),
             ]).start();
         });
+        unsubEventsRef.current = unsubscribeEvents;
 
         // Fetch Featured Venues for the dashboard
         const qVenues = query(collection(db, 'venues'), limit(5));
@@ -169,6 +176,7 @@ export default function DashboardScreen({ navigation }) {
             const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             setArVenues(data);
         });
+        unsubVenuesRef.current = unsubscribeVenues;
 
         return () => {
             unsubscribeEvents();
@@ -208,6 +216,12 @@ export default function DashboardScreen({ navigation }) {
 
     const confirmLogout = async () => {
         setLoggingOut(true);
+        // Tear down all Firestore listeners BEFORE signing out.
+        // If they stay active during signOut, Firestore fires them again
+        // as an unauthenticated user and throws a permissions error.
+        unsubEventsRef.current?.();
+        unsubVenuesRef.current?.();
+        unsubNotifsRef.current?.();
         try {
             await signOut(auth);
             navigation.replace('Landing');

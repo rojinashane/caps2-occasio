@@ -19,6 +19,7 @@
     ],
     "android": {
       "package": "com.anonymous.occasio",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logoo.png",
         "backgroundColor": "#FFFFFF"

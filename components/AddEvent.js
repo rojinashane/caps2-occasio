@@ -320,7 +320,7 @@ export default function AddEventScreen({ navigation }) {
     return (
         <SafeAreaView style={tw`flex-1 bg-[#F0F4F8]`} edges={['top']}>
             {/* The rest of your AddEventScreen UI remains exactly the same */}
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={tw`flex-1`}>
+            <KeyboardAvoidingView behavior="padding" style={tw`flex-1`}>
                 <Animated.View style={{
                     transform: [{ scale: heroScale }],
                     marginHorizontal: 16,

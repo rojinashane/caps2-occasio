@@ -42,11 +42,11 @@ export default function BottomNav({ navigation, activeRoute, userData }) {
             }
         ]}>
             {/* Home Tab */}
-            <TouchableOpacity style={tw`items-center flex-1`} onPress={() => navigation.navigate('Dashboard')}>
+            <TouchableOpacity style={tw`items-center flex-1`} onPress={() => navigation.navigate('DashboardScreen')}>
                 <Ionicons
-                    name={activeRoute === 'Dashboard' ? 'home' : 'home-outline'}
+                    name={activeRoute === 'DashboardScreen' ? 'home' : 'home-outline'}
                     size={24}
-                    color={activeRoute === 'Dashboard' ? '#00686F' : '#94A3B8'}
+                    color={activeRoute === 'DashboardScreen' ? '#00686F' : '#94A3B8'}
                 />
                 {activeRoute === 'Dashboard' && (
                     <View style={[tw`w-1 h-1 rounded-full mt-1`, { backgroundColor: '#00686F' }]} />

@@ -94,6 +94,8 @@ export default function VenueOwnerScreen({ navigation }) {
     // Drawer States
     const [menuVisible, setMenuVisible]   = useState(false);
     const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+    const unsubVenuesRef  = useRef(null);
+    const unsubVendorsRef = useRef(null);
     const [loggingOut, setLoggingOut] = useState(false);
 
     // Confirmation / success modals
@@ -123,7 +125,7 @@ export default function VenueOwnerScreen({ navigation }) {
         });
 
         const qV = query(collection(db, 'venues'), where('userId', '==', uid));
-        const unsubV = onSnapshot(qV, snap => {
+        unsubVenuesRef.current = onSnapshot(qV, snap => {
             setVenues(snap.docs.map(d => ({ id: d.id, ...d.data() })));
             setLoading(false);
             Animated.parallel([
@@ -133,11 +135,13 @@ export default function VenueOwnerScreen({ navigation }) {
         });
 
         const qVd = query(collection(db, 'vendors'), where('userId', '==', uid));
-        const unsubVd = onSnapshot(qVd, snap => {
+        unsubVendorsRef.current = onSnapshot(qVd, snap => {
             setVendors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        return () => { unsubV(); unsubVd(); };
+        const unsubV  = unsubVenuesRef.current;
+        const unsubVd = unsubVendorsRef.current;
+        return () => { unsubV?.(); unsubVd?.(); };
     }, []);
 
     const toggleMenu = (open) => {
@@ -157,6 +161,10 @@ export default function VenueOwnerScreen({ navigation }) {
 
     const confirmLogout = async () => {
         setLoggingOut(true);
+        // Unsubscribe Firestore listeners before signing out to prevent
+        // permission errors firing on unauthenticated listener callbacks.
+        unsubVenuesRef.current?.();
+        unsubVendorsRef.current?.();
         try {
             await signOut(auth);
             navigation.replace('Landing');

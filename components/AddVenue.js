@@ -602,7 +602,7 @@ export default function AddVenue({
             <SafeAreaView style={{ flex: 1, backgroundColor: '#F0F4F8' }}>
                 <KeyboardAvoidingView
                     style={{ flex: 1 }}
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior="padding"
                 >
                     {/* Required-fields legend */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#FFF8F0', borderBottomWidth: 1, borderBottomColor: '#FDEBD0' }}>
