@@ -16,6 +16,10 @@
     },
     "production": {
       "autoIncrement": true,
+<<<<<<< HEAD
+=======
+      "distribution": "internal",
+>>>>>>> b7c24c702317eccb228688d68a50abdb3d53aa4d
       "android": {
         "buildType": "apk"
       }
